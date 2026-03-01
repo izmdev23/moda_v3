@@ -1,0 +1,12 @@
+export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_PRODUCT_IMAGES = 3;
+export const MAX_ADDRESSES = 10;
+export const MAX_CART_QUANTITY = 99;
+export const GRID_MIN_COLUMN_WIDTH = 128;
+export const GRID_MAX_COLUMN_WIDTH = 256;
+export const SEARCH_DEBOUNCE_MS = 300;
+export const OTP_LENGTH = 6;
+export const OTP_EXPIRY_SECONDS = 300; // 5 minutes
+export const SUPABASE_EMAIL_RATE_LIMIT = 4; // 4 emails per hour (approx)
+export const MAX_IMAGE_SIZE_MB = 5;
+export const VTON_TIMEOUT_MS = 90000; // 90 seconds
