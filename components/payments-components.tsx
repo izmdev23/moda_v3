@@ -3,14 +3,16 @@ import {
     ActivityIndicator,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
-import { lightPalette } from '../utils/theme';
+import { CardForm, useStripe } from '@stripe/stripe-react-native';
+import { useTheme } from './ui/theme-provider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type StoredPaymentType = 'gcash' | 'paymaya';
+export type StoredPaymentType = 'gcash' | 'paymaya' | 'card';
 
 export interface StoredPaymentMethod {
     readonly uid: string;
@@ -30,11 +32,13 @@ interface PaymentMethodCardProps {
 const PAYMENT_ICONS: Record<StoredPaymentType, string> = {
     gcash: '💙',
     paymaya: '💚',
+    card: '💳',
 };
 
 const PAYMENT_LABELS: Record<StoredPaymentType, string> = {
-    gcash: 'GCash',
+    gcash: 'GCash (Unavailable)',
     paymaya: 'Maya',
+    card: 'Card',
 };
 
 /**
@@ -46,40 +50,143 @@ export const PaymentMethodCard: React.FC<PaymentMethodCardProps> = ({
     onDelete,
     onSetDefault,
 }): React.JSX.Element => {
+    const { theme } = useTheme();
     const maskedNumber = maskAccountNumber(method.account_number);
 
     return (
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
             <View style={styles.cardLeft}>
                 <Text style={styles.cardIcon}>{PAYMENT_ICONS[method.type]}</Text>
                 <View>
                     <View style={styles.labelRow}>
-                        <Text style={styles.cardLabel}>{PAYMENT_LABELS[method.type]}</Text>
+                        <Text style={[styles.cardLabel, { color: theme.textPrimary }]}>{PAYMENT_LABELS[method.type]}</Text>
                         {method.is_default && (
-                            <View style={styles.defaultBadge}>
-                                <Text style={styles.defaultBadgeText}>Default</Text>
+                            <View style={[styles.defaultBadge, { backgroundColor: theme.primary }]}>
+                                <Text style={[styles.defaultBadgeText, { color: theme.white }]}>Default</Text>
                             </View>
                         )}
                     </View>
-                    <Text style={styles.cardNumber}>{maskedNumber}</Text>
+                    <Text style={[styles.cardNumber, { color: theme.textSecondary }]}>{maskedNumber}</Text>
                 </View>
             </View>
             <View style={styles.cardActions}>
                 {!method.is_default && (
                     <TouchableOpacity
-                        style={styles.actionBtn}
+                        style={[styles.actionBtn, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}
                         onPress={() => onSetDefault(method.uid)}
                         id={`set-default-payment-${method.uid}`}
                     >
-                        <Text style={styles.actionText}>Set Default</Text>
+                        <Text style={[styles.actionText, { color: theme.textPrimary }]}>Set Default</Text>
                     </TouchableOpacity>
                 )}
                 <TouchableOpacity
-                    style={[styles.actionBtn, styles.deleteBtn]}
+                    style={[styles.actionBtn, { borderColor: theme.error, backgroundColor: `${theme.error}12` }]}
                     onPress={() => onDelete(method.uid)}
                     id={`delete-payment-${method.uid}`}
                 >
-                    <Text style={styles.deleteText}>Remove</Text>
+                    <Text style={[styles.deleteText, { color: theme.error }]}>Remove</Text>
+                </TouchableOpacity>
+            </View>
+        </View>
+    );
+};
+
+// ─── AddCardForm ──────────────────────────────────────────────────────────────
+
+interface AddCardFormProps {
+    readonly onSubmit: (paymentMethodId: string) => void;
+    readonly onCancel: () => void;
+    readonly isSubmitting: boolean;
+}
+
+/**
+ * Inline form for adding a new credit/debit card.
+ * Uses Stripe's CardField for PCI-compliant tokenization.
+ */
+export const AddCardForm: React.FC<AddCardFormProps> = ({
+    onSubmit,
+    onCancel,
+    isSubmitting,
+}): React.JSX.Element => {
+    const { theme } = useTheme();
+    const { createPaymentMethod } = useStripe();
+    const [isCardComplete, setIsCardComplete] = React.useState<boolean>(false);
+    const [cardError, setCardError] = React.useState<string | null>(null);
+    const [isProcessing, setIsProcessing] = React.useState<boolean>(false);
+
+    const handleSave = async () => {
+        if (!isCardComplete) {
+            setCardError('Please complete all card details.');
+            return;
+        }
+        setCardError(null);
+        setIsProcessing(true);
+        
+        const { paymentMethod, error } = await createPaymentMethod({
+            paymentMethodType: 'Card',
+        });
+
+        setIsProcessing(false);
+
+        if (error) {
+            setCardError(error.message);
+            return;
+        }
+
+        if (paymentMethod) {
+            onSubmit(paymentMethod.id);
+        }
+    };
+
+    return (
+        <View style={[styles.form, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.formTitle, { color: theme.textPrimary }]}>Add Credit/Debit Card</Text>
+
+            <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                    Card Details <Text style={{ color: theme.error }}>*</Text>
+                </Text>
+                <CardForm
+                    cardStyle={{
+                        backgroundColor: theme.background,
+                        textColor: theme.textPrimary,
+                        placeholderColor: theme.textSecondary,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: theme.border,
+                    }}
+                    style={{
+                        width: '100%',
+                        height: 330,
+                        marginVertical: 10,
+                    }}
+                    onFormComplete={(cardDetails: any) => {
+                        setIsCardComplete(cardDetails.complete);
+                        if (cardDetails.complete) {
+                            setCardError(null);
+                        }
+                    }}
+                />
+                {cardError !== null && (
+                    <Text style={{ color: theme.error, fontSize: 13, marginTop: 4 }}>{cardError}</Text>
+                )}
+            </View>
+
+            <View style={styles.formActions}>
+                <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: theme.border }]} onPress={onCancel} id="cancel-add-card">
+                    <Text style={[styles.cancelBtnText, { color: theme.textSecondary }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.submitBtn, { backgroundColor: theme.primary }, (isSubmitting || isProcessing) && styles.submitBtnDisabled]}
+                    onPress={() => { void handleSave(); }}
+                    disabled={isSubmitting || isProcessing}
+                    id="submit-add-card"
+                >
+                    {(isSubmitting || isProcessing) ? (
+                        <ActivityIndicator size="small" color={theme.white} />
+                    ) : (
+                        <Text style={[styles.submitBtnText, { color: theme.white }]}>Next</Text>
+                    )}
                 </TouchableOpacity>
             </View>
         </View>
@@ -111,52 +218,46 @@ export const AddPaymentForm: React.FC<AddPaymentFormProps> = ({
     onCancel,
     isSubmitting,
 }): React.JSX.Element => {
-    return (
-        <View style={styles.form}>
-            <Text style={styles.formTitle}>Add Payment Method</Text>
+    const { theme } = useTheme();
 
-            <View style={styles.typeRow}>
-                {(['gcash', 'paymaya'] as StoredPaymentType[]).map((type) => (
-                    <TouchableOpacity
-                        key={type}
-                        style={[styles.typeChip, selectedType === type && styles.typeChipSelected]}
-                        onPress={() => onTypeSelect(type)}
-                        id={`select-payment-type-${type}`}
-                    >
-                        <Text style={styles.typeChipIcon}>{PAYMENT_ICONS[type]}</Text>
-                        <Text
-                            style={[
-                                styles.typeChipText,
-                                selectedType === type && styles.typeChipTextSelected,
-                            ]}
-                        >
-                            {PAYMENT_LABELS[type]}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
-            </View>
+    return (
+        <View style={[styles.form, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.formTitle, { color: theme.textPrimary }]}>Add e-Wallet Details</Text>
 
             <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Account Number / Mobile Number</Text>
-                <View style={styles.textInputContainer}>
-                    <Text style={styles.textInputInner}>{accountNumber}</Text>
-                </View>
+                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                    Account Number / Mobile Number <Text style={{ color: theme.error }}>*</Text>
+                </Text>
+                <TextInput
+                    style={[
+                        styles.textInputContainer,
+                        styles.textInputInner,
+                        { borderColor: theme.border, backgroundColor: theme.background, color: theme.textPrimary }
+                    ]}
+                    value={accountNumber}
+                    onChangeText={onAccountNumberChange}
+                    placeholder="e.g. 09123456789"
+                    placeholderTextColor={theme.textSecondary}
+                    keyboardType="phone-pad"
+                    maxLength={11}
+                    id="add-payment-account-number"
+                />
             </View>
 
             <View style={styles.formActions}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} id="cancel-add-payment">
-                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: theme.border }]} onPress={onCancel} id="cancel-add-payment">
+                    <Text style={[styles.cancelBtnText, { color: theme.textSecondary }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                    style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
+                    style={[styles.submitBtn, { backgroundColor: theme.primary }, isSubmitting && styles.submitBtnDisabled]}
                     onPress={onSubmit}
                     disabled={isSubmitting}
                     id="submit-add-payment"
                 >
                     {isSubmitting ? (
-                        <ActivityIndicator size="small" color={lightPalette.white} />
+                        <ActivityIndicator size="small" color={theme.white} />
                     ) : (
-                        <Text style={styles.submitBtnText}>Save</Text>
+                        <Text style={[styles.submitBtnText, { color: theme.white }]}>Next</Text>
                     )}
                 </TouchableOpacity>
             </View>
@@ -167,6 +268,9 @@ export const AddPaymentForm: React.FC<AddPaymentFormProps> = ({
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const maskAccountNumber = (number: string): string => {
+    if (number.startsWith('pm_')) {
+        return `•••• •••• •••• ${number.slice(-4)}`;
+    }
     if (number.length <= 4) return number;
     const visible = number.slice(-4);
     const masked = '*'.repeat(Math.max(number.length - 4, 4));
@@ -178,7 +282,6 @@ const maskAccountNumber = (number: string): string => {
 const styles = StyleSheet.create({
     // PaymentMethodCard
     card: {
-        backgroundColor: lightPalette.cardBackground,
         borderRadius: 14,
         padding: 16,
         marginHorizontal: 16,
@@ -207,22 +310,18 @@ const styles = StyleSheet.create({
     cardLabel: {
         fontSize: 16,
         fontWeight: '700',
-        color: lightPalette.textPrimary,
     },
     defaultBadge: {
-        backgroundColor: lightPalette.primary,
         borderRadius: 6,
         paddingHorizontal: 8,
         paddingVertical: 2,
     },
     defaultBadgeText: {
-        color: lightPalette.white,
         fontSize: 11,
         fontWeight: '700',
     },
     cardNumber: {
         fontSize: 14,
-        color: lightPalette.textSecondary,
         letterSpacing: 1,
     },
     cardActions: {
@@ -234,27 +333,18 @@ const styles = StyleSheet.create({
         paddingVertical: 7,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: lightPalette.border,
-        backgroundColor: lightPalette.cardBackground,
     },
     actionText: {
         fontSize: 13,
         fontWeight: '600',
-        color: lightPalette.textPrimary,
-    },
-    deleteBtn: {
-        borderColor: lightPalette.error,
-        backgroundColor: 'rgba(245,54,92,0.07)',
     },
     deleteText: {
         fontSize: 13,
         fontWeight: '600',
-        color: lightPalette.error,
     },
 
     // AddPaymentForm
     form: {
-        backgroundColor: lightPalette.cardBackground,
         borderRadius: 16,
         padding: 20,
         marginHorizontal: 16,
@@ -268,7 +358,6 @@ const styles = StyleSheet.create({
     formTitle: {
         fontSize: 17,
         fontWeight: '800',
-        color: lightPalette.textPrimary,
         marginBottom: 16,
     },
     typeRow: {
@@ -285,12 +374,6 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         borderRadius: 10,
         borderWidth: 2,
-        borderColor: lightPalette.border,
-        backgroundColor: lightPalette.background,
-    },
-    typeChipSelected: {
-        borderColor: lightPalette.primary,
-        backgroundColor: 'rgba(244,67,54,0.05)',
     },
     typeChipIcon: {
         fontSize: 18,
@@ -298,11 +381,6 @@ const styles = StyleSheet.create({
     typeChipText: {
         fontSize: 14,
         fontWeight: '600',
-        color: lightPalette.textSecondary,
-    },
-    typeChipTextSelected: {
-        color: lightPalette.primary,
-        fontWeight: '700',
     },
     inputGroup: {
         marginBottom: 16,
@@ -310,22 +388,18 @@ const styles = StyleSheet.create({
     inputLabel: {
         fontSize: 12,
         fontWeight: '700',
-        color: lightPalette.textSecondary,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
         marginBottom: 6,
     },
     textInputContainer: {
         borderWidth: 1,
-        borderColor: lightPalette.border,
         borderRadius: 10,
         paddingHorizontal: 14,
         paddingVertical: 12,
-        backgroundColor: lightPalette.background,
     },
     textInputInner: {
         fontSize: 15,
-        color: lightPalette.textPrimary,
     },
     formActions: {
         flexDirection: 'row',
@@ -335,19 +409,16 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingVertical: 12,
         borderRadius: 10,
-        backgroundColor: lightPalette.border,
         alignItems: 'center',
     },
     cancelBtnText: {
         fontSize: 14,
         fontWeight: '700',
-        color: lightPalette.textSecondary,
     },
     submitBtn: {
         flex: 2,
         paddingVertical: 12,
         borderRadius: 10,
-        backgroundColor: lightPalette.primary,
         alignItems: 'center',
     },
     submitBtnDisabled: {
@@ -356,6 +427,5 @@ const styles = StyleSheet.create({
     submitBtnText: {
         fontSize: 14,
         fontWeight: '800',
-        color: lightPalette.white,
     },
 });

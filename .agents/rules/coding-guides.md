@@ -2,7 +2,7 @@
 trigger: always_on
 ---
 
-# Antigravity Agent Rules & Protocols: Expo + Supabase
+# Agent Rules & Protocols: Expo + Supabase
 
 Your code must be lightweight, frictionless, strictly typed, highly stable, and strictly adhere to the project's React Native (Expo) and Supabase architecture. You must follow these deterministic constraints at all times.
 
@@ -14,7 +14,7 @@ Your code must be lightweight, frictionless, strictly typed, highly stable, and 
 * **Explicit Return Types:** Every function, hook, and component **MUST** have an explicitly defined return type in its signature (e.g., `React.FC<Props>`, `JSX.Element`, `void`, `boolean`).
 * **Strict Equality:** Exclusively use the strict equality (`===`) and strict inequality (`!==`) operators.
 * **Prop Interfaces:** Always define a dedicated `interface` for component props (e.g., `interface ButtonProps { ... }`). **NEVER** define inline prop types inside the function parameter list.
-* **ALWAYS** add an activity indicator modal when doing an aynchronous operation.
+* **ALWAYS** add an activity indicator modal when doing an asynchronous operation.
 
 ## II. Project Structure & File Placement
 
@@ -27,6 +27,9 @@ Your code must be lightweight, frictionless, strictly typed, highly stable, and 
 ## III. React Architecture & Component Modularity
 
 * **Single Component Principle:** Strictly maintain exactly one React component per `.tsx` file. **NEVER** define custom helper or nested components within the same file as the component that uses them.
+* **Modular Reusability:** When creating a new component, you **MUST** design it to be modular so that it can be easily reused across other screens and contexts.
+* **Single Source of Truth (SSOT):** Always maintain a single source of truth for components, data values, and properties. Before implementing new logic or UI, **ALWAYS** check the project for existing code to prevent duplication.
+* **No Redundant Creation:** **NEVER** hard code any values or create a new component without first looking for a single source of truth (e.g., a shared utility, a global component, or a centralized config).
 * **Component Placement:**
     * **Global:** Reusable, app-wide UI components belong in `components/ui/`.
     * **Page-Specific:** Nested or supporting components exclusive to a specific route **MUST** be placed in `app/components/[page-name]-components.tsx` (e.g., `app/components/home-components.tsx`).
@@ -36,6 +39,7 @@ Your code must be lightweight, frictionless, strictly typed, highly stable, and 
 
 ## IV. "Antigravity" Frictionless Protocols
 
+* **Simplicity & Conciseness (KISS):** Do not over-engineer solutions. Keep it simple. Do not write excessively long code blocks; write less code but ensure the quality, performance, and readability are exceptionally high.
 * **Graceful Fallbacks:** If rendering data from props or an API, **ALWAYS** account for `null`, `undefined`, or empty arrays to prevent the UI from crashing.
 * **No Magic Numbers or Strings:** Extract all hardcoded numbers, timeout values, and specific string literals into explicitly typed, uppercase `const` variables at the top of the file or in a shared config.
 * **Empty Lists:** If a list/FlatList is empty, it **MUST** render a dedicated custom "Empty State" component. This component must contain an icon and a catchy, context-specific text string indicating the list is empty.
@@ -65,7 +69,8 @@ When modifying the database schema or creating new tables, you **MUST** strictly
 
 * **Password Requirements:** Any manual password validation must enforce: Minimum 8 characters, at least one uppercase letter, one lowercase letter, and one number.
 * **Encryption:** If manual cryptographic hashing or encryption is required, you **MUST** use SHA-256.
-* **Theme Declaration:** The theme file (`utils/theme.ts`) **MUST** use a strict custom `interface` to define exhaustive colors for both light mode and dark mode.
+* **Theme Declaration:** The theme file (`constants/theme.ts`) **MUST** use a strict custom `interface` to define exhaustive colors for both light mode and dark mode.
+* **Dynamic Theming (`useTheme`):** When applying colors within components, you **MUST** use the `useTheme` hook. **NEVER** hard code any color values within `StyleSheet` objects, inline styles, or component files. Always extract the active colors dynamically from the hook to support seamless mode switching and maintain your single source of truth.
 
 ## VIII. Documentation & Safety Guards
 
@@ -73,3 +78,8 @@ When modifying the database schema or creating new tables, you **MUST** strictly
 * **Algorithmic Comments:** For complex logic or data transformations, write inline comments explaining the *why* behind the logic, not just the *what*.
 * **Danger Zones:** For functions that mutate global state, interact with critical APIs, or can break the project if misused, you **MUST** add a prominent `// WARNING:` tag in the docstring.
 * **Usage Instructions:** If a function carries a warning tag, the docstring **MUST** include an `@example` tag demonstrating both the correct usage and the incorrect usage to avoid.
+
+## IX. Agent Enforcement & Constraint Management
+
+* **Strict Adherence:** You **ALWAYS** enforce all rules outlined in this document and must **NEVER** break them under any circumstances.
+* **Constraint Workarounds:** If you find yourself constrained by a specific rule during implementation, you must find a valid workaround that solves the problem while still strictly abiding by all other established rules.

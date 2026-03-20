@@ -2,35 +2,35 @@ import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
-    Alert,
-    Dimensions,
-    Easing,
-    KeyboardAvoidingView,
-    Linking,
-    Platform,
-    Animated as RNAnimated,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  Easing,
+  KeyboardAvoidingView,
+  Linking,
+  Platform,
+  Animated as RNAnimated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { SafeScreen } from '../../components/ui/safe-screen';
 import { Animation } from '../../utils/animation';
 
 import {
-    AccountInfoStep,
-    AccountTypeStep,
-    ConfirmationStep,
-    SellerInfoStep,
-    SignupFormData,
-    UserInfoStep,
-    WizardProgressBar,
+  AccountInfoStep,
+  AccountTypeStep,
+  ConfirmationStep,
+  SellerInfoStep,
+  SignupFormData,
+  UserInfoStep,
+  WizardProgressBar,
 } from '../../components/signup-components';
 import { LoadingModal } from '../../components/ui/loading-modal';
+import { useTheme } from '../../components/ui/theme-provider';
 import { supabase } from '../../supabase/supabaseClient';
 import { authApi } from '../../utils/database/auth';
-import { lightPalette } from '../../utils/theme';
 import { UserRole } from '../../utils/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -42,6 +42,8 @@ const TOTAL_BUYER_STEPS = 4; // Step 1→2→3→5 (skip seller step 4)
 const TOTAL_SELLER_STEPS = 5; // Step 1→2→3→4→5
 
 const TERMS_URL = 'https://moda.example.com/terms'; // Placeholder
+const AUTH_EMAIL_SEND_FAILURE_FRAGMENT = 'Error sending confirmation email';
+const SMTP_AUTH_FAILURE_FRAGMENT = '535 5.7.8';
 
 /**
  * Maps wizard step index (0-based) to a user-facing step number.
@@ -61,6 +63,7 @@ const getStepNumber = (stepIndex: number): number => stepIndex + 1; // displayed
  */
 export default function SignupScreen(): React.JSX.Element {
     const router = useRouter();
+    const { theme } = useTheme();
 
 
     const {
@@ -182,51 +185,70 @@ export default function SignupScreen(): React.JSX.Element {
      * If unconfirmed, redirects to verify-email and resends verification.
      */
     const checkEmailUniqueness = async (email: string): Promise<boolean> => {
-        const { data, error } = await supabase.rpc('check_email_availability', { target_email: email });
+        try {
+            const { data, error } = await supabase.rpc('check_email_availability', { target_email: email });
 
-        if (error) {
-            console.error('Error checking email uniqueness:', error);
-            return true; // On network error, allow continue optimistically
-        }
+            if (error) {
+                console.warn('Network or DB error checking email uniqueness:', error.message || JSON.stringify(error));
+                return true; // On network error, allow continue optimistically
+            }
 
-        if (data && data.available === false) {
-            // Check if the existing user is unconfirmed
-            const isConfirmed = data.is_confirmed;
+            if (data && data.available === false) {
+                // Check if the existing user is unconfirmed
+                const isConfirmed = data.is_confirmed;
 
-            if (!isConfirmed) {
-                // Resend verification email
-                await supabase.auth.resend({
-                    type: 'signup',
-                    email: email,
-                    options: {
-                        emailRedirectTo: 'moda://auth/login'
+                if (!isConfirmed) {
+                    // Resend verification email
+                    const { error: resendError } = await supabase.auth.resend({
+                        type: 'signup',
+                        email: email,
+                        options: {
+                            emailRedirectTo: 'moda://auth/login'
+                        }
+                    });
+
+                    if (resendError) {
+                        const resendErrorMessage = resendError.message || '';
+                        if (
+                            resendErrorMessage.includes(AUTH_EMAIL_SEND_FAILURE_FRAGMENT) ||
+                            resendErrorMessage.includes(SMTP_AUTH_FAILURE_FRAGMENT)
+                        ) {
+                            Alert.alert(
+                                'Email Service Temporarily Unavailable',
+                                'We could not send a verification email right now. Please try again later while we restore email delivery.'
+                            );
+                            return false;
+                        }
                     }
-                });
 
+                    Alert.alert(
+                        'Email Unconfirmed',
+                        'An account with this email exists but is not yet confirmed. We have sent a new verification link to your inbox.',
+                        [
+                            {
+                                text: 'OK',
+                                onPress: () => router.replace({
+                                    pathname: '/auth/verify-email',
+                                    params: { email },
+                                } as unknown as Parameters<typeof router.replace>[0]),
+                            },
+                        ]
+                    );
+                    return false;
+                }
+
+                // If already confirmed
                 Alert.alert(
-                    'Email Unconfirmed',
-                    'An account with this email exists but is not yet confirmed. We have sent a new verification link to your inbox.',
-                    [
-                        {
-                            text: 'OK',
-                            onPress: () => router.replace({
-                                pathname: '/auth/verify-email',
-                                params: { email },
-                            } as unknown as Parameters<typeof router.replace>[0]),
-                        },
-                    ]
+                    'Email Already Registered',
+                    'An account with this email already exists. Please use a different email or log in.'
                 );
                 return false;
             }
-
-            // If already confirmed
-            Alert.alert(
-                'Email Already Registered',
-                'An account with this email already exists. Please use a different email or log in.'
-            );
-            return false;
+            return true;
+        } catch (err: unknown) {
+            console.warn('Exception checking email uniqueness:', err);
+            return true;
         }
-        return true;
     };
 
     // ── Submission ────────────────────────────────────────────────────────────
@@ -278,7 +300,15 @@ export default function SignupScreen(): React.JSX.Element {
 
             const errorMessage = authError.message || 'An unexpected error occurred. Please try again.';
 
-            if (errorMessage.includes('rate limit')) {
+            if (
+                errorMessage.includes(AUTH_EMAIL_SEND_FAILURE_FRAGMENT) ||
+                errorMessage.includes(SMTP_AUTH_FAILURE_FRAGMENT)
+            ) {
+                Alert.alert(
+                    'Signup Temporarily Unavailable',
+                    'Your account could not be created because verification email delivery failed. Please try again in a few minutes.'
+                );
+            } else if (errorMessage.includes('rate limit')) {
                 Alert.alert(
                     'Rate Limit Exceeded',
                     'You have attempted to sign up too many times in a short period. Please wait a few minutes before trying again or check your email for an existing confirmation link.'
@@ -337,22 +367,22 @@ export default function SignupScreen(): React.JSX.Element {
 
     return (
         <SafeScreen>
-            <Animated.View
-                entering={Animation.Presets.FadeInDown}
-                exiting={Animation.Presets.FadeOutUp}
-                style={styles.container}
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={styles.keyboardAvoid}
             >
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                    style={styles.keyboardAvoid}
+                <Animated.View
+                    entering={Animation.Presets.FadeInDown}
+                    exiting={Animation.Presets.FadeOutUp}
+                    style={styles.container}
                 >
                     {/* Header */}
 
                     <View style={styles.header}>
                         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-                            <Text style={styles.backButtonText}>‹ Back</Text>
+                            <Text style={[styles.backButtonText, { color: theme.primary }]}>‹ Back</Text>
                         </TouchableOpacity>
-                        <Text style={styles.headerTitle}>Create Account</Text>
+                        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Create Account</Text>
                         <View style={styles.backButton} />
                     </View>
 
@@ -387,21 +417,22 @@ export default function SignupScreen(): React.JSX.Element {
                                 <TouchableOpacity
                                     style={[
                                         styles.primaryButton,
+                                        { backgroundColor: theme.primary },
                                         !agreedToTerms && styles.primaryButtonDisabled,
                                     ]}
                                     onPress={handleSubmit(onSubmit)}
                                     disabled={!agreedToTerms || isLoading}
                                     activeOpacity={0.8}
                                 >
-                                    <Text style={styles.primaryButtonText}>Create Account</Text>
+                                    <Text style={[styles.primaryButtonText, { color: theme.white }]}>Create Account</Text>
                                 </TouchableOpacity>
                             ) : (
                                 <TouchableOpacity
-                                    style={styles.primaryButton}
+                                    style={[styles.primaryButton, { backgroundColor: theme.primary }]}
                                     onPress={handleNext}
                                     activeOpacity={0.8}
                                 >
-                                    <Text style={styles.primaryButtonText}>Next →</Text>
+                                    <Text style={[styles.primaryButtonText, { color: theme.white }]}>Next →</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -410,17 +441,17 @@ export default function SignupScreen(): React.JSX.Element {
                     {/* Sign In link */}
                     {isFirstStep && (
                         <View style={styles.loginLink}>
-                            <Text style={styles.loginLinkText}>Already have an account? </Text>
+                            <Text style={[styles.loginLinkText, { color: theme.textSecondary }]}>Already have an account? </Text>
                             <TouchableOpacity onPress={() => router.replace('/auth/login' as unknown as Parameters<typeof router.replace>[0])}>
-                                <Text style={styles.loginLinkAction}>Sign In</Text>
+                                <Text style={[styles.loginLinkAction, { color: theme.primary }]}>Sign In</Text>
                             </TouchableOpacity>
                         </View>
                     )}
 
                     {/* Loading Modal */}
                     <LoadingModal isVisible={isLoading} message={loadingMessage} />
-                </KeyboardAvoidingView>
-            </Animated.View>
+                </Animated.View>
+            </KeyboardAvoidingView>
         </SafeScreen>
     );
 }
@@ -428,10 +459,10 @@ export default function SignupScreen(): React.JSX.Element {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-    container: {
+    keyboardAvoid: {
         flex: 1,
     },
-    keyboardAvoid: {
+    container: {
         flex: 1,
         paddingHorizontal: 24,
     },
@@ -445,14 +476,12 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 18,
         fontWeight: '700',
-        color: '#32325D',
     },
     backButton: {
         width: 60,
     },
     backButtonText: {
         fontSize: 16,
-        color: lightPalette.primary,
         fontWeight: '600',
     },
     stepContainer: {
@@ -467,7 +496,6 @@ const styles = StyleSheet.create({
         paddingTop: 16,
     },
     primaryButton: {
-        backgroundColor: lightPalette.primary,
         paddingVertical: 14,
         borderRadius: 10,
         alignItems: 'center',
@@ -476,7 +504,6 @@ const styles = StyleSheet.create({
         opacity: 0.5,
     },
     primaryButtonText: {
-        color: '#FFFFFF',
         fontSize: 16,
         fontWeight: '700',
     },
@@ -487,11 +514,9 @@ const styles = StyleSheet.create({
     },
     loginLinkText: {
         fontSize: 14,
-        color: '#525F7F',
     },
     loginLinkAction: {
         fontSize: 14,
-        color: lightPalette.primary,
         fontWeight: '700',
     },
 });

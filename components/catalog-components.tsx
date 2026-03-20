@@ -204,8 +204,15 @@ interface CatalogFilterPanelProps {
     readonly onClose: () => void;
 }
 
-const CATEGORY_OPTIONS = ['tops', 'bottoms', 'footwear'];
+const CATEGORY_OPTIONS = ['headwear', 'tops', 'bottoms', 'footwear', 'full_body', 'accessory'];
 const RATING_OPTIONS = [1, 2, 3, 4, 5];
+
+function formatCategoryLabel(category: string): string {
+    return category
+        .split('_')
+        .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+        .join(' ');
+}
 
 /**
  * Modal filter panel for categories, price range, and minimum rating.
@@ -280,7 +287,7 @@ export const CatalogFilterPanel: React.FC<CatalogFilterPanelProps> = ({
                                             filterStyles.chipTextActive,
                                         ]}
                                     >
-                                        {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                                        {formatCategoryLabel(cat)}
                                     </Text>
                                 </TouchableOpacity>
                             ))}

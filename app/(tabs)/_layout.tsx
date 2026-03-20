@@ -1,35 +1,25 @@
-import { Tabs } from 'expo-router';
+import { useTheme } from '@/components/ui/theme-provider';
+import { Stack } from 'expo-router';
 import React from 'react';
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+/**
+ * TabsLayout
+ *
+ * Thin shell layout for the (tabs) route group. The visual tab bar and
+ * role-based tab navigation live in app/home/_layout.tsx via the custom
+ * TabBar component. This group primarily serves as an entry-point route
+ * segment — app/index.tsx redirects directly to /home/catalog or
+ * /home/seller-dashboard based on the authenticated user's role.
+ */
+export default function TabsLayout(): React.JSX.Element {
+    const { theme } = useTheme();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
-  return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
-        }}
-      />
-    </Tabs>
-  );
+    return (
+        <Stack
+            screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: theme.background },
+            }}
+        />
+    );
 }

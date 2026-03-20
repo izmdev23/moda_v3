@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Control, Controller, RegisterOptions } from 'react-hook-form';
 import { StyleSheet, Text, TextInput, TextInputProps, TouchableOpacity, View } from 'react-native';
+import { useTheme } from './theme-provider';
 
 export interface FormInputProps extends Omit<TextInputProps, 'name'> {
     readonly name: string;
@@ -14,7 +15,8 @@ export interface FormInputProps extends Omit<TextInputProps, 'name'> {
 }
 
 /**
- * Reusable Form Input integrated with react-hook-form Controller
+ * Reusable Form Input integrated with react-hook-form Controller.
+ * Colors are sourced from the active theme via useTheme().
  * @param props {FormInputProps}
  */
 export const FormInput: React.FC<FormInputProps> = ({
@@ -28,6 +30,7 @@ export const FormInput: React.FC<FormInputProps> = ({
     multiline,
     ...rest
 }) => {
+    const { theme } = useTheme();
     const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
     const isPasswordField = secureTextEntry;
@@ -35,20 +38,24 @@ export const FormInput: React.FC<FormInputProps> = ({
 
     return (
         <View style={styles.container}>
-            <Text style={styles.label}>{label}</Text>
-            <View style={[styles.inputContainer, error ? styles.inputContainerError : null]}>
+            <Text style={[styles.label, { color: theme.textPrimary }]}>{label}</Text>
+            <View style={[
+                styles.inputContainer,
+                { borderColor: error ? theme.error : theme.border, backgroundColor: theme.cardBackground },
+                error ? { backgroundColor: `${theme.error}10` } : null,
+            ]}>
                 <Controller
                     control={control}
                     name={name}
                     rules={rules}
                     render={({ field: { onChange, onBlur, value } }) => (
                         <TextInput
-                            style={[styles.input, multiline && styles.inputMultiline]}
+                            style={[styles.input, multiline && styles.inputMultiline, { color: theme.textPrimary }]}
                             onBlur={onBlur}
                             onChangeText={onChange}
                             value={value}
                             placeholder={placeholder}
-                            placeholderTextColor="#A0A0A0"
+                            placeholderTextColor={theme.gray}
                             secureTextEntry={currentSecureTextEntry}
                             multiline={multiline}
                             {...rest}
@@ -61,13 +68,13 @@ export const FormInput: React.FC<FormInputProps> = ({
                         onPress={() => setIsPasswordVisible(prev => !prev)}
                         activeOpacity={0.7}
                     >
-                        <Text style={styles.eyeText}>
+                        <Text style={[styles.eyeText, { color: theme.primary }]}>
                             {isPasswordVisible ? 'Hide' : 'Show'}
                         </Text>
                     </TouchableOpacity>
                 )}
             </View>
-            {error && <Text style={styles.errorText}>{error}</Text>}
+            {error && <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>}
         </View>
     );
 };
@@ -79,27 +86,19 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#333',
         marginBottom: 6,
     },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#DDD',
         borderRadius: 8,
-        backgroundColor: '#FAFAFA',
-    },
-    inputContainerError: {
-        borderColor: '#FF3B30',
-        backgroundColor: '#FFF5F5',
     },
     input: {
         flex: 1,
         paddingHorizontal: 16,
         paddingVertical: 12,
         fontSize: 16,
-        color: '#333',
     },
     inputMultiline: {
         minHeight: 100,
@@ -110,11 +109,9 @@ const styles = StyleSheet.create({
     },
     eyeText: {
         fontSize: 14,
-        color: '#007AFF', // Theme primary
         fontWeight: '500',
     },
     errorText: {
-        color: '#FF3B30',
         fontSize: 12,
         marginTop: 4,
     },

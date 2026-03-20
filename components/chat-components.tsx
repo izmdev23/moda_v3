@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { ActivityIndicator, FlatList, ListRenderItem, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { lightPalette } from '../utils/theme';
+import { ActivityIndicator, FlatList, ListRenderItem, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ImageWithFallback } from './ui/image-with-fallback';
+import { useTheme } from './ui/theme-provider';
 
 // ─── ChatThreadCard ─────────────────────────────────────────────────────────
 export interface ChatThreadItem {
@@ -20,33 +20,34 @@ export interface ChatThreadCardProps {
 }
 
 export const ChatThreadCard: React.FC<ChatThreadCardProps> = ({ item, onPress }) => {
+    const { theme } = useTheme();
     return (
-        <TouchableOpacity style={threadStyles.container} onPress={onPress} activeOpacity={0.7}>
+        <TouchableOpacity style={[threadStyles.container, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]} onPress={onPress} activeOpacity={0.7}>
             {item.otherPartyAvatar ? (
                 <ImageWithFallback src={item.otherPartyAvatar} style={threadStyles.avatar} />
             ) : (
-                <View style={[threadStyles.avatar, threadStyles.avatarPlaceholder]}>
-                    <Ionicons name="person" size={24} color="#FFFFFF" />
+                <View style={[threadStyles.avatar, { backgroundColor: theme.gray, alignItems: 'center', justifyContent: 'center' }]}>
+                    <Ionicons name="person" size={24} color={theme.white} />
                 </View>
             )}
 
             <View style={threadStyles.content}>
                 <View style={threadStyles.header}>
-                    <Text style={threadStyles.name} numberOfLines={1}>{item.otherPartyName}</Text>
-                    <Text style={threadStyles.timestamp}>{item.timestamp}</Text>
+                    <Text style={[threadStyles.name, { color: theme.textPrimary }]} numberOfLines={1}>{item.otherPartyName}</Text>
+                    <Text style={[threadStyles.timestamp, { color: theme.textSecondary }]}>{item.timestamp}</Text>
                 </View>
 
                 <View style={threadStyles.messageRow}>
                     <Text
-                        style={[threadStyles.message, item.unreadCount > 0 && threadStyles.messageUnread]}
+                        style={[threadStyles.message, { color: item.unreadCount > 0 ? theme.textPrimary : theme.textSecondary }, item.unreadCount > 0 && { fontWeight: 'bold' }]}
                         numberOfLines={1}
                     >
                         {item.lastMessage}
                     </Text>
 
                     {item.unreadCount > 0 && (
-                        <View style={threadStyles.badge}>
-                            <Text style={threadStyles.badgeText}>{item.unreadCount}</Text>
+                        <View style={[threadStyles.badge, { backgroundColor: theme.primary }]}>
+                            <Text style={[threadStyles.badgeText, { color: theme.white }]}>{item.unreadCount}</Text>
                         </View>
                     )}
                 </View>
@@ -59,20 +60,13 @@ const threadStyles = StyleSheet.create({
     container: {
         flexDirection: 'row',
         padding: 16,
-        backgroundColor: '#FFFFFF',
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#E9ECEF',
     },
     avatar: {
         width: 50,
         height: 50,
         borderRadius: 25,
         marginRight: 12,
-    },
-    avatarPlaceholder: {
-        backgroundColor: '#ADB5BD',
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     content: {
         flex: 1,
@@ -88,12 +82,10 @@ const threadStyles = StyleSheet.create({
         flex: 1,
         fontSize: 16,
         fontWeight: 'bold',
-        color: lightPalette.textPrimary,
         marginRight: 8,
     },
     timestamp: {
         fontSize: 12,
-        color: lightPalette.textSecondary,
     },
     messageRow: {
         flexDirection: 'row',
@@ -103,15 +95,9 @@ const threadStyles = StyleSheet.create({
     message: {
         flex: 1,
         fontSize: 14,
-        color: lightPalette.textSecondary,
         marginRight: 8,
     },
-    messageUnread: {
-        fontWeight: 'bold',
-        color: lightPalette.textPrimary,
-    },
     badge: {
-        backgroundColor: lightPalette.primary,
         borderRadius: 10,
         minWidth: 20,
         height: 20,
@@ -120,7 +106,6 @@ const threadStyles = StyleSheet.create({
         paddingHorizontal: 6,
     },
     badgeText: {
-        color: '#FFFFFF',
         fontSize: 12,
         fontWeight: 'bold',
     },
@@ -171,27 +156,28 @@ export interface ChatBubbleProps {
 }
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
+    const { theme } = useTheme();
     return (
         <View style={[bubbleStyles.container, message.isOwn ? bubbleStyles.ownContainer : bubbleStyles.otherContainer]}>
-            <View style={[bubbleStyles.bubble, message.isOwn ? bubbleStyles.ownBubble : bubbleStyles.otherBubble]}>
+            <View style={[bubbleStyles.bubble, message.isOwn ? { backgroundColor: theme.primary, borderBottomRightRadius: 4 } : { backgroundColor: theme.cardBackground, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: theme.border }]}>
                 {message.imageUrl && (
                     <ImageWithFallback src={message.imageUrl} style={bubbleStyles.image} />
                 )}
 
                 {message.content && (
-                    <Text style={[bubbleStyles.text, message.isOwn ? bubbleStyles.ownText : bubbleStyles.otherText]}>
+                    <Text style={[bubbleStyles.text, { color: message.isOwn ? theme.white : theme.textPrimary }]}>
                         {message.content}
                     </Text>
                 )}
             </View>
 
             <View style={[bubbleStyles.footer, message.isOwn && bubbleStyles.ownFooter]}>
-                <Text style={bubbleStyles.time}>{message.timestamp}</Text>
+                <Text style={[bubbleStyles.time, { color: theme.textSecondary }]}>{message.timestamp}</Text>
                 {message.isOwn && (
                     <Ionicons
                         name={message.isRead ? "checkmark-done" : "checkmark"}
                         size={14}
-                        color={message.isRead ? lightPalette.primary : "#ADB5BD"}
+                        color={message.isRead ? theme.primary : theme.gray}
                         style={bubbleStyles.readReceipt}
                     />
                 )}
@@ -217,16 +203,6 @@ const bubbleStyles = StyleSheet.create({
         borderRadius: 16,
         overflow: 'hidden',
     },
-    ownBubble: {
-        backgroundColor: lightPalette.primary,
-        borderBottomRightRadius: 4,
-    },
-    otherBubble: {
-        backgroundColor: '#FFFFFF',
-        borderBottomLeftRadius: 4,
-        borderWidth: 1,
-        borderColor: '#E9ECEF',
-    },
     image: {
         width: 200,
         height: 200,
@@ -236,12 +212,6 @@ const bubbleStyles = StyleSheet.create({
     text: {
         fontSize: 15,
         lineHeight: 20,
-    },
-    ownText: {
-        color: '#FFFFFF',
-    },
-    otherText: {
-        color: lightPalette.textPrimary,
     },
     footer: {
         flexDirection: 'row',
@@ -253,7 +223,6 @@ const bubbleStyles = StyleSheet.create({
     },
     time: {
         fontSize: 11,
-        color: lightPalette.textSecondary,
     },
     readReceipt: {
         marginLeft: 4,
@@ -276,26 +245,27 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     onAttachImage,
     isSending = false
 }) => {
+    const { theme } = useTheme();
     const hasContent = value.trim().length > 0;
 
     return (
-        <View style={inputStyles.wrapper}>
+        <View style={[inputStyles.wrapper, { backgroundColor: theme.cardBackground, borderTopColor: theme.border }]}>
             <TouchableOpacity
                 style={inputStyles.attachButton}
                 onPress={onAttachImage}
                 disabled={isSending}
                 activeOpacity={0.7}
             >
-                <Ionicons name="image-outline" size={24} color={lightPalette.textSecondary} />
+                <Ionicons name="image-outline" size={24} color={theme.textSecondary} />
             </TouchableOpacity>
 
-            <View style={inputStyles.inputContainer}>
+            <View style={[inputStyles.inputContainer, { backgroundColor: theme.background, borderColor: theme.border }]}>
                 <TextInput
-                    style={inputStyles.input}
+                    style={[inputStyles.input, { color: theme.textPrimary }]}
                     value={value}
                     onChangeText={onChangeText}
                     placeholder="Type a message..."
-                    placeholderTextColor="#ADB5BD"
+                    placeholderTextColor={theme.gray}
                     multiline
                     maxLength={1000}
                     editable={!isSending}
@@ -305,16 +275,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <TouchableOpacity
                 style={[
                     inputStyles.sendButton,
-                    hasContent ? inputStyles.sendButtonActive : inputStyles.sendButtonInactive
+                    { backgroundColor: hasContent ? theme.primary : theme.border }
                 ]}
                 onPress={onSend}
                 disabled={!hasContent || isSending}
                 activeOpacity={0.7}
             >
                 {isSending ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <ActivityIndicator size="small" color={theme.white} />
                 ) : (
-                    <Ionicons name="send" size={18} color={hasContent ? '#FFFFFF' : '#ADB5BD'} />
+                    <Ionicons name="send" size={18} color={hasContent ? theme.white : theme.gray} />
                 )}
             </TouchableOpacity>
         </View>
@@ -327,9 +297,7 @@ const inputStyles = StyleSheet.create({
         alignItems: 'flex-end',
         paddingHorizontal: 12,
         paddingVertical: 10,
-        backgroundColor: '#FFFFFF',
         borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: '#E9ECEF',
     },
     attachButton: {
         padding: 8,
@@ -340,10 +308,8 @@ const inputStyles = StyleSheet.create({
     },
     inputContainer: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
         borderRadius: 20,
         borderWidth: 1,
-        borderColor: '#E9ECEF',
         paddingHorizontal: 16,
         paddingTop: Platform.OS === 'ios' ? 12 : 8,
         paddingBottom: Platform.OS === 'ios' ? 12 : 8,
@@ -352,7 +318,6 @@ const inputStyles = StyleSheet.create({
     },
     input: {
         fontSize: 15,
-        color: lightPalette.textPrimary,
         lineHeight: 20,
     },
     sendButton: {
@@ -363,12 +328,5 @@ const inputStyles = StyleSheet.create({
         justifyContent: 'center',
         marginLeft: 8,
     },
-    sendButtonActive: {
-        backgroundColor: lightPalette.primary,
-    },
-    sendButtonInactive: {
-        backgroundColor: '#E9ECEF',
-    },
 });
 
-import { Platform } from 'react-native';

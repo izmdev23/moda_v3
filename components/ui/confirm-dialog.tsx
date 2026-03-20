@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useTheme } from './theme-provider';
 
 export interface ConfirmDialogProps {
     readonly title: string;
@@ -14,6 +15,7 @@ export interface ConfirmDialogProps {
 
 /**
  * Reusable modal for destructive or important actions.
+ * Uses the active theme for all colors — no hardcoded hex values.
  * @param props {ConfirmDialogProps}
  * @example
  * <ConfirmDialog title="Delete" message="Are you sure?" onConfirm={handleDelete} onCancel={close} visible={true} />
@@ -28,25 +30,31 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     cancelLabel = 'Cancel',
     variant = 'info'
 }) => {
+    const { theme } = useTheme();
+
+    const confirmBg =
+        variant === 'danger' ? theme.error :
+            variant === 'warning' ? theme.warning :
+                theme.info;
+
     return (
         <Modal visible={visible} transparent={true} animationType="fade" onRequestClose={onCancel}>
             <View style={styles.overlay}>
-                <View style={styles.dialog}>
-                    <Text style={styles.title}>{title}</Text>
-                    <Text style={styles.message}>{message}</Text>
+                <View style={[styles.dialog, { backgroundColor: theme.cardBackground }]}>
+                    <Text style={[styles.title, { color: theme.textPrimary }]}>{title}</Text>
+                    <Text style={[styles.message, { color: theme.textSecondary }]}>{message}</Text>
                     <View style={styles.buttonRow}>
-                        <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-                            <Text style={styles.cancelText}>{cancelLabel}</Text>
+                        <TouchableOpacity
+                            style={[styles.cancelButton, { backgroundColor: theme.border }]}
+                            onPress={onCancel}
+                        >
+                            <Text style={[styles.cancelText, { color: theme.textSecondary }]}>{cancelLabel}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[
-                                styles.confirmButton,
-                                variant === 'danger' && styles.dangerButton,
-                                variant === 'warning' && styles.warningButton
-                            ]}
+                            style={[styles.confirmButton, { backgroundColor: confirmBg }]}
                             onPress={onConfirm}
                         >
-                            <Text style={styles.confirmText}>{confirmLabel}</Text>
+                            <Text style={[styles.confirmText, { color: theme.white }]}>{confirmLabel}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -64,7 +72,6 @@ const styles = StyleSheet.create({
         padding: 24
     },
     dialog: {
-        backgroundColor: '#fff', // Ideally use theme, but keeping it simple
         borderRadius: 12,
         padding: 24,
         width: '100%',
@@ -79,11 +86,9 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: 'bold',
         marginBottom: 8,
-        color: '#1A1A1A'
     },
     message: {
         fontSize: 16,
-        color: '#666',
         marginBottom: 24,
         lineHeight: 22
     },
@@ -96,23 +101,14 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 16,
         borderRadius: 8,
-        backgroundColor: '#F5F5F5'
     },
     cancelText: {
-        color: '#666',
         fontWeight: '600'
     },
     confirmButton: {
         paddingVertical: 10,
         paddingHorizontal: 16,
         borderRadius: 8,
-        backgroundColor: '#007AFF'
-    },
-    dangerButton: {
-        backgroundColor: '#FF3B30'
-    },
-    warningButton: {
-        backgroundColor: '#FF9500'
     },
     confirmText: {
         color: '#FFFFFF',

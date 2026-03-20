@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
     ActivityIndicator,
     Image,
@@ -8,8 +8,9 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { lightPalette } from '../utils/theme';
+import { usePaymentMethods } from '../hooks/use-payment-methods';
 import { formatPrice } from '../utils/utils';
+import { useTheme } from './ui/theme-provider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,15 +21,18 @@ export interface CheckoutItemData {
     readonly price: number;
     readonly quantity: number;
     readonly thumbnailUrl: string;
+    readonly productId?: number;
+    readonly variantId?: number;
 }
 
-export type PaymentMethodType = 'gcash' | 'paymaya';
+export type PaymentMethodType = 'gcash' | 'paymaya' | 'card';
 
 export interface PaymentMethodOption {
     readonly type: PaymentMethodType;
     readonly label: string;
     readonly icon: string;
     readonly description: string;
+    readonly disabled?: boolean;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -38,13 +42,20 @@ export const PAYMENT_OPTIONS: PaymentMethodOption[] = [
         type: 'gcash',
         label: 'GCash',
         icon: '💙',
-        description: 'Pay via GCash e-wallet',
+        description: 'Currently Unavailable',
+        disabled: true,
     },
     {
         type: 'paymaya',
         label: 'Maya',
         icon: '💚',
         description: 'Pay via Maya (formerly PayMaya)',
+    },
+    {
+        type: 'card',
+        label: 'Credit / Debit Card',
+        icon: '💳',
+        description: 'Visa, Mastercard, etc.',
     },
 ];
 
@@ -59,23 +70,24 @@ interface CheckoutItemProps {
  * Shows thumbnail, product name, variant, quantity, and subtotal.
  */
 export const CheckoutItem: React.FC<CheckoutItemProps> = ({ item }): React.JSX.Element => {
+    const { theme } = useTheme();
     const subtotal = item.price * item.quantity;
 
     return (
-        <View style={styles.checkoutItem}>
+        <View style={[styles.checkoutItem, { borderBottomColor: theme.border }]}>
             <Image
                 source={{ uri: item.thumbnailUrl }}
-                style={styles.itemThumb}
+                style={[styles.itemThumb, { backgroundColor: theme.border }]}
                 resizeMode="cover"
             />
             <View style={styles.itemInfo}>
-                <Text style={styles.itemName} numberOfLines={2}>
+                <Text style={[styles.itemName, { color: theme.textPrimary }]} numberOfLines={2}>
                     {item.productName}
                 </Text>
-                <Text style={styles.itemVariant}>{item.variantName}</Text>
-                <Text style={styles.itemQty}>Qty: {item.quantity}</Text>
+                <Text style={[styles.itemVariant, { color: theme.textSecondary }]}>{item.variantName}</Text>
+                <Text style={[styles.itemQty, { color: theme.gray }]}>Qty: {item.quantity}</Text>
             </View>
-            <Text style={styles.itemSubtotal}>{formatPrice(subtotal)}</Text>
+            <Text style={[styles.itemSubtotal, { color: theme.textPrimary }]}>{formatPrice(subtotal)}</Text>
         </View>
     );
 };
@@ -83,51 +95,125 @@ export const CheckoutItem: React.FC<CheckoutItemProps> = ({ item }): React.JSX.E
 // ─── PaymentMethodSelector ────────────────────────────────────────────────────
 
 interface PaymentMethodSelectorProps {
-    readonly selected: PaymentMethodType | null;
-    readonly onSelect: (type: PaymentMethodType) => void;
+    readonly userId: number;
+    readonly selectedMethodUid: string | null;
+    readonly onSelect: (uid: string, type: PaymentMethodType, accountNumber: string) => void;
+    readonly onAddNew: () => void;
+    readonly onEmpty?: () => void;
 }
 
 /**
- * Horizontal card-based selector for GCash and Maya payment options.
- * Highlights the selected option with a primary border.
+ * Horizontal card-based selector for user's saved payment methods.
  */
 export const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
-    selected,
+    userId,
+    selectedMethodUid,
     onSelect,
+    onAddNew,
+    onEmpty,
 }): React.JSX.Element => {
+    const { theme } = useTheme();
+    const { data: methods = [], isLoading } = usePaymentMethods(userId);
+
+    // Auto-select a payment method when methods load or change (e.g. after returning
+    // from the Add Payment screen). Invalidation in useAddPaymentMethod / useDeletePaymentMethod
+    // triggers a refetch, so this effect runs with fresh data automatically.
+    useEffect(() => {
+        if (isLoading) return;
+        if (methods.length === 0) {
+            onEmpty?.();
+            return;
+        }
+        if (selectedMethodUid !== null) return;
+
+        const def = methods.find((m) => {
+            const opt = PAYMENT_OPTIONS.find((o) => o.type === m.type);
+            return m.is_default && !opt?.disabled;
+        });
+        if (def) {
+            onSelect(def.uid, def.type as PaymentMethodType, def.account_number);
+        } else {
+            const firstAvailable = methods.find((m) => {
+                const opt = PAYMENT_OPTIONS.find((o) => o.type === m.type);
+                return !opt?.disabled;
+            });
+            if (firstAvailable) {
+                onSelect(firstAvailable.uid, firstAvailable.type as PaymentMethodType, firstAvailable.account_number);
+            }
+        }
+    }, [methods, isLoading]);
+
     return (
         <View style={styles.paymentContainer}>
-            <Text style={styles.sectionLabel}>Payment Method</Text>
-            <View style={styles.paymentRow}>
-                {PAYMENT_OPTIONS.map((option) => {
-                    const isSelected = selected === option.type;
-                    return (
-                        <TouchableOpacity
-                            key={option.type}
-                            style={[styles.paymentCard, isSelected && styles.paymentCardSelected]}
-                            onPress={() => onSelect(option.type)}
-                            activeOpacity={0.75}
-                            id={`payment-method-${option.type}`}
-                        >
-                            <Text style={styles.paymentIcon}>{option.icon}</Text>
-                            <Text
-                                style={[
-                                    styles.paymentLabel,
-                                    isSelected && styles.paymentLabelSelected,
-                                ]}
-                            >
-                                {option.label}
-                            </Text>
-                            <Text style={styles.paymentDesc}>{option.description}</Text>
-                            {isSelected && (
-                                <View style={styles.selectedIndicator}>
-                                    <Text style={styles.selectedCheck}>✓</Text>
-                                </View>
-                            )}
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
+            <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Payment Method</Text>
+            {isLoading ? (
+                <View style={[styles.paymentCard, { borderColor: theme.border, backgroundColor: theme.cardBackground, paddingVertical: 24 }]}>
+                    <ActivityIndicator size="small" color={theme.primary} />
+                </View>
+            ) : (
+                <View style={styles.paymentMethodsList}>
+                    {methods.map((method, index) => {
+                        const isSelected = selectedMethodUid === method.uid;
+                        // Find matching options for icon and label
+                        const optionInfo = PAYMENT_OPTIONS.find(o => o.type === method.type) || { icon: '💳', label: method.type, description: 'Payment Method', type: method.type as PaymentMethodType };
+
+                        // Add a separator before the first card if preceded by e-wallets
+                        const showSeparator = index > 0 && method.type === 'card' && methods[index - 1].type !== 'card';
+
+                        return (
+                            <React.Fragment key={method.uid}>
+                                {showSeparator && (
+                                    <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 8 }} />
+                                )}
+                                <TouchableOpacity
+                                    style={[
+                                        styles.paymentCardRow, 
+                                        { borderColor: theme.border, backgroundColor: theme.cardBackground }, 
+                                        isSelected && { borderColor: theme.primary, backgroundColor: theme.primary + '0A' },
+                                        optionInfo.disabled && { opacity: 0.5, backgroundColor: theme.border + '1A' }
+                                    ]}
+                                    onPress={() => !optionInfo.disabled && onSelect(method.uid, optionInfo.type, method.account_number)}
+                                    activeOpacity={optionInfo.disabled ? 1 : 0.75}
+                                    disabled={optionInfo.disabled}
+                                >
+                                    <Text style={[styles.paymentIconRow, optionInfo.disabled && { grayscale: 1 } as any]}>{optionInfo.icon}</Text>
+                                    <View style={styles.paymentInfoRow}>
+                                        <Text
+                                            style={[
+                                                styles.paymentLabel,
+                                                { color: isSelected ? theme.primary : theme.textPrimary },
+                                                optionInfo.disabled && { color: theme.gray }
+                                            ]}
+                                        >
+                                            {optionInfo.label} •••• {method.account_number.slice(-4)}
+                                        </Text>
+                                        <Text style={[styles.paymentDesc, { color: optionInfo.disabled ? theme.gray : theme.textSecondary }]}>
+                                            {optionInfo.disabled ? 'Currently Unavailable' : (method.is_default ? 'Default' : optionInfo.description)}
+                                        </Text>
+                                    </View>
+                                    {isSelected && (
+                                        <View style={[styles.selectedIndicatorRow, { backgroundColor: theme.primary }]}>
+                                            <Text style={[styles.selectedCheck, { color: theme.white }]}>✓</Text>
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
+                            </React.Fragment>
+                        );
+                    })}
+
+                    <TouchableOpacity
+                        style={[styles.addMethodBtn, { borderColor: theme.primary, backgroundColor: theme.primary + '05' }]}
+                        onPress={onAddNew}
+                        activeOpacity={0.7}
+                    >
+                        <Text style={[styles.addMethodText, { color: theme.primary }]}>+ Add New Method</Text>
+                    </TouchableOpacity>
+
+                    {methods.length === 0 && (
+                        <Text style={[styles.noMethodsText, { color: theme.warning }]}>No payment methods found. Please add one.</Text>
+                    )}
+                </View>
+            )}
         </View>
     );
 };
@@ -151,19 +237,20 @@ export const OrderSummaryFooter: React.FC<OrderSummaryFooterProps> = ({
     onPlaceOrder,
     isDisabled,
 }): React.JSX.Element => {
+    const { theme } = useTheme();
     return (
-        <View style={styles.footer}>
+        <View style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.cardBackground }]}>
             <View style={styles.footerAmounts}>
-                <Text style={styles.footerItems}>{itemCount} item{itemCount !== 1 ? 's' : ''}</Text>
-                <Text style={styles.footerTotal}>{formatPrice(totalAmount)}</Text>
+                <Text style={[styles.footerItems, { color: theme.textSecondary }]}>{itemCount} item{itemCount !== 1 ? 's' : ''}</Text>
+                <Text style={[styles.footerTotal, { color: theme.primary }]}>{formatPrice(totalAmount)}</Text>
             </View>
             <TouchableOpacity
-                style={[styles.placeOrderBtn, isDisabled && styles.placeOrderBtnDisabled]}
+                style={[styles.placeOrderBtn, { backgroundColor: theme.primary }, isDisabled && styles.placeOrderBtnDisabled]}
                 onPress={onPlaceOrder}
                 disabled={isDisabled}
                 id="place-order-button"
             >
-                <Text style={styles.placeOrderText}>Place Order</Text>
+                <Text style={[styles.placeOrderText, { color: theme.white }]}>Place Order</Text>
             </TouchableOpacity>
         </View>
     );
@@ -186,20 +273,21 @@ export const PaymentLoadingOverlay: React.FC<PaymentLoadingOverlayProps> = ({
     message,
     onCancel,
 }): React.JSX.Element => {
+    const { theme } = useTheme();
     return (
         <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
             <View style={styles.paymentOverlay}>
-                <View style={styles.paymentOverlayCard}>
-                    <ActivityIndicator size="small" color={lightPalette.primary} />
-                    <Text style={styles.paymentOverlayTitle}>Processing Payment</Text>
-                    <Text style={styles.paymentOverlayMessage}>{message}</Text>
+                <View style={[styles.paymentOverlayCard, { backgroundColor: theme.cardBackground }]}>
+                    <ActivityIndicator size="small" color={theme.primary} />
+                    <Text style={[styles.paymentOverlayTitle, { color: theme.textPrimary }]}>Processing Payment</Text>
+                    <Text style={[styles.paymentOverlayMessage, { color: theme.textSecondary }]}>{message}</Text>
                     {onCancel !== undefined && (
                         <TouchableOpacity
-                            style={styles.paymentCancelBtn}
+                            style={[styles.paymentCancelBtn, { backgroundColor: theme.border }]}
                             onPress={onCancel}
                             id="cancel-payment-button"
                         >
-                            <Text style={styles.paymentCancelText}>Cancel</Text>
+                            <Text style={[styles.paymentCancelText, { color: theme.textSecondary }]}>Cancel</Text>
                         </TouchableOpacity>
                     )}
                 </View>
@@ -218,13 +306,11 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         paddingHorizontal: 16,
         borderBottomWidth: 1,
-        borderBottomColor: lightPalette.border,
     },
     itemThumb: {
         width: 64,
         height: 64,
         borderRadius: 8,
-        backgroundColor: lightPalette.border,
         marginRight: 12,
     },
     itemInfo: {
@@ -233,22 +319,18 @@ const styles = StyleSheet.create({
     itemName: {
         fontSize: 14,
         fontWeight: '700',
-        color: lightPalette.textPrimary,
         marginBottom: 2,
     },
     itemVariant: {
         fontSize: 13,
-        color: lightPalette.textSecondary,
         marginBottom: 2,
     },
     itemQty: {
         fontSize: 12,
-        color: lightPalette.gray,
     },
     itemSubtotal: {
         fontSize: 15,
         fontWeight: '800',
-        color: lightPalette.textPrimary,
         marginLeft: 8,
     },
 
@@ -260,62 +342,72 @@ const styles = StyleSheet.create({
     sectionLabel: {
         fontSize: 12,
         fontWeight: '700',
-        color: lightPalette.textSecondary,
         textTransform: 'uppercase',
         letterSpacing: 0.8,
         marginBottom: 10,
     },
-    paymentRow: {
-        flexDirection: 'row',
+    paymentMethodsList: {
+        flexDirection: 'column',
         gap: 12,
     },
-    paymentCard: {
-        flex: 1,
+    paymentCardRow: {
+        flexDirection: 'row',
         padding: 16,
         borderRadius: 14,
         borderWidth: 2,
-        borderColor: lightPalette.border,
-        backgroundColor: lightPalette.cardBackground,
         alignItems: 'center',
         position: 'relative',
     },
-    paymentCardSelected: {
-        borderColor: lightPalette.primary,
-        backgroundColor: 'rgba(244,67,54,0.04)',
+    paymentIconRow: {
+        fontSize: 24,
+        marginRight: 12,
     },
-    paymentIcon: {
-        fontSize: 28,
-        marginBottom: 6,
+    paymentInfoRow: {
+        flex: 1,
     },
     paymentLabel: {
         fontSize: 14,
         fontWeight: '700',
-        color: lightPalette.textPrimary,
         marginBottom: 4,
     },
-    paymentLabelSelected: {
-        color: lightPalette.primary,
-    },
     paymentDesc: {
-        fontSize: 11,
-        color: lightPalette.textSecondary,
-        textAlign: 'center',
+        fontSize: 12,
     },
-    selectedIndicator: {
-        position: 'absolute',
-        top: 8,
-        right: 8,
+    selectedIndicatorRow: {
         width: 20,
         height: 20,
         borderRadius: 10,
-        backgroundColor: lightPalette.primary,
         justifyContent: 'center',
         alignItems: 'center',
+        marginLeft: 10,
     },
     selectedCheck: {
-        color: lightPalette.white,
         fontSize: 12,
         fontWeight: '900',
+    },
+    addMethodBtn: {
+        padding: 14,
+        borderRadius: 12,
+        borderWidth: 1.5,
+        borderStyle: 'dashed',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    addMethodText: {
+        fontWeight: '700',
+        fontSize: 14,
+    },
+    noMethodsText: {
+        fontSize: 13,
+        textAlign: 'center',
+        marginTop: 4,
+        fontWeight: '500',
+    },
+    paymentCard: {
+        borderRadius: 14,
+        borderWidth: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 
     // OrderSummaryFooter
@@ -325,8 +417,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingVertical: 16,
         borderTopWidth: 1,
-        borderTopColor: lightPalette.border,
-        backgroundColor: lightPalette.cardBackground,
         gap: 16,
         elevation: 8,
         shadowColor: '#000',
@@ -339,24 +429,20 @@ const styles = StyleSheet.create({
     },
     footerItems: {
         fontSize: 12,
-        color: lightPalette.textSecondary,
     },
     footerTotal: {
         fontSize: 22,
         fontWeight: '900',
-        color: lightPalette.primary,
     },
     placeOrderBtn: {
         paddingHorizontal: 24,
         paddingVertical: 14,
-        backgroundColor: lightPalette.primary,
         borderRadius: 12,
     },
     placeOrderBtnDisabled: {
         opacity: 0.4,
     },
     placeOrderText: {
-        color: lightPalette.white,
         fontWeight: '800',
         fontSize: 16,
     },
@@ -370,7 +456,6 @@ const styles = StyleSheet.create({
         padding: 32,
     },
     paymentOverlayCard: {
-        backgroundColor: lightPalette.cardBackground,
         borderRadius: 20,
         padding: 32,
         width: '100%',
@@ -385,13 +470,11 @@ const styles = StyleSheet.create({
     paymentOverlayTitle: {
         fontSize: 18,
         fontWeight: '800',
-        color: lightPalette.textPrimary,
         marginTop: 16,
         marginBottom: 8,
     },
     paymentOverlayMessage: {
         fontSize: 14,
-        color: lightPalette.textSecondary,
         textAlign: 'center',
         lineHeight: 20,
     },
@@ -400,11 +483,9 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 24,
         borderRadius: 10,
-        backgroundColor: lightPalette.border,
     },
     paymentCancelText: {
         fontSize: 14,
         fontWeight: '700',
-        color: lightPalette.textSecondary,
     },
 });

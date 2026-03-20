@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     Dimensions,
     FlatList,
@@ -9,62 +9,44 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { CatalogFilterPanel, CatalogFilterState, CatalogProductItem, CatalogSearchBar, CatalogSortPicker, FeaturedShopsCarousel, RecommendedSection, ShopCardItem, SortOption, TrendingProductsCarousel } from '../../components/catalog-components';
+import type { Edge } from 'react-native-safe-area-context';
+import { CatalogFilterPanel, CatalogFilterState, CatalogSearchBar, CatalogSortPicker, FeaturedShopsCarousel, RecommendedSection, SortOption, TrendingProductsCarousel } from '../../components/catalog-components';
 import { AppHeader } from '../../components/ui/app-header';
 import { EmptyList } from '../../components/ui/empty-list';
-import { LoadingModal } from '../../components/ui/loading-modal';
 import { ProductCard } from '../../components/ui/product-card';
 import { SafeScreen } from '../../components/ui/safe-screen';
-import { Tables } from '../../supabase/database.types';
-import { supabase } from '../../supabase/supabaseClient';
+import { SkeletonLoader } from '../../components/ui/skeleton-loader';
+import type { CatalogProductItem, ShopCardItem } from '../../hooks/use-catalog';
+import { useCatalogProducts, useFeaturedShops, useRecommendations, useTrendingProducts } from '../../hooks/use-catalog';
+import { useCurrentUser } from '../../hooks/use-current-user';
 import { GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH } from '../../utils/constants';
-import { UserRole } from '../../utils/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PAGE_SIZE = 20;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PADDING = 32;
 const GAP = 16;
 const COLUMN_WIDTH = Math.min(GRID_MAX_COLUMN_WIDTH, Math.max(GRID_MIN_COLUMN_WIDTH, (SCREEN_WIDTH - PADDING - GAP) / 2));
+const CATALOG_SAFE_AREA_EDGES: readonly Edge[] = ['top', 'left', 'right'];
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Catalog Grid Skeleton ────────────────────────────────────────────────────
 
-type ProductWithVariants = Tables<'products'> & {
-    product_variants?: Array<Tables<'product_variants'>>;
-};
+/** Placeholder grid shown while the initial product list is loading. */
+const CatalogGridSkeleton: React.FC = () => (
+    <View style={skeletonStyles.grid}>
+        {Array.from({ length: 6 }).map((_, i) => (
+            <View key={i} style={{ width: COLUMN_WIDTH }}>
+                <SkeletonLoader height={COLUMN_WIDTH * 1.25} borderRadius={8} style={{ marginBottom: 8 }} />
+                <SkeletonLoader height={13} width="80%" style={{ marginBottom: 5 }} />
+                <SkeletonLoader height={12} width="50%" />
+            </View>
+        ))}
+    </View>
+);
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Transform raw product row to CatalogProductItem */
-const transformProduct = (row: ProductWithVariants): CatalogProductItem => {
-    const variants = row.product_variants ?? [];
-    const prices = variants.map((v) => v.price);
-    const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
-    const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
-    const now = new Date();
-
-    const saleVariant = variants.find(
-        (v) =>
-            v.sale_price !== null &&
-            v.sale_start_date !== null &&
-            v.sale_end_date !== null &&
-            new Date(v.sale_start_date) <= now &&
-            new Date(v.sale_end_date) >= now
-    );
-
-    return {
-        uid: row.uid,
-        name: row.name,
-        thumbnailUrl: row.thumbnail_url,
-        minPrice,
-        maxPrice,
-        salePrice: saleVariant?.sale_price ?? null,
-        originalPriceForSale: saleVariant ? saleVariant.price : null,
-        rating: row.rating_avg ?? 0,
-        totalSales: row.total_sales ?? 0,
-    };
-};
+const skeletonStyles = StyleSheet.create({
+    grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 8, gap: 16, paddingTop: 8, paddingBottom: 16 },
+});
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -73,18 +55,7 @@ const transformProduct = (row: ProductWithVariants): CatalogProductItem => {
  * Shows featured shops, trending, recommendations, search/filter/sort, and paginated grid.
  */
 export default function CatalogScreen(): React.JSX.Element {
-    const [products, setProducts] = useState<CatalogProductItem[]>([]);
-    const [featuredShops, setFeaturedShops] = useState<ShopCardItem[]>([]);
-    const [trendingProducts, setTrendingProducts] = useState<CatalogProductItem[]>([]);
-    const [recommendedProducts, setRecommendedProducts] = useState<CatalogProductItem[]>([]);
-
-    const [isLoading, setIsLoading] = useState<boolean>(true);
-    const [isFetchingMore, setIsFetchingMore] = useState<boolean>(false);
-    const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-    const [shopsLoading, setShopsLoading] = useState<boolean>(true);
-    const [trendingLoading, setTrendingLoading] = useState<boolean>(true);
-    const [recommendedLoading, setRecommendedLoading] = useState<boolean>(true);
-
+    // ── Search / filter / sort state (UI-local, not server state) ─────────
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [isShopSearch, setIsShopSearch] = useState<boolean>(false);
     const [filters, setFilters] = useState<CatalogFilterState>({
@@ -97,300 +68,56 @@ export default function CatalogScreen(): React.JSX.Element {
     const [showFilters, setShowFilters] = useState<boolean>(false);
     const [showSort, setShowSort] = useState<boolean>(false);
 
-    const [pageOffset, setPageOffset] = useState<number>(0);
-    const [hasMore, setHasMore] = useState<boolean>(true);
-    const [hasActivity, setHasActivity] = useState<boolean>(false);
+    const catalogFilters = {
+        query: searchQuery,
+        isShopSearch,
+        category: filters.category,
+        minPrice: filters.minPrice,
+        maxPrice: filters.maxPrice,
+        minRating: filters.minRating,
+        sort: sortOption,
+    };
 
-    const [userAvatar, setUserAvatar] = useState<string | null>(null);
-    const [userRole, setUserRole] = useState<UserRole>('buyer');
+    // ── Queries ───────────────────────────────────────────────────────────
+    const { data: currentUser } = useCurrentUser();
+    const userId = currentUser?.id ?? null;
 
-    const currentUserId = useRef<number | null>(null);
-    const isMounted = useRef<boolean>(true);
+    const {
+        data: productsData,
+        isLoading: productsLoading,
+        isFetchingNextPage,
+        hasNextPage,
+        fetchNextPage,
+        refetch: refetchProducts,
+        isRefetching: isRefetchingProducts,
+    } = useCatalogProducts(catalogFilters);
 
-    // ─── Fetch user ──────────────────────────────────────────────────────────
+    const { data: featuredShops = [], isLoading: shopsLoading, refetch: refetchShops } = useFeaturedShops();
+    const { data: trendingProducts = [], isLoading: trendingLoading, refetch: refetchTrending } = useTrendingProducts();
+    const { data: recommendationsData, isLoading: recommendedLoading } = useRecommendations(userId);
 
+    const products: CatalogProductItem[] = productsData?.pages.flatMap((p) => p.items) ?? [];
+    const recommendedProducts = recommendationsData?.products ?? [];
+    const hasActivity = recommendationsData?.hasActivity ?? false;
+
+    // ── Redirect sellers to seller dashboard ─────────────────────────────
     useEffect(() => {
-        isMounted.current = true;
-        const fetchUserData = async (): Promise<void> => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user?.id) {
-                const { data } = await supabase
-                    .from('users')
-                    .select('id, avatar_url, role')
-                    .eq('auth_id', session.user.id)
-                    .single();
-
-                if (data && isMounted.current) {
-                    currentUserId.current = data.id;
-                    setUserAvatar(data.avatar_url ?? null);
-                    setUserRole(data.role as UserRole);
-                    void fetchRecommendations(data.id);
-                } else if (isMounted.current) {
-                    setRecommendedLoading(false);
-                }
-            } else if (isMounted.current) {
-                setRecommendedLoading(false);
-            }
-        };
-        void fetchUserData();
-        return () => { isMounted.current = false; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    // ─── Fetch featured shops ────────────────────────────────────────────────
-
-    const fetchFeaturedShops = useCallback(async (): Promise<void> => {
-        if (!isMounted.current) return;
-        setShopsLoading(true);
-        try {
-            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-            const { data } = await supabase
-                .from('order_items')
-                .select('shop_id')
-                .gte('created_at', sevenDaysAgo)
-                .not('shop_id', 'is', null)
-                .limit(100);
-
-            if (!data || !isMounted.current) return;
-
-            const countMap: Record<number, number> = {};
-            for (const item of data) {
-                if (item.shop_id === null) continue;
-                countMap[item.shop_id] = (countMap[item.shop_id] ?? 0) + 1;
-            }
-            const topShopIds = Object.entries(countMap)
-                .sort(([, a], [, b]) => b - a)
-                .slice(0, 10)
-                .map(([id]) => Number(id));
-
-            if (topShopIds.length > 0) {
-                const { data: shopData } = await supabase
-                    .from('shops')
-                    .select('uid, shop_name, city, province, banner_url')
-                    .in('id', topShopIds);
-
-                if (shopData && isMounted.current) {
-                    const shops: ShopCardItem[] = shopData.map((s) => ({
-                        uid: s.uid,
-                        shopName: s.shop_name,
-                        city: s.city,
-                        province: s.province,
-                        bannerUrl: s.banner_url ?? null,
-                        orderCount: countMap[topShopIds.find((id) => true) ?? 0] ?? 0,
-                    }));
-                    setFeaturedShops(shops);
-                }
-            }
-        } catch {
-            // Fail silently
-        } finally {
-            if (isMounted.current) setShopsLoading(false);
+        if (currentUser?.role === 'seller') {
+            router.replace('/home/seller-dashboard');
         }
-    }, []);
+    }, [currentUser?.role]);
 
-    // ─── Fetch trending ──────────────────────────────────────────────────────
-
-    const fetchTrending = useCallback(async (): Promise<void> => {
-        if (!isMounted.current) return;
-        setTrendingLoading(true);
-        try {
-            const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-            const { data: viewData } = await supabase
-                .from('product_views')
-                .select('product_id')
-                .gte('viewed_at', twoDaysAgo)
-                .limit(200);
-
-            if (!viewData || viewData.length === 0 || !isMounted.current) return;
-
-            const viewCount: Record<number, number> = {};
-            for (const v of viewData) {
-                viewCount[v.product_id] = (viewCount[v.product_id] ?? 0) + 1;
-            }
-            const topIds = Object.entries(viewCount)
-                .sort(([, a], [, b]) => b - a)
-                .slice(0, 20)
-                .map(([id]) => Number(id));
-
-            const { data: prodData } = await supabase
-                .from('products')
-                .select('*, product_variants(*)')
-                .in('id', topIds)
-                .is('deleted_at', null);
-
-            if (prodData && isMounted.current) {
-                setTrendingProducts((prodData as ProductWithVariants[]).map(transformProduct));
-            }
-        } catch {
-            // Fail silently
-        } finally {
-            if (isMounted.current) setTrendingLoading(false);
-        }
-    }, []);
-
-    // ─── Fetch recommendations ───────────────────────────────────────────────
-
-    const fetchRecommendations = useCallback(async (userId: number): Promise<void> => {
-        if (!isMounted.current) return;
-        setRecommendedLoading(true);
-        try {
-            const { data: actData } = await supabase
-                .from('user_activity_log')
-                .select('id')
-                .eq('user_id', userId)
-                .limit(1);
-
-            const userHasActivity = (actData?.length ?? 0) > 0;
-            if (isMounted.current) setHasActivity(userHasActivity);
-
-            if (!userHasActivity) return;
-
-            const { data: recData } = await supabase
-                .from('user_recommendations')
-                .select('product_id, score')
-                .eq('user_id', userId)
-                .order('score', { ascending: false })
-                .limit(20);
-
-            if (!recData || recData.length === 0 || !isMounted.current) return;
-
-            const productIds = recData.map((r) => r.product_id);
-            const { data: prodData } = await supabase
-                .from('products')
-                .select('*, product_variants(*)')
-                .in('id', productIds)
-                .is('deleted_at', null);
-
-            if (prodData && isMounted.current) {
-                setRecommendedProducts((prodData as ProductWithVariants[]).map(transformProduct));
-            }
-        } catch {
-            // Fail silently
-        } finally {
-            if (isMounted.current) setRecommendedLoading(false);
-        }
-    }, []);
-
-    // ─── Fetch products ──────────────────────────────────────────────────────
-
-    const fetchProducts = useCallback(async (opts: {
-        offset: number;
-        query: string;
-        filterState: CatalogFilterState;
-        sort: SortOption;
-        shopSearch: boolean;
-        append: boolean;
-    }): Promise<void> => {
-        if (!isMounted.current) return;
-        if (opts.append) setIsFetchingMore(true);
-        else setIsLoading(true);
-
-        try {
-            let query = supabase
-                .from('products')
-                .select('*, product_variants(*)')
-                .is('deleted_at', null);
-
-            if (opts.query.trim()) {
-                if (opts.shopSearch) {
-                    query = query.ilike('shop_name', `%${opts.query.trim()}%`);
-                } else {
-                    query = query.textSearch('search_vector', opts.query.trim(), { type: 'plain' }) as typeof query;
-                }
-            }
-
-            if (opts.filterState.category) {
-                query = query.eq('category', opts.filterState.category);
-            }
-            if (opts.filterState.minRating !== null) {
-                query = query.gte('rating_avg', opts.filterState.minRating);
-            }
-
-            switch (opts.sort) {
-                case 'newest': query = query.order('created_at', { ascending: false }); break;
-                case 'best_rating': query = query.order('rating_avg', { ascending: false }); break;
-                case 'best_sellers': query = query.order('total_sales', { ascending: false }); break;
-                case 'by_shop': query = query.order('shop_name', { ascending: true }); break;
-                default: query = query.order('created_at', { ascending: false }); break;
-            }
-
-            query = query.range(opts.offset, opts.offset + PAGE_SIZE - 1);
-
-            const { data } = await query;
-            let transformed = ((data ?? []) as ProductWithVariants[]).map(transformProduct);
-
-            // Client-side price filter (requires variant data)
-            transformed = transformed.filter((p) => {
-                if (opts.filterState.minPrice !== null && p.minPrice < opts.filterState.minPrice) return false;
-                if (opts.filterState.maxPrice !== null && p.maxPrice > opts.filterState.maxPrice) return false;
-                return true;
-            });
-
-            if (opts.sort === 'price_asc') {
-                transformed.sort((a, b) => a.minPrice - b.minPrice);
-            } else if (opts.sort === 'price_desc') {
-                transformed.sort((a, b) => b.maxPrice - a.maxPrice);
-            }
-
-            if (!isMounted.current) return;
-
-            if (opts.append) {
-                setProducts((prev) => [...prev, ...transformed]);
-            } else {
-                setProducts(transformed);
-            }
-            setHasMore(transformed.length >= PAGE_SIZE);
-            setPageOffset(opts.offset + PAGE_SIZE);
-        } catch {
-            // Keep existing products on error
-        } finally {
-            if (isMounted.current) {
-                setIsLoading(false);
-                setIsFetchingMore(false);
-                setIsRefreshing(false);
-            }
-        }
-    }, []);
-
-    // ─── Initial load ────────────────────────────────────────────────────────
-
-    useEffect(() => {
-        void fetchFeaturedShops();
-        void fetchTrending();
-        void fetchProducts({
-            offset: 0,
-            query: '',
-            filterState: { category: null, minPrice: null, maxPrice: null, minRating: null },
-            sort: 'newest',
-            shopSearch: false,
-            append: false,
-        });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    // ─── Re-fetch on filter/search/sort change ───────────────────────────────
-
-    const isFirstRender = useRef<boolean>(true);
-    useEffect(() => {
-        if (isFirstRender.current) { isFirstRender.current = false; return; }
-        setPageOffset(0);
-        void fetchProducts({ offset: 0, query: searchQuery, filterState: filters, sort: sortOption, shopSearch: isShopSearch, append: false });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchQuery, filters, sortOption, isShopSearch]);
-
-    // ─── Handlers ────────────────────────────────────────────────────────────
+    // ── Handlers ─────────────────────────────────────────────────────────
 
     const handleRefresh = useCallback(async (): Promise<void> => {
-        setIsRefreshing(true);
-        await Promise.all([fetchFeaturedShops(), fetchTrending()]);
-        void fetchProducts({ offset: 0, query: searchQuery, filterState: filters, sort: sortOption, shopSearch: isShopSearch, append: false });
-    }, [fetchFeaturedShops, fetchTrending, fetchProducts, searchQuery, filters, sortOption, isShopSearch]);
+        await Promise.all([refetchShops(), refetchTrending(), refetchProducts()]);
+    }, [refetchShops, refetchTrending, refetchProducts]);
 
     const handleEndReached = useCallback((): void => {
-        if (!isFetchingMore && hasMore) {
-            void fetchProducts({ offset: pageOffset, query: searchQuery, filterState: filters, sort: sortOption, shopSearch: isShopSearch, append: true });
+        if (!isFetchingNextPage && hasNextPage) {
+            void fetchNextPage();
         }
-    }, [isFetchingMore, hasMore, pageOffset, searchQuery, filters, sortOption, isShopSearch, fetchProducts]);
+    }, [isFetchingNextPage, hasNextPage, fetchNextPage]);
 
     const handleProductPress = useCallback((uid: string): void => {
         router.push({ pathname: '/home/product-details' as string, params: { uid } } as Parameters<typeof router.push>[0]);
@@ -409,7 +136,7 @@ export default function CatalogScreen(): React.JSX.Element {
 
     const hasActiveFilters = filters.category !== null || filters.minPrice !== null || filters.maxPrice !== null || filters.minRating !== null;
 
-    // ─── Render helpers ───────────────────────────────────────────────────────
+    // ── Render helpers ────────────────────────────────────────────────────
 
     const renderItem = useCallback(({ item }: { item: CatalogProductItem }): React.JSX.Element => (
         <ProductCard
@@ -429,9 +156,9 @@ export default function CatalogScreen(): React.JSX.Element {
 
     const ListHeader = useCallback((): React.JSX.Element => (
         <View>
-            <FeaturedShopsCarousel shops={featuredShops} onShopPress={handleShopPress} isLoading={shopsLoading} />
-            <TrendingProductsCarousel products={trendingProducts} onProductPress={handleProductPress} isLoading={trendingLoading} />
-            <RecommendedSection products={recommendedProducts} onProductPress={handleProductPress} isLoading={recommendedLoading} hasActivity={hasActivity} />
+            <FeaturedShopsCarousel shops={featuredShops as ShopCardItem[]} onShopPress={handleShopPress} isLoading={shopsLoading} />
+            <TrendingProductsCarousel products={trendingProducts as CatalogProductItem[]} onProductPress={handleProductPress} isLoading={trendingLoading} />
+            <RecommendedSection products={recommendedProducts as CatalogProductItem[]} onProductPress={handleProductPress} isLoading={recommendedLoading} hasActivity={hasActivity} />
 
             <View style={styles.divider} />
 
@@ -458,12 +185,12 @@ export default function CatalogScreen(): React.JSX.Element {
     ]);
 
     const ListFooter = useCallback((): React.JSX.Element | null =>
-        isFetchingMore ? (
+        isFetchingNextPage ? (
             <View style={styles.footerLoading}>
                 <Text style={styles.footerText}>Loading more…</Text>
             </View>
         ) : null,
-        [isFetchingMore]);
+        [isFetchingNextPage]);
 
     const ListEmpty = useCallback((): React.JSX.Element => (
         <EmptyList
@@ -475,12 +202,11 @@ export default function CatalogScreen(): React.JSX.Element {
     ), [hasActiveFilters, searchQuery, handleClearFilters]);
 
     return (
-        <SafeScreen style={styles.root}>
+        <SafeScreen style={styles.root} edges={CATALOG_SAFE_AREA_EDGES}>
             <AppHeader
-                userAvatarUrl={userAvatar}
-                userRole={userRole}
+                userAvatarUrl={currentUser?.avatarUrl ?? null}
+                userRole={currentUser?.role ?? 'buyer'}
             />
-            <LoadingModal isVisible={isLoading && products.length === 0} message="Loading catalog…" />
 
             <FlatList
                 data={products}
@@ -489,11 +215,15 @@ export default function CatalogScreen(): React.JSX.Element {
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
                 ListFooterComponent={ListFooter}
-                ListEmptyComponent={!isLoading ? ListEmpty : null}
+                ListEmptyComponent={productsLoading ? CatalogGridSkeleton : ListEmpty}
                 onEndReached={handleEndReached}
                 onEndReachedThreshold={0.3}
                 refreshControl={
-                    <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={['#F44336']} />
+                    <RefreshControl
+                        refreshing={isRefetchingProducts}
+                        onRefresh={handleRefresh}
+                        colors={['#F44336']}
+                    />
                 }
                 contentContainerStyle={styles.listContent}
                 showsVerticalScrollIndicator={false}
@@ -508,7 +238,7 @@ export default function CatalogScreen(): React.JSX.Element {
 
 const styles = StyleSheet.create({
     root: { flex: 1 },
-    listContent: { paddingBottom: 32 },
+    listContent: { paddingBottom: 0 },
     columnWrapper: { paddingHorizontal: 8 },
     divider: { height: 4, backgroundColor: '#F0F0F0', marginVertical: 8 },
     controlsRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginBottom: 8 },

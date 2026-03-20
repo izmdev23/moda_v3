@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { calculateDiscount, formatPrice, formatPriceRange } from '../../utils/utils';
+import { useTheme } from './theme-provider';
 
 export interface ProductCardProps {
     readonly uid: string;
@@ -17,10 +18,11 @@ export interface ProductCardProps {
 }
 
 /**
- * Shared Product Card component wrapped in React.memo
+ * Shared Product Card component. Uses the active theme for all colors.
+ * Wrapped in React.memo for rendering efficiency.
  * @param props {ProductCardProps}
  */
-export const ProductCard = React.memo<ProductCardProps>(({
+const ProductCardComponent: React.FC<ProductCardProps> = ({
     uid,
     name,
     thumbnailUrl,
@@ -33,62 +35,61 @@ export const ProductCard = React.memo<ProductCardProps>(({
     onPress,
     width = 'auto',
 }) => {
+    const { theme } = useTheme();
     const isMultiVariant = minPrice !== maxPrice;
 
-    // Determine the price string to show
     let priceDisplay: React.ReactNode;
     let discountBadge: React.ReactNode = null;
 
     if (salePrice && originalPriceForSale) {
-        // Find discount percent
         const discountPct = calculateDiscount(originalPriceForSale, salePrice);
 
         discountBadge = (
-            <View style={styles.discountBadge}>
-                <Text style={styles.discountText}>-{discountPct}%</Text>
+            <View style={[styles.discountBadge, { backgroundColor: theme.error }]}>
+                <Text style={[styles.discountText, { color: theme.white }]}>-{discountPct}%</Text>
             </View>
         );
 
         if (isMultiVariant) {
             priceDisplay = (
                 <View>
-                    <Text style={styles.priceTextSale}>From {formatPrice(salePrice)}</Text>
+                    <Text style={[styles.priceTextSale, { color: theme.error }]}>From {formatPrice(salePrice)}</Text>
                     <Text style={styles.originalPriceText}>{formatPrice(originalPriceForSale)}</Text>
                 </View>
             );
         } else {
             priceDisplay = (
                 <View style={styles.priceRow}>
-                    <Text style={styles.priceTextSale}>{formatPrice(salePrice)}</Text>
+                    <Text style={[styles.priceTextSale, { color: theme.error }]}>{formatPrice(salePrice)}</Text>
                     <Text style={styles.originalPriceText}>{formatPrice(originalPriceForSale)}</Text>
                 </View>
             );
         }
     } else {
         priceDisplay = (
-            <Text style={styles.priceText}>{formatPriceRange(minPrice, maxPrice)}</Text>
+            <Text style={[styles.priceText, { color: theme.primary }]}>{formatPriceRange(minPrice, maxPrice)}</Text>
         );
     }
 
     return (
         <TouchableOpacity
-            style={[styles.container, { width: width as any }]}
+            style={[styles.container, { backgroundColor: theme.cardBackground, width: width as any }]}
             onPress={() => onPress(uid)}
             activeOpacity={0.8}
         >
-            <View style={styles.imageContainer}>
+            <View style={[styles.imageContainer, { backgroundColor: theme.background }]}>
                 {thumbnailUrl ? (
                     <Image source={{ uri: thumbnailUrl }} style={styles.image} resizeMode="cover" />
                 ) : (
                     <View style={styles.placeholderImage}>
-                        <Text style={styles.placeholderText}>No Image</Text>
+                        <Text style={[styles.placeholderText, { color: theme.gray }]}>No Image</Text>
                     </View>
                 )}
                 {discountBadge}
             </View>
 
             <View style={styles.detailsContainer}>
-                <Text style={styles.nameText} numberOfLines={2}>
+                <Text style={[styles.nameText, { color: theme.textPrimary }]} numberOfLines={2}>
                     {name}
                 </Text>
 
@@ -99,22 +100,22 @@ export const ProductCard = React.memo<ProductCardProps>(({
                 <View style={styles.metaRow}>
                     <View style={styles.ratingContainer}>
                         <Text style={styles.starIcon}>★</Text>
-                        <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
+                        <Text style={[styles.ratingText, { color: theme.textSecondary }]}>{rating.toFixed(1)}</Text>
                     </View>
                     {totalSales > 0 && (
-                        <Text style={styles.salesText}>{totalSales} sold</Text>
+                        <Text style={[styles.salesText, { color: theme.gray }]}>{totalSales} sold</Text>
                     )}
                 </View>
             </View>
         </TouchableOpacity>
     );
-});
+};
 
+export const ProductCard = React.memo<ProductCardProps>(ProductCardComponent);
 ProductCard.displayName = 'ProductCard';
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: '#FFFFFF',
         borderRadius: 12,
         overflow: 'hidden',
         elevation: 2,
@@ -124,12 +125,11 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         marginBottom: 16,
         marginHorizontal: 8,
-        flex: 1, // for grid
+        flex: 1,
     },
     imageContainer: {
         width: '100%',
         aspectRatio: 1,
-        backgroundColor: '#F5F5F5',
         position: 'relative',
     },
     image: {
@@ -143,20 +143,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     placeholderText: {
-        color: '#999',
         fontSize: 12,
     },
     discountBadge: {
         position: 'absolute',
         top: 8,
         right: 8,
-        backgroundColor: '#FF3B30',
         paddingHorizontal: 6,
         paddingVertical: 4,
         borderRadius: 4,
     },
     discountText: {
-        color: '#FFF',
         fontSize: 10,
         fontWeight: 'bold',
     },
@@ -165,10 +162,9 @@ const styles = StyleSheet.create({
     },
     nameText: {
         fontSize: 14,
-        color: '#333',
         fontWeight: '500',
         lineHeight: 18,
-        minHeight: 36, // Ensure height stability for 2 lines
+        minHeight: 36,
         marginBottom: 8,
     },
     priceSection: {
@@ -182,16 +178,14 @@ const styles = StyleSheet.create({
     priceText: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#007AFF', // Theme Primary
     },
     priceTextSale: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#FF3B30', // Theme Danger/Sale
     },
     originalPriceText: {
         fontSize: 12,
-        color: '#999',
+        color: '#ADB5BD',
         textDecorationLine: 'line-through',
     },
     metaRow: {
@@ -210,11 +204,9 @@ const styles = StyleSheet.create({
     },
     ratingText: {
         fontSize: 12,
-        color: '#666',
         fontWeight: '500',
     },
     salesText: {
         fontSize: 10,
-        color: '#999',
     }
 });

@@ -10,9 +10,10 @@ import {
 } from '../../components/shop-analytics-components';
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
 import { SafeScreen } from '../../components/ui/safe-screen';
-import { lightPalette } from '../../utils/theme';
+import { useTheme } from '../../components/ui/theme-provider';
 
-export default function ShopAnalyticsScreen() {
+export default function ShopAnalyticsScreen(): React.JSX.Element {
+    const { theme } = useTheme();
     const [loading, setLoading] = useState<boolean>(true);
     const [period, setPeriod] = useState<AnalyticsPeriod>('daily');
     const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
@@ -94,8 +95,8 @@ export default function ShopAnalyticsScreen() {
 
     return (
         <SafeScreen>
-            <View style={styles.headerContainer}>
-                <Text style={styles.headerTitle}>Shop Analytics</Text>
+            <View style={[styles.headerContainer, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
+                <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Shop Analytics</Text>
             </View>
 
             <ScrollView
@@ -113,7 +114,7 @@ export default function ShopAnalyticsScreen() {
                     />
                 ) : (
                     <View style={styles.center}>
-                        <Text style={styles.errorText}>No analytics data available.</Text>
+                        <Text style={[styles.errorText, { color: theme.textSecondary }]}>No analytics data available.</Text>
                     </View>
                 )}
             </ScrollView>
@@ -124,19 +125,15 @@ export default function ShopAnalyticsScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
     },
     headerContainer: {
-        backgroundColor: '#FFFFFF',
         padding: 16,
         paddingTop: 24,
         borderBottomWidth: 1,
-        borderBottomColor: '#E9ECEF',
     },
     headerTitle: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: lightPalette.textPrimary,
     },
     center: {
         flex: 1,
@@ -145,7 +142,6 @@ const styles = StyleSheet.create({
         paddingVertical: 40,
     },
     errorText: {
-        color: lightPalette.textSecondary,
         fontSize: 14,
     },
 });

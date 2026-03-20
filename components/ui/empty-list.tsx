@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useTheme } from './theme-provider';
 
 export interface EmptyListProps {
     readonly icon: React.ReactNode;
@@ -12,7 +13,8 @@ export interface EmptyListProps {
 }
 
 /**
- * Empty state component for FlatLists
+ * Empty state component for FlatLists.
+ * Colors are derived from the active theme via useTheme().
  * @param props {EmptyListProps}
  */
 export const EmptyList: React.FC<EmptyListProps> = ({
@@ -21,14 +23,19 @@ export const EmptyList: React.FC<EmptyListProps> = ({
     submessage,
     actionButton
 }) => {
+    const { theme } = useTheme();
+
     return (
         <View style={styles.container}>
             <View style={styles.iconContainer}>{icon}</View>
-            <Text style={styles.message}>{message}</Text>
-            {submessage && <Text style={styles.submessage}>{submessage}</Text>}
+            <Text style={[styles.message, { color: theme.textPrimary }]}>{message}</Text>
+            {submessage && <Text style={[styles.submessage, { color: theme.textSecondary }]}>{submessage}</Text>}
             {actionButton && (
-                <TouchableOpacity style={styles.button} onPress={actionButton.onPress}>
-                    <Text style={styles.buttonText}>{actionButton.label}</Text>
+                <TouchableOpacity
+                    style={[styles.button, { backgroundColor: theme.primary }]}
+                    onPress={actionButton.onPress}
+                >
+                    <Text style={[styles.buttonText, { color: theme.white }]}>{actionButton.label}</Text>
                 </TouchableOpacity>
             )}
         </View>
@@ -49,13 +56,11 @@ const styles = StyleSheet.create({
     message: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#333',
         textAlign: 'center',
         marginBottom: 8
     },
     submessage: {
         fontSize: 14,
-        color: '#666',
         textAlign: 'center',
         marginBottom: 24,
         lineHeight: 20
@@ -63,11 +68,9 @@ const styles = StyleSheet.create({
     button: {
         paddingVertical: 12,
         paddingHorizontal: 24,
-        backgroundColor: '#007AFF', // Theme primary
         borderRadius: 8
     },
     buttonText: {
-        color: '#FFF',
         fontWeight: '600',
         fontSize: 16
     }

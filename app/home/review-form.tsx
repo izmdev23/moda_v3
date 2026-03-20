@@ -7,11 +7,12 @@ import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { ImageWithFallback } from '../../components/ui/image-with-fallback';
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { useTheme } from '../../components/ui/theme-provider';
 import { supabase } from '../../supabase/supabaseClient';
-import { lightPalette } from '../../utils/theme';
 
-export default function ReviewFormScreen() {
+export default function ReviewFormScreen(): React.JSX.Element {
     const router = useRouter();
+    const { theme } = useTheme();
     const { product_id, review_id } = useLocalSearchParams();
 
     const [loading, setLoading] = useState<boolean>(true);
@@ -115,11 +116,11 @@ export default function ReviewFormScreen() {
 
     return (
         <SafeScreen>
-            <View style={styles.header}>
+            <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={lightPalette.textPrimary} />
+                    <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>{review_id ? 'Edit Review' : 'Write a Review'}</Text>
+                <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>{review_id ? 'Edit Review' : 'Write a Review'}</Text>
             </View>
 
             <ScrollView
@@ -128,39 +129,39 @@ export default function ReviewFormScreen() {
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
             >
-                <View style={styles.productBanner}>
+                <View style={[styles.productBanner, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
                     <ImageWithFallback src={productImage} style={styles.productImage} />
                     <View style={styles.productInfo}>
-                        <Text style={styles.productName} numberOfLines={2}>{productName}</Text>
-                        <Text style={styles.productSubtitle}>Rate your purchase</Text>
+                        <Text style={[styles.productName, { color: theme.textPrimary }]} numberOfLines={2}>{productName}</Text>
+                        <Text style={[styles.productSubtitle, { color: theme.textSecondary }]}>Rate your purchase</Text>
                     </View>
                 </View>
 
                 {/* Rating Input and Star Visuals */}
                 <View style={styles.formSection}>
-                    <Text style={styles.label}>Your Rating</Text>
+                    <Text style={[styles.label, { color: theme.textPrimary }]}>Your Rating</Text>
                     <View style={styles.starsContainer}>
                         {[1, 2, 3, 4, 5].map((star) => (
                             <TouchableOpacity key={star} onPress={() => setRating(star)} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}>
                                 <Ionicons
                                     name={star <= rating ? 'star' : 'star-outline'}
                                     size={40}
-                                    color={star <= rating ? '#FFCC00' : '#E9ECEF'}
+                                    color={star <= rating ? theme.starColor : theme.border}
                                 />
                             </TouchableOpacity>
                         ))}
                     </View>
 
-                    <Text style={styles.label}>Your Review</Text>
-                    <View style={styles.inputContainer}>
+                    <Text style={[styles.label, { color: theme.textPrimary }]}>Your Review</Text>
+                    <View style={[styles.inputContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
                         <React.Fragment>
                             {/* We use standard TextInput, manually bound for flexibility in screen layer without complex wrappers */}
                             <TextInput
-                                style={styles.input}
+                                style={[styles.input, { color: theme.textPrimary }]}
                                 value={reviewText}
                                 onChangeText={setReviewText}
                                 placeholder="What did you like or dislike?"
-                                placeholderTextColor="#ADB5BD"
+                                placeholderTextColor={theme.gray}
                                 multiline
                                 numberOfLines={5}
                                 maxLength={500}
@@ -168,7 +169,7 @@ export default function ReviewFormScreen() {
                             />
                         </React.Fragment>
                     </View>
-                    <Text style={styles.charCount}>{reviewText.length}/500</Text>
+                    <Text style={[styles.charCount, { color: theme.textSecondary }]}>{reviewText.length}/500</Text>
                 </View>
 
                 {/* Image Uploader */}
@@ -180,7 +181,7 @@ export default function ReviewFormScreen() {
                 />
 
                 <TouchableOpacity
-                    style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+                    style={[styles.submitButton, { backgroundColor: theme.primary }, isSubmitting && styles.submitButtonDisabled]}
                     onPress={handleSubmitPress}
                     disabled={isSubmitting}
                     activeOpacity={0.8}
@@ -188,7 +189,7 @@ export default function ReviewFormScreen() {
                     {isSubmitting ? (
                         <LoadingIndicator message="" />
                     ) : (
-                        <Text style={styles.submitButtonText}>Submit Review</Text>
+                        <Text style={[styles.submitButtonText, { color: theme.white }]}>Submit Review</Text>
                     )}
                 </TouchableOpacity>
             </ScrollView>
@@ -210,7 +211,6 @@ export default function ReviewFormScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
     },
     contentContainer: {
         padding: 16,
@@ -221,9 +221,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingTop: 16,
         paddingBottom: 16,
-        backgroundColor: '#FFFFFF',
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#E9ECEF',
     },
     backButton: {
         marginRight: 16,
@@ -232,23 +230,19 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: lightPalette.textPrimary,
     },
     center: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#F8F9FA',
     },
     productBanner: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
         padding: 16,
         borderRadius: 12,
         marginBottom: 24,
         borderWidth: 1,
-        borderColor: '#E9ECEF',
     },
     productImage: {
         width: 60,
@@ -262,12 +256,10 @@ const styles = StyleSheet.create({
     productName: {
         fontSize: 15,
         fontWeight: 'bold',
-        color: lightPalette.textPrimary,
         marginBottom: 4,
     },
     productSubtitle: {
         fontSize: 13,
-        color: lightPalette.textSecondary,
     },
     formSection: {
         marginBottom: 24,
@@ -275,7 +267,6 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: lightPalette.textPrimary,
         marginBottom: 8,
     },
     starsContainer: {
@@ -285,9 +276,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
     },
     inputContainer: {
-        backgroundColor: '#FFFFFF',
         borderWidth: 1,
-        borderColor: '#E9ECEF',
         borderRadius: 12,
         padding: 12,
         minHeight: 120,
@@ -295,17 +284,14 @@ const styles = StyleSheet.create({
     input: {
         flex: 1,
         fontSize: 15,
-        color: lightPalette.textPrimary,
         lineHeight: 22,
     },
     charCount: {
         textAlign: 'right',
         fontSize: 12,
-        color: lightPalette.textSecondary,
         marginTop: 8,
     },
     submitButton: {
-        backgroundColor: lightPalette.primary,
         paddingVertical: 16,
         borderRadius: 12,
         alignItems: 'center',
@@ -314,11 +300,9 @@ const styles = StyleSheet.create({
         marginBottom: 40,
     },
     submitButtonDisabled: {
-        backgroundColor: '#ADB5BD',
-        opacity: 0.8,
+        opacity: 0.6,
     },
     submitButtonText: {
-        color: '#FFFFFF',
         fontSize: 16,
         fontWeight: 'bold',
     },

@@ -3,7 +3,7 @@ import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { Animation } from '../../utils/animation';
-import { lightPalette } from '../../utils/theme';
+import { useTheme } from './theme-provider';
 
 interface LoadingModalProps {
     /** Whether the modal is visible */
@@ -15,11 +15,14 @@ interface LoadingModalProps {
 /**
  * A unified generic activity indicator modal for asynchronous operations.
  * Uses React Native Reanimated for entering and exiting animations.
- * 
+ * Colors are sourced from the active theme via useTheme().
+ *
  * @param {LoadingModalProps} props - The component props.
  * @returns {React.JSX.Element | null} The rendered component.
  */
 export const LoadingModal: React.FC<LoadingModalProps> = ({ isVisible, message }): React.JSX.Element | null => {
+    const { theme } = useTheme();
+
     if (!isVisible) return null;
 
     return (
@@ -33,11 +36,11 @@ export const LoadingModal: React.FC<LoadingModalProps> = ({ isVisible, message }
                 <Animated.View
                     entering={Animation.Presets.FadeIn}
                     exiting={Animation.Presets.FadeOut}
-                    style={styles.container}
+                    style={[styles.container, { backgroundColor: theme.cardBackground }]}
                 >
-                    <ActivityIndicator size="small" color={lightPalette.primary} />
+                    <ActivityIndicator size="small" color={theme.primary} />
                     {message && (
-                        <Text style={styles.message}>{message}</Text>
+                        <Text style={[styles.message, { color: theme.textPrimary }]}>{message}</Text>
                     )}
                 </Animated.View>
             </View>
@@ -53,7 +56,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     container: {
-        backgroundColor: '#FFFFFF',
         padding: 24,
         borderRadius: 12,
         alignItems: 'center',
@@ -68,7 +70,6 @@ const styles = StyleSheet.create({
     message: {
         marginTop: 12,
         fontSize: 14,
-        color: '#32325D',
         fontWeight: '600',
         textAlign: 'center',
     },

@@ -1,49 +1,59 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 // Using Alert for simple feedback — Toast will be added in Phase 20
-import { AddToCartSection, ChatWithSellerButton, InlineRatingStars, ProductImageCarousel, ReviewItem, ReviewsList, SaleCountdownTimer, ShopHeader, VariantItem, VariantSelector, VirtualTryOnModal } from '../../components/product-details-components';
-import { LoadingModal } from '../../components/ui/loading-modal';
+import { AddToCartSection, ChatWithSellerButton, InlineRatingStars, ProductImageCarousel, ReviewItem, ReviewsList, SaleCountdownTimer, ShopHeader, VariantSelector } from '../../components/product-details-components';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { SkeletonLoader } from '../../components/ui/skeleton-loader';
+import { useTheme } from '../../components/ui/theme-provider';
+import { useCurrentUser } from '../../hooks/use-current-user';
+import { useAddToCart, useProduct, useProductImages, useProductVariants, useRatingCount, useReviews, useShopForProduct, useUpsertRating, useUserRating, type VariantItem } from '../../hooks/use-product-details';
 import { supabase } from '../../supabase/supabaseClient';
-import { lightPalette } from '../../utils/theme';
 import { formatPrice } from '../../utils/utils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const REVIEWS_PAGE_SIZE = 5;
+const VTON_ENABLED_CATEGORIES: readonly string[] = ['tops', 'bottoms', 'full_body'];
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ShopInfo {
-    readonly uid: string;
-    readonly shopName: string;
-    readonly city: string;
-    readonly province: string;
-    readonly sellerId: number;
+function isVtonCategoryEnabled(category: string): boolean {
+    return VTON_ENABLED_CATEGORIES.includes(category);
 }
 
-interface ProductDetails {
-    readonly id: number;
-    readonly uid: string;
-    readonly name: string;
-    readonly description: string;
-    readonly category: string;
-    readonly thumbnailUrl: string;
-    readonly ratingAvg: number;
-    readonly totalSales: number;
-    readonly shopId: number | null;
-    readonly shopName: string;
-    readonly tags: string[];
-    readonly createdAt: string;
+function formatCategoryLabel(category: string): string {
+    return category
+        .split('_')
+        .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+        .join(' ');
 }
+
+// ─── Product Details Skeleton ─────────────────────────────────────────────────
+
+const ProductDetailsSkeleton: React.FC = () => (
+    <ScrollView showsVerticalScrollIndicator={false}>
+        <SkeletonLoader height={320} borderRadius={0} />
+        <View style={detailsSkeletonStyles.body}>
+            <SkeletonLoader height={22} width="85%" style={{ marginBottom: 10 }} />
+            <SkeletonLoader height={14} width="40%" style={{ marginBottom: 14 }} />
+            <SkeletonLoader height={28} width="30%" style={{ marginBottom: 16 }} />
+            <SkeletonLoader height={12} style={{ marginBottom: 6 }} />
+            <SkeletonLoader height={12} style={{ marginBottom: 6 }} />
+            <SkeletonLoader height={12} width="70%" style={{ marginBottom: 20 }} />
+            <SkeletonLoader height={48} borderRadius={10} />
+        </View>
+    </ScrollView>
+);
+
+const detailsSkeletonStyles = StyleSheet.create({
+    body: { padding: 16 },
+});
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -55,189 +65,59 @@ interface ProductDetails {
 export default function ProductDetailsScreen(): React.JSX.Element {
     const params = useLocalSearchParams<{ uid: string }>();
     const productUid = params.uid ?? '';
+    const { theme } = useTheme();
 
-    const [product, setProduct] = useState<ProductDetails | null>(null);
-    const [shop, setShop] = useState<ShopInfo | null>(null);
-    const [images, setImages] = useState<string[]>([]);
-    const [variants, setVariants] = useState<VariantItem[]>([]);
+    // ── Identity ───────────────────────────────────────────────────────────
+    const { data: currentUser } = useCurrentUser();
+    const userId = currentUser?.id ?? null;
+
+    // ── Server-state queries ───────────────────────────────────────────────
+    const { data: product, isLoading: productLoading } = useProduct(productUid || null);
+    const { data: shop } = useShopForProduct(product?.shopId ?? null);
+    const { data: images = [] } = useProductImages(product?.id ?? null);
+    const { data: variants = [] } = useProductVariants(product?.id ?? null);
+    const { data: ratingCount = 0 } = useRatingCount(product?.id ?? null);
+    const { data: userRating = null } = useUserRating(product?.id ?? null, userId);
+    const { data: initialReviews = [] } = useReviews(product?.id ?? null);
+
+    // ── Mutations ──────────────────────────────────────────────────────────
+    const addToCartMutation = useAddToCart(userId);
+    const upsertRatingMutation = useUpsertRating(product?.id ?? null, userId);
+
+    // ── Local UI state ─────────────────────────────────────────────────────
     const [selectedVariant, setSelectedVariant] = useState<VariantItem | null>(null);
-    const [reviews, setReviews] = useState<ReviewItem[]>([]);
-    const [ratingCount, setRatingCount] = useState<number>(0);
-    const [userRating, setUserRating] = useState<number | null>(null);
-    const [currentUserNumericId, setCurrentUserNumericId] = useState<number | null>(null);
-
-    const [isLoading, setIsLoading] = useState<boolean>(true);
-    const [isAddingToCart, setIsAddingToCart] = useState<boolean>(false);
-    const [isRatingSubmitting, setIsRatingSubmitting] = useState<boolean>(false);
     const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
-    const [isLoadingMoreReviews, setIsLoadingMoreReviews] = useState<boolean>(false);
-    const [showVton, setShowVton] = useState<boolean>(false);
 
-    const [reviewOffset, setReviewOffset] = useState<number>(0);
+    // Review pagination (initial page from query, subsequent pages manual)
+    const [reviews, setReviews] = useState<ReviewItem[]>([]);
+    const [reviewOffset, setReviewOffset] = useState<number>(REVIEWS_PAGE_SIZE);
     const [hasMoreReviews, setHasMoreReviews] = useState<boolean>(true);
+    const [isLoadingMoreReviews, setIsLoadingMoreReviews] = useState<boolean>(false);
 
     // Debounce view logging
     const viewLogged = useRef<boolean>(false);
 
-    // ─── Fetch current user ────────────────────────────────────────────────
-
+    // ── Sync initial reviews into local state ──────────────────────────────
     useEffect(() => {
-        const getUser = async (): Promise<void> => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user?.id) {
-                const { data } = await supabase
-                    .from('users')
-                    .select('id')
-                    .eq('auth_id', session.user.id)
-                    .single();
-                if (data) {
-                    setCurrentUserNumericId(data.id);
-                }
-            }
-        };
-        void getUser();
-    }, []);
+        setReviews(initialReviews);
+        setHasMoreReviews(initialReviews.length >= REVIEWS_PAGE_SIZE);
+        setReviewOffset(REVIEWS_PAGE_SIZE);
+    }, [initialReviews]);
 
-    // ─── Fetch product details ─────────────────────────────────────────────
-
-    useEffect(() => {
-        if (!productUid) return;
-
-        const fetchProduct = async (): Promise<void> => {
-            setIsLoading(true);
-            try {
-                // Fetch product
-                const { data: productData } = await supabase
-                    .from('products')
-                    .select('*')
-                    .eq('uid', productUid)
-                    .is('deleted_at', null)
-                    .single();
-
-                if (!productData) {
-                    setIsLoading(false);
-                    return;
-                }
-
-                const tags = Array.isArray(productData.tags) ? (productData.tags as string[]) : [];
-                setProduct({
-                    id: productData.id,
-                    uid: productData.uid,
-                    name: productData.name,
-                    description: productData.description,
-                    category: productData.category,
-                    thumbnailUrl: productData.thumbnail_url,
-                    ratingAvg: productData.rating_avg,
-                    totalSales: productData.total_sales,
-                    shopId: productData.shop_id,
-                    shopName: productData.shop_name,
-                    tags,
-                    createdAt: productData.created_at,
-                });
-
-                // Fetch shop info
-                if (productData.shop_id !== null) {
-                    const { data: shopData } = await supabase
-                        .from('shops')
-                        .select('uid, shop_name, city, province, user_id')
-                        .eq('id', productData.shop_id)
-                        .single();
-
-                    if (shopData) {
-                        setShop({
-                            uid: shopData.uid,
-                            shopName: shopData.shop_name,
-                            city: shopData.city,
-                            province: shopData.province,
-                            sellerId: shopData.user_id,
-                        });
-                    }
-                }
-
-                // Fetch product images
-                const { data: imageData } = await supabase
-                    .from('product_images')
-                    .select('image_url')
-                    .eq('product_id', productData.id)
-                    .order('sort_order', { ascending: true });
-
-                setImages(imageData?.map((img) => img.image_url) ?? []);
-
-                // Fetch variants
-                const { data: variantData } = await supabase
-                    .from('product_variants')
-                    .select('*')
-                    .eq('product_id', productData.id);
-
-                const mappedVariants: VariantItem[] = (variantData ?? []).map((v) => ({
-                    uid: v.uid,
-                    id: v.id,
-                    name: v.name,
-                    price: v.price,
-                    salePrice: v.sale_price,
-                    saleStartDate: v.sale_start_date,
-                    saleEndDate: v.sale_end_date,
-                    stock: v.stock,
-                    imageUrl: v.image_url,
-                }));
-                setVariants(mappedVariants);
-
-                // Fetch rating count
-                const { data: ratingsData } = await supabase
-                    .from('ratings')
-                    .select('id, rating, user_id')
-                    .eq('product_id', productData.id);
-
-                setRatingCount(ratingsData?.length ?? 0);
-
-                // Fetch initial reviews
-                await fetchReviews(productData.id, 0, false);
-            } catch {
-                // Swallow errors — show empty state
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        void fetchProduct();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [productUid]);
-
-    // Fetch user's existing rating when numericId is known
-    useEffect(() => {
-        if (currentUserNumericId === null || product === null) return;
-
-        const fetchUserRating = async (): Promise<void> => {
-            const { data } = await supabase
-                .from('ratings')
-                .select('rating')
-                .eq('product_id', product.id)
-                .eq('user_id', currentUserNumericId)
-                .maybeSingle();
-            if (data) {
-                setUserRating(data.rating);
-            }
-        };
-        void fetchUserRating();
-    }, [currentUserNumericId, product]);
-
-    // ─── Log product view (debounced – 1 per user per product per hour) ────
-
+    // ── Log product view (once per mount, fire-and-forget) ─────────────────
     useEffect(() => {
         if (!product || viewLogged.current) return;
+        viewLogged.current = true;
 
         const logView = async (): Promise<void> => {
-            viewLogged.current = true;
             try {
                 await supabase.from('product_views').insert({
                     product_id: product.id,
-                    user_id: currentUserNumericId ?? undefined,
+                    user_id: userId ?? undefined,
                 });
-
-                if (currentUserNumericId !== null) {
-                    // WARNING: Typed insert - fields must match user_activity_log schema
+                if (userId !== null) {
                     await supabase.from('user_activity_log').insert({
-                        user_id: currentUserNumericId,
+                        user_id: userId,
                         activity_type: 'view',
                         product_id: product.id,
                     });
@@ -247,13 +127,12 @@ export default function ProductDetailsScreen(): React.JSX.Element {
             }
         };
         void logView();
-    }, [product, currentUserNumericId]);
+    }, [product, userId]);
 
-    // ─── Fetch reviews ─────────────────────────────────────────────────────
+    // ── Fetch additional review pages ─────────────────────────────────────
 
-    const fetchReviews = useCallback(async (productId: number, offset: number, append: boolean): Promise<void> => {
-        if (append) setIsLoadingMoreReviews(true);
-
+    const fetchMoreReviews = useCallback(async (productId: number, offset: number): Promise<void> => {
+        setIsLoadingMoreReviews(true);
         try {
             const { data: reviewData } = await supabase
                 .from('reviews')
@@ -278,7 +157,7 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                         uid: r.uid,
                         userName: userInfo ? `${userInfo.first_name} ${userInfo.last_name}` : 'Anonymous',
                         avatarUrl: userInfo?.avatar_url ?? null,
-                        rating: 0, // Reviews don't have embedded ratings — link via ratings table in full implementation
+                        rating: 0,
                         reviewText: r.review_text,
                         imageUrls: imgData?.map((i) => i.image_url) ?? [],
                         createdAt: r.created_at,
@@ -286,11 +165,7 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                 })
             );
 
-            if (append) {
-                setReviews((prev) => [...prev, ...reviewsWithImages]);
-            } else {
-                setReviews(reviewsWithImages);
-            }
+            setReviews((prev) => [...prev, ...reviewsWithImages]);
             setHasMoreReviews(reviewData.length >= REVIEWS_PAGE_SIZE);
             setReviewOffset(offset + REVIEWS_PAGE_SIZE);
         } catch {
@@ -302,90 +177,39 @@ export default function ProductDetailsScreen(): React.JSX.Element {
 
     const handleLoadMoreReviews = useCallback((): void => {
         if (product && !isLoadingMoreReviews && hasMoreReviews) {
-            void fetchReviews(product.id, reviewOffset, true);
+            void fetchMoreReviews(product.id, reviewOffset);
         }
-    }, [product, isLoadingMoreReviews, hasMoreReviews, reviewOffset, fetchReviews]);
+    }, [product, isLoadingMoreReviews, hasMoreReviews, reviewOffset, fetchMoreReviews]);
 
-    // ─── Handlers ──────────────────────────────────────────────────────────
+    // ── Handlers ───────────────────────────────────────────────────────────
 
-    const handleAddToCart = useCallback(async (quantity: number): Promise<void> => {
-        if (!selectedVariant || !product || currentUserNumericId === null) return;
+    const handleAddToCart = useCallback((quantity: number): void => {
+        if (!selectedVariant || !product) return;
 
-        setIsAddingToCart(true);
-        try {
-            // Check if item already in cart
-            const { data: existing } = await supabase
-                .from('cart_items')
-                .select('id, quantity, uid')
-                .eq('user_id', currentUserNumericId)
-                .eq('variant_id', selectedVariant.id)
-                .maybeSingle();
-
-            if (existing) {
-                // Update quantity
-                const newQty = Math.min(existing.quantity + quantity, 99);
-                await supabase
-                    .from('cart_items')
-                    .update({ quantity: newQty })
-                    .eq('uid', existing.uid);
-            } else {
-                await supabase.from('cart_items').insert({
-                    user_id: currentUserNumericId,
-                    product_id: product.id,
-                    variant_id: selectedVariant.id,
-                    quantity,
-                });
+        addToCartMutation.mutate(
+            { productId: product.id, variantId: selectedVariant.id, quantity },
+            {
+                onSuccess: () => Alert.alert('✓ Added to Cart', `${product.name} (${selectedVariant.name}) × ${quantity}`),
+                onError: () => Alert.alert('Error', 'Failed to add to cart. Please try again.'),
             }
+        );
+    }, [selectedVariant, product, addToCartMutation]);
 
-            Alert.alert('✓ Added to Cart', `${product.name} (${selectedVariant.name}) × ${quantity}`);
-        } catch {
-            Alert.alert('Error', 'Failed to add to cart. Please try again.');
-        } finally {
-            setIsAddingToCart(false);
-        }
-    }, [selectedVariant, product, currentUserNumericId]);
-
-    const handleRate = useCallback(async (rating: number): Promise<void> => {
-        if (!product || currentUserNumericId === null) return;
-
-        setIsRatingSubmitting(true);
-        try {
-            // Upsert rating
-            const { data: existing } = await supabase
-                .from('ratings')
-                .select('uid')
-                .eq('product_id', product.id)
-                .eq('user_id', currentUserNumericId)
-                .maybeSingle();
-
-            if (existing) {
-                await supabase.from('ratings').update({ rating }).eq('uid', existing.uid);
-            } else {
-                await supabase.from('ratings').insert({
-                    product_id: product.id,
-                    user_id: currentUserNumericId,
-                    rating,
-                });
-                setRatingCount((prev) => prev + 1);
-            }
-            setUserRating(rating);
-        } catch {
-            Alert.alert('Error', 'Failed to submit rating. Please try again.');
-        } finally {
-            setIsRatingSubmitting(false);
-        }
-    }, [product, currentUserNumericId]);
+    const handleRate = useCallback((rating: number): void => {
+        upsertRatingMutation.mutate(rating, {
+            onError: () => Alert.alert('Error', 'Failed to submit rating. Please try again.'),
+        });
+    }, [upsertRatingMutation]);
 
     const handleChatWithSeller = useCallback(async (): Promise<void> => {
-        if (!shop || currentUserNumericId === null || !product) return;
+        if (!shop || userId === null || !product) return;
 
         setIsChatLoading(true);
         try {
-            // Check for existing thread
             const { data: existing } = await supabase
                 .from('chat_threads')
                 .select('uid')
-                .eq('buyer_id', currentUserNumericId)
+                .eq('buyer_id', userId)
                 .eq('seller_id', shop.sellerId)
                 .eq('shop_id', product.shopId ?? 0)
                 .maybeSingle();
@@ -396,7 +220,7 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                 const { data: newThread } = await supabase
                     .from('chat_threads')
                     .insert({
-                        buyer_id: currentUserNumericId,
+                        buyer_id: userId,
                         seller_id: shop.sellerId,
                         shop_id: product.shopId ?? 0,
                         product_id: product.id,
@@ -413,7 +237,7 @@ export default function ProductDetailsScreen(): React.JSX.Element {
         } finally {
             setIsChatLoading(false);
         }
-    }, [shop, currentUserNumericId, product]);
+    }, [shop, userId, product]);
 
     const handleWriteReview = useCallback((): void => {
         if (!product) return;
@@ -425,7 +249,27 @@ export default function ProductDetailsScreen(): React.JSX.Element {
         router.push({ pathname: '/home/shop-landing' as string, params: { uid: shop.uid } } as Parameters<typeof router.push>[0]);
     }, [shop]);
 
-    // ─── Determine sale info for selected variant ──────────────────────────
+    const handleOpenVirtualTryOn = useCallback((): void => {
+        if (!product) return;
+
+        if (!isVtonCategoryEnabled(product.category)) {
+            Alert.alert('Virtual Try-On Unavailable', 'Virtual try-on is only available for tops, bottoms, and full_body products.');
+            return;
+        }
+
+        router.push({
+            pathname: '/home/virtual-tryon' as string,
+            params: {
+                productId: String(product.id),
+                productName: product.name,
+                garmentImageUrl: images[0] ?? product.thumbnailUrl,
+                productCategory: product.category,
+                userId: userId !== null ? String(userId) : '',
+            },
+        } as Parameters<typeof router.push>[0]);
+    }, [images, product, userId]);
+
+    // ── Sale info for selected variant ─────────────────────────────────────
 
     const now = new Date();
     const activeSale =
@@ -437,12 +281,12 @@ export default function ProductDetailsScreen(): React.JSX.Element {
         new Date(selectedVariant.saleStartDate as string) <= now &&
         new Date(selectedVariant.saleEndDate as string) >= now;
 
-    // ─── Render ────────────────────────────────────────────────────────────
+    // ── Render ─────────────────────────────────────────────────────────────
 
-    if (isLoading) {
+    if (productLoading) {
         return (
             <SafeScreen>
-                <LoadingModal isVisible message="Loading product…" />
+                <ProductDetailsSkeleton />
             </SafeScreen>
         );
     }
@@ -451,9 +295,9 @@ export default function ProductDetailsScreen(): React.JSX.Element {
         return (
             <SafeScreen style={styles.errorContainer}>
                 <Text style={styles.errorIcon}>😕</Text>
-                <Text style={styles.errorText}>Product not found</Text>
-                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                    <Text style={styles.backBtnText}>Go Back</Text>
+                <Text style={[styles.errorText, { color: theme.textPrimary }]}>Product not found</Text>
+                <TouchableOpacity style={[styles.backBtn, { backgroundColor: theme.primary }]} onPress={() => router.back()}>
+                    <Text style={[styles.backBtnText, { color: theme.white }]}>Go Back</Text>
                 </TouchableOpacity>
             </SafeScreen>
         );
@@ -466,7 +310,8 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                 <ProductImageCarousel
                     imageUrls={images}
                     thumbnailUrl={product.thumbnailUrl}
-                    onVtonPress={() => setShowVton(true)}
+                    showVton={isVtonCategoryEnabled(product.category)}
+                    onVtonPress={handleOpenVirtualTryOn}
                 />
 
                 {/* Shop header */}
@@ -480,16 +325,16 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                 )}
 
                 {/* Product Info */}
-                <View style={styles.infoSection}>
-                    <Text style={styles.productName}>{product.name}</Text>
+                <View style={[styles.infoSection, { backgroundColor: theme.cardBackground }]}>
+                    <Text style={[styles.productName, { color: theme.textPrimary }]}>{product.name}</Text>
 
                     {/* Category & tags */}
                     <View style={styles.categoryRow}>
-                        <Text style={styles.categoryChip}>
-                            {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
+                        <Text style={[styles.categoryChip, { backgroundColor: `${theme.primary}1A`, color: theme.primary }]}>
+                            {formatCategoryLabel(product.category)}
                         </Text>
                         {product.tags.slice(0, 4).map((tag, idx) => (
-                            <Text key={idx} style={styles.tagChip}>{tag}</Text>
+                            <Text key={idx} style={[styles.tagChip, { backgroundColor: theme.background, color: theme.textSecondary, borderColor: theme.border }]}>{tag}</Text>
                         ))}
                     </View>
 
@@ -498,11 +343,11 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                         <View style={styles.priceRow}>
                             {activeSale ? (
                                 <>
-                                    <Text style={styles.salePriceText}>{formatPrice(selectedVariant.salePrice ?? 0)}</Text>
-                                    <Text style={styles.originalPriceText}>{formatPrice(selectedVariant.price)}</Text>
+                                    <Text style={[styles.salePriceText, { color: theme.error }]}>{formatPrice(selectedVariant.salePrice ?? 0)}</Text>
+                                    <Text style={[styles.originalPriceText, { color: theme.gray }]}>{formatPrice(selectedVariant.price)}</Text>
                                 </>
                             ) : (
-                                <Text style={styles.priceText}>{formatPrice(selectedVariant.price)}</Text>
+                                <Text style={[styles.priceText, { color: theme.primary }]}>{formatPrice(selectedVariant.price)}</Text>
                             )}
                         </View>
                     )}
@@ -514,12 +359,12 @@ export default function ProductDetailsScreen(): React.JSX.Element {
 
                     {/* Total sales */}
                     {product.totalSales > 0 && (
-                        <Text style={styles.salesText}>🛒 {product.totalSales} sold</Text>
+                        <Text style={[styles.salesText, { color: theme.textSecondary }]}>🛒 {product.totalSales} sold</Text>
                     )}
 
                     {/* Description */}
-                    <Text style={styles.descriptionLabel}>Description</Text>
-                    <Text style={styles.descriptionText}>{product.description}</Text>
+                    <Text style={[styles.descriptionLabel, { color: theme.textPrimary }]}>Description</Text>
+                    <Text style={[styles.descriptionText, { color: theme.textSecondary }]}>{product.description}</Text>
                 </View>
 
                 {/* Variant selection */}
@@ -534,13 +379,13 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                 {/* Add to Cart */}
                 <AddToCartSection
                     onAddToCart={handleAddToCart}
-                    isLoading={isAddingToCart}
+                    isLoading={addToCartMutation.isPending}
                     maxStock={selectedVariant?.stock ?? 0}
                     isDisabled={selectedVariant === null}
                 />
 
                 {/* Chat with Seller */}
-                {shop && currentUserNumericId !== null && (
+                {shop && userId !== null && (
                     <ChatWithSellerButton onPress={handleChatWithSeller} isLoading={isChatLoading} />
                 )}
 
@@ -550,7 +395,7 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                     ratingCount={ratingCount}
                     userRating={userRating}
                     onRate={handleRate}
-                    isSubmitting={isRatingSubmitting}
+                    isSubmitting={upsertRatingMutation.isPending}
                 />
 
                 {/* Reviews */}
@@ -563,12 +408,6 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                 />
             </ScrollView>
 
-            {/* Virtual Try-On Modal */}
-            <VirtualTryOnModal
-                visible={showVton}
-                onClose={() => setShowVton(false)}
-                productName={product.name}
-            />
         </SafeScreen>
     );
 }
@@ -578,20 +417,16 @@ const styles = StyleSheet.create({
     scrollContent: { paddingBottom: 48 },
     infoSection: {
         padding: 16,
-        backgroundColor: lightPalette.cardBackground,
         marginBottom: 4,
     },
     productName: {
         fontSize: 22,
         fontWeight: '700',
-        color: lightPalette.textPrimary,
         marginBottom: 10,
         lineHeight: 28,
     },
     categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
     categoryChip: {
-        backgroundColor: 'rgba(244,67,54,0.1)',
-        color: lightPalette.primary,
         fontSize: 12,
         fontWeight: '700',
         paddingHorizontal: 10,
@@ -599,34 +434,28 @@ const styles = StyleSheet.create({
         borderRadius: 10,
     },
     tagChip: {
-        backgroundColor: lightPalette.background,
-        color: lightPalette.textSecondary,
         fontSize: 11,
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: lightPalette.border,
     },
     priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 4 },
-    priceText: { fontSize: 24, fontWeight: '700', color: lightPalette.primary },
-    salePriceText: { fontSize: 24, fontWeight: '700', color: lightPalette.error },
+    priceText: { fontSize: 24, fontWeight: '700' },
+    salePriceText: { fontSize: 24, fontWeight: '700' },
     originalPriceText: {
         fontSize: 16,
-        color: lightPalette.gray,
         textDecorationLine: 'line-through',
     },
-    salesText: { fontSize: 12, color: lightPalette.textSecondary, marginTop: 6 },
+    salesText: { fontSize: 12, marginTop: 6 },
     descriptionLabel: {
         fontSize: 15,
         fontWeight: '700',
-        color: lightPalette.textPrimary,
         marginTop: 16,
         marginBottom: 6,
     },
     descriptionText: {
         fontSize: 14,
-        color: lightPalette.textSecondary,
         lineHeight: 21,
     },
     errorContainer: {
@@ -636,12 +465,11 @@ const styles = StyleSheet.create({
         padding: 32,
     },
     errorIcon: { fontSize: 48, marginBottom: 16 },
-    errorText: { fontSize: 18, fontWeight: '600', color: lightPalette.textPrimary, marginBottom: 20 },
+    errorText: { fontSize: 18, fontWeight: '600', marginBottom: 20 },
     backBtn: {
         paddingHorizontal: 24,
         paddingVertical: 12,
-        backgroundColor: lightPalette.primary,
         borderRadius: 10,
     },
-    backBtnText: { color: lightPalette.white, fontWeight: '700', fontSize: 15 },
+    backBtnText: { fontWeight: '700', fontSize: 15 },
 });

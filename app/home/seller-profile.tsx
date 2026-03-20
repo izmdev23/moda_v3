@@ -1,11 +1,12 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import type { Edge } from 'react-native-safe-area-context';
 import { AvatarUploader, ProfileCompletenessBar } from '../../components/buyer-profile-components';
 import {
-    MenuItem,
-    SellerMenu,
-    SellerProfileHeader
+  MenuItem,
+  SellerMenu,
+  SellerProfileHeader
 } from '../../components/seller-profile-components';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
@@ -14,6 +15,8 @@ import { Tables } from '../../supabase/database.types';
 import { supabase } from '../../supabase/supabaseClient';
 import { shopsTable } from '../../utils/database/shops-table';
 import { usersTable } from '../../utils/database/users-table';
+
+const SELLER_PROFILE_SAFE_AREA_EDGES: readonly Edge[] = ['top', 'left', 'right'];
 
 export default function SellerProfileScreen() {
     const router = useRouter();
@@ -84,7 +87,7 @@ export default function SellerProfileScreen() {
 
     if (loading) {
         return (
-            <SafeScreen>
+            <SafeScreen edges={SELLER_PROFILE_SAFE_AREA_EDGES}>
                 <View style={styles.center}>
                     <LoadingIndicator message="Loading profile..." />
                 </View>
@@ -94,7 +97,7 @@ export default function SellerProfileScreen() {
 
     if (!user || !shop) {
         return (
-            <SafeScreen>
+            <SafeScreen edges={SELLER_PROFILE_SAFE_AREA_EDGES}>
                 <View style={styles.center} />
             </SafeScreen>
         );
@@ -150,7 +153,7 @@ export default function SellerProfileScreen() {
     ];
 
     return (
-        <SafeScreen>
+        <SafeScreen edges={SELLER_PROFILE_SAFE_AREA_EDGES}>
             <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
                 <SellerProfileHeader
                     shopName={shop.shop_name}

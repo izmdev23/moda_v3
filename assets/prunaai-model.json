@@ -1,0 +1,367 @@
+﻿{
+    "cover_image_url":  "https://tjzk.replicate.delivery/models_models_featured_image/3d47600d-1400-4fe0-b2bb-ab4c278e3af8/replicate-prediction-apvbkfqc.jpeg",
+    "created_at":  "2025-10-13T12:27:24.200020Z",
+    "default_example":  {
+                            "completed_at":  "2025-12-01T11:23:07.580752Z",
+                            "created_at":  "2025-12-01T11:23:06.659000Z",
+                            "data_removed":  false,
+                            "error":  null,
+                            "id":  "apvbkfqc4drme0ctv6k967ad40",
+                            "input":  {
+                                          "turbo":  true,
+                                          "images":  [
+                                                         "https://replicate.delivery/pbxt/NsSOT0QHataCEiYjbagDkT9MdFuV6VXBUnSDU3F9lc537gag/replicate-prediction-2rq8q6nrg5rmc0csex6818jzk8.jpeg"
+                                                     ],
+                                          "prompt":  "The woman\u0027s dress is changed to black",
+                                          "aspect_ratio":  "1:1"
+                                      },
+                            "is_free_trial_prediction":  false,
+                            "logs":  "Using seed: 140890\nGeneration took 0.82 seconds",
+                            "metrics":  {
+                                            "predict_time":  0.913398072,
+                                            "total_time":  0.921752369
+                                        },
+                            "model":  "prunaai/p-image-edit",
+                            "output":  "https://replicate.delivery/xezq/xysoIoov9S7XJpMU1Y3QSFZXTPQYy6zbZcwNcw4bXXfNZZ3KA/output_140890.jpeg",
+                            "source":  "web",
+                            "started_at":  "2025-12-01T11:23:06.667354Z",
+                            "status":  "succeeded",
+                            "urls":  {
+                                         "stream":  "https://stream.replicate.com/v1/files/bcwr-2eodnjrfugfn527ve46dpycg2f4m4dpn6pp3kjnypb5eanwo5miq",
+                                         "get":  "https://api.replicate.com/v1/predictions/apvbkfqc4drme0ctv6k967ad40",
+                                         "cancel":  "https://api.replicate.com/v1/predictions/apvbkfqc4drme0ctv6k967ad40/cancel"
+                                     },
+                            "version":  "6796c32795d5ad71296fe0637e77dd940ee6678c6116335cf72656a5ad5d31b5"
+                        },
+    "description":  "A sub 1 second 0.01$ multi-image editing model built for production use cases. For image generation, check out p-image here: https://replicate.com/prunaai/p-image",
+    "github_url":  null,
+    "latest_version":  {
+                           "id":  "05a6b136010c1590ff0de1a473b5bc8a5aa221359229f9a69b230d093503eae0",
+                           "created_at":  "2026-03-17T13:19:29.709626Z",
+                           "cog_version":  "0.16.9",
+                           "openapi_schema":  {
+                                                  "info":  {
+                                                               "title":  "Cog",
+                                                               "version":  "0.1.0"
+                                                           },
+                                                  "paths":  {
+
+                                                            },
+                                                  "openapi":  "3.0.2",
+                                                  "components":  {
+                                                                     "schemas":  {
+                                                                                     "Input":  {
+                                                                                                   "type":  "object",
+                                                                                                   "title":  "Input",
+                                                                                                   "required":  [
+                                                                                                                    "prompt"
+                                                                                                                ],
+                                                                                                   "properties":  {
+                                                                                                                      "seed":  {
+                                                                                                                                   "type":  "integer",
+                                                                                                                                   "title":  "Seed",
+                                                                                                                                   "x-order":  5,
+                                                                                                                                   "nullable":  true,
+                                                                                                                                   "description":  "Random seed. Set for reproducible generation."
+                                                                                                                               },
+                                                                                                                      "turbo":  {
+                                                                                                                                    "type":  "boolean",
+                                                                                                                                    "title":  "Turbo",
+                                                                                                                                    "default":  true,
+                                                                                                                                    "x-order":  2,
+                                                                                                                                    "description":  "If turned on, the model will run faster with additional optimizations. For complicated tasks, it is recommended to turn this off."
+                                                                                                                                },
+                                                                                                                      "images":  {
+                                                                                                                                     "type":  "array",
+                                                                                                                                     "items":  {
+                                                                                                                                                   "type":  "string",
+                                                                                                                                                   "format":  "uri"
+                                                                                                                                               },
+                                                                                                                                     "title":  "Images",
+                                                                                                                                     "default":  [
+
+                                                                                                                                                 ],
+                                                                                                                                     "x-order":  1,
+                                                                                                                                     "description":  "Images to use as a reference. For editing task, provide the main image as the first image."
+                                                                                                                                 },
+                                                                                                                      "prompt":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "title":  "Prompt",
+                                                                                                                                     "x-order":  0,
+                                                                                                                                     "description":  "Text prompt for image generation. Make sure to describe your edit task clearly. You can refer to the images as \u0027image 1\u0027 and \u0027image 2\u0027 and so on."
+                                                                                                                                 },
+                                                                                                                      "aspect_ratio":  {
+                                                                                                                                           "allOf":  [
+                                                                                                                                                         {
+                                                                                                                                                             "$ref":  "#/components/schemas/aspect_ratio"
+                                                                                                                                                         }
+                                                                                                                                                     ],
+                                                                                                                                           "default":  "match_input_image",
+                                                                                                                                           "x-order":  4,
+                                                                                                                                           "description":  "Aspect ratio for the generated image. `match_input_image` will match the aspect ratio of the first image."
+                                                                                                                                       },
+                                                                                                                      "replicate_weights":  {
+                                                                                                                                                "allOf":  [
+                                                                                                                                                              {
+                                                                                                                                                                  "$ref":  "#/components/schemas/replicate_weights"
+                                                                                                                                                              }
+                                                                                                                                                          ],
+                                                                                                                                                "default":  "default",
+                                                                                                                                                "x-order":  3,
+                                                                                                                                                "description":  "Task to perform with P-Edit."
+                                                                                                                                            },
+                                                                                                                      "disable_safety_checker":  {
+                                                                                                                                                     "type":  "boolean",
+                                                                                                                                                     "title":  "Disable Safety Checker",
+                                                                                                                                                     "default":  false,
+                                                                                                                                                     "x-order":  6,
+                                                                                                                                                     "description":  "Disable safety checker for generated images."
+                                                                                                                                                 }
+                                                                                                                  }
+                                                                                               },
+                                                                                     "Output":  {
+                                                                                                    "type":  "string",
+                                                                                                    "title":  "Output",
+                                                                                                    "format":  "uri"
+                                                                                                },
+                                                                                     "Status":  {
+                                                                                                    "enum":  [
+                                                                                                                 "starting",
+                                                                                                                 "processing",
+                                                                                                                 "succeeded",
+                                                                                                                 "canceled",
+                                                                                                                 "failed"
+                                                                                                             ],
+                                                                                                    "type":  "string",
+                                                                                                    "title":  "Status",
+                                                                                                    "description":  "An enumeration."
+                                                                                                },
+                                                                                     "WebhookEvent":  {
+                                                                                                          "enum":  [
+                                                                                                                       "start",
+                                                                                                                       "output",
+                                                                                                                       "logs",
+                                                                                                                       "completed"
+                                                                                                                   ],
+                                                                                                          "type":  "string",
+                                                                                                          "title":  "WebhookEvent",
+                                                                                                          "description":  "An enumeration."
+                                                                                                      },
+                                                                                     "aspect_ratio":  {
+                                                                                                          "enum":  [
+                                                                                                                       "match_input_image",
+                                                                                                                       "1:1",
+                                                                                                                       "16:9",
+                                                                                                                       "9:16",
+                                                                                                                       "4:3",
+                                                                                                                       "3:4",
+                                                                                                                       "3:2",
+                                                                                                                       "2:3"
+                                                                                                                   ],
+                                                                                                          "type":  "string",
+                                                                                                          "title":  "aspect_ratio",
+                                                                                                          "description":  "An enumeration."
+                                                                                                      },
+                                                                                     "ValidationError":  {
+                                                                                                             "type":  "object",
+                                                                                                             "title":  "ValidationError",
+                                                                                                             "required":  [
+                                                                                                                              "loc",
+                                                                                                                              "msg",
+                                                                                                                              "type"
+                                                                                                                          ],
+                                                                                                             "properties":  {
+                                                                                                                                "loc":  {
+                                                                                                                                            "type":  "array",
+                                                                                                                                            "items":  {
+                                                                                                                                                          "anyOf":  [
+                                                                                                                                                                        {
+                                                                                                                                                                            "type":  "string"
+                                                                                                                                                                        },
+                                                                                                                                                                        {
+                                                                                                                                                                            "type":  "integer"
+                                                                                                                                                                        }
+                                                                                                                                                                    ]
+                                                                                                                                                      },
+                                                                                                                                            "title":  "Location"
+                                                                                                                                        },
+                                                                                                                                "msg":  {
+                                                                                                                                            "type":  "string",
+                                                                                                                                            "title":  "Message"
+                                                                                                                                        },
+                                                                                                                                "type":  {
+                                                                                                                                             "type":  "string",
+                                                                                                                                             "title":  "Error Type"
+                                                                                                                                         }
+                                                                                                                            }
+                                                                                                         },
+                                                                                     "PredictionRequest":  {
+                                                                                                               "type":  "object",
+                                                                                                               "title":  "PredictionRequest",
+                                                                                                               "properties":  {
+                                                                                                                                  "id":  {
+                                                                                                                                             "type":  "string",
+                                                                                                                                             "title":  "Id",
+                                                                                                                                             "nullable":  true
+                                                                                                                                         },
+                                                                                                                                  "input":  {
+                                                                                                                                                "$ref":  "#/components/schemas/Input",
+                                                                                                                                                "nullable":  true
+                                                                                                                                            },
+                                                                                                                                  "context":  {
+                                                                                                                                                  "type":  "object",
+                                                                                                                                                  "title":  "Context",
+                                                                                                                                                  "nullable":  true,
+                                                                                                                                                  "additionalProperties":  {
+                                                                                                                                                                               "type":  "string"
+                                                                                                                                                                           }
+                                                                                                                                              },
+                                                                                                                                  "webhook":  {
+                                                                                                                                                  "type":  "string",
+                                                                                                                                                  "title":  "Webhook",
+                                                                                                                                                  "format":  "uri",
+                                                                                                                                                  "nullable":  true,
+                                                                                                                                                  "maxLength":  65536,
+                                                                                                                                                  "minLength":  1
+                                                                                                                                              },
+                                                                                                                                  "created_at":  {
+                                                                                                                                                     "type":  "string",
+                                                                                                                                                     "title":  "Created At",
+                                                                                                                                                     "format":  "date-time",
+                                                                                                                                                     "nullable":  true
+                                                                                                                                                 },
+                                                                                                                                  "output_file_prefix":  {
+                                                                                                                                                             "type":  "string",
+                                                                                                                                                             "title":  "Output File Prefix",
+                                                                                                                                                             "nullable":  true
+                                                                                                                                                         },
+                                                                                                                                  "webhook_events_filter":  {
+                                                                                                                                                                "type":  "array",
+                                                                                                                                                                "items":  {
+                                                                                                                                                                              "$ref":  "#/components/schemas/WebhookEvent"
+                                                                                                                                                                          },
+                                                                                                                                                                "default":  [
+                                                                                                                                                                                "start",
+                                                                                                                                                                                "output",
+                                                                                                                                                                                "logs",
+                                                                                                                                                                                "completed"
+                                                                                                                                                                            ],
+                                                                                                                                                                "nullable":  true
+                                                                                                                                                            }
+                                                                                                                              }
+                                                                                                           },
+                                                                                     "replicate_weights":  {
+                                                                                                               "enum":  [
+                                                                                                                            "default",
+                                                                                                                            "multiple_angles",
+                                                                                                                            "relight",
+                                                                                                                            "light_restoration",
+                                                                                                                            "white_to_scene",
+                                                                                                                            "fusion",
+                                                                                                                            "add_characters",
+                                                                                                                            "next_scene",
+                                                                                                                            "style_consistency",
+                                                                                                                            "subject_consistency",
+                                                                                                                            "scene_consistency",
+                                                                                                                            "to_anime",
+                                                                                                                            "to_3dchibi",
+                                                                                                                            "to_caricature",
+                                                                                                                            "photous",
+                                                                                                                            "extract_texture",
+                                                                                                                            "apply_texture",
+                                                                                                                            "upscale",
+                                                                                                                            "anything_to_real",
+                                                                                                                            "white_film_to_rendering"
+                                                                                                                        ],
+                                                                                                               "type":  "string",
+                                                                                                               "title":  "replicate_weights",
+                                                                                                               "description":  "An enumeration."
+                                                                                                           },
+                                                                                     "PredictionResponse":  {
+                                                                                                                "type":  "object",
+                                                                                                                "title":  "PredictionResponse",
+                                                                                                                "properties":  {
+                                                                                                                                   "id":  {
+                                                                                                                                              "type":  "string",
+                                                                                                                                              "title":  "Id",
+                                                                                                                                              "nullable":  true
+                                                                                                                                          },
+                                                                                                                                   "logs":  {
+                                                                                                                                                "type":  "string",
+                                                                                                                                                "title":  "Logs",
+                                                                                                                                                "default":  ""
+                                                                                                                                            },
+                                                                                                                                   "error":  {
+                                                                                                                                                 "type":  "string",
+                                                                                                                                                 "title":  "Error",
+                                                                                                                                                 "nullable":  true
+                                                                                                                                             },
+                                                                                                                                   "input":  {
+                                                                                                                                                 "$ref":  "#/components/schemas/Input",
+                                                                                                                                                 "nullable":  true
+                                                                                                                                             },
+                                                                                                                                   "output":  {
+                                                                                                                                                  "$ref":  "#/components/schemas/Output"
+                                                                                                                                              },
+                                                                                                                                   "status":  {
+                                                                                                                                                  "$ref":  "#/components/schemas/Status",
+                                                                                                                                                  "nullable":  true
+                                                                                                                                              },
+                                                                                                                                   "metrics":  {
+                                                                                                                                                   "type":  "object",
+                                                                                                                                                   "title":  "Metrics",
+                                                                                                                                                   "nullable":  true,
+                                                                                                                                                   "additionalProperties":  true
+                                                                                                                                               },
+                                                                                                                                   "version":  {
+                                                                                                                                                   "type":  "string",
+                                                                                                                                                   "title":  "Version",
+                                                                                                                                                   "nullable":  true
+                                                                                                                                               },
+                                                                                                                                   "created_at":  {
+                                                                                                                                                      "type":  "string",
+                                                                                                                                                      "title":  "Created At",
+                                                                                                                                                      "format":  "date-time",
+                                                                                                                                                      "nullable":  true
+                                                                                                                                                  },
+                                                                                                                                   "started_at":  {
+                                                                                                                                                      "type":  "string",
+                                                                                                                                                      "title":  "Started At",
+                                                                                                                                                      "format":  "date-time",
+                                                                                                                                                      "nullable":  true
+                                                                                                                                                  },
+                                                                                                                                   "completed_at":  {
+                                                                                                                                                        "type":  "string",
+                                                                                                                                                        "title":  "Completed At",
+                                                                                                                                                        "format":  "date-time",
+                                                                                                                                                        "nullable":  true
+                                                                                                                                                    }
+                                                                                                                               }
+                                                                                                            },
+                                                                                     "HTTPValidationError":  {
+                                                                                                                 "type":  "object",
+                                                                                                                 "title":  "HTTPValidationError",
+                                                                                                                 "properties":  {
+                                                                                                                                    "detail":  {
+                                                                                                                                                   "type":  "array",
+                                                                                                                                                   "items":  {
+                                                                                                                                                                 "$ref":  "#/components/schemas/ValidationError"
+                                                                                                                                                             },
+                                                                                                                                                   "title":  "Detail"
+                                                                                                                                               }
+                                                                                                                                }
+                                                                                                             }
+                                                                                 }
+                                                                 }
+                                              }
+                       },
+    "license_url":  null,
+    "name":  "p-image-edit",
+    "owner":  "prunaai",
+    "is_official":  true,
+    "paper_url":  null,
+    "run_count":  20306419,
+    "url":  "https://replicate.com/prunaai/p-image-edit",
+    "visibility":  "public",
+    "weights_url":  null
+}

@@ -10,8 +10,8 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { lightPalette } from '../utils/theme';
 import { formatPrice } from '../utils/utils';
+import { useTheme } from './ui/theme-provider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,10 +40,11 @@ interface CartWarningBannerProps {
  * @param props {CartWarningBannerProps}
  */
 export const CartWarningBanner: React.FC<CartWarningBannerProps> = ({ message }) => {
+    const { theme } = useTheme();
     return (
-        <View style={bannerStyles.container}>
+        <View style={[bannerStyles.container, { backgroundColor: `${theme.warning}1A`, borderLeftColor: theme.warning }]}>
             <Text style={bannerStyles.icon}>⚠️</Text>
-            <Text style={bannerStyles.text}>{message}</Text>
+            <Text style={[bannerStyles.text, { color: theme.textPrimary }]}>{message}</Text>
         </View>
     );
 };
@@ -53,9 +54,7 @@ const bannerStyles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        backgroundColor: 'rgba(251,99,64,0.1)',
         borderLeftWidth: 4,
-        borderLeftColor: lightPalette.warning,
         paddingHorizontal: 16,
         paddingVertical: 10,
         marginHorizontal: 16,
@@ -63,7 +62,7 @@ const bannerStyles = StyleSheet.create({
         borderRadius: 8,
     },
     icon: { fontSize: 16 },
-    text: { flex: 1, fontSize: 13, color: lightPalette.textPrimary, lineHeight: 18 },
+    text: { flex: 1, fontSize: 13, lineHeight: 18 },
 });
 
 // ─── QuantityControl ──────────────────────────────────────────────────────────
@@ -91,6 +90,7 @@ export const QuantityControl: React.FC<QuantityControlProps> = ({
     onManualInput,
     isLoading,
 }) => {
+    const { theme } = useTheme();
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [inputText, setInputText] = useState<string>(String(quantity));
 
@@ -112,16 +112,16 @@ export const QuantityControl: React.FC<QuantityControlProps> = ({
     return (
         <View style={qtyStyles.container}>
             <TouchableOpacity
-                style={[qtyStyles.btn, (quantity <= 1 || isLoading) && qtyStyles.btnDisabled]}
+                style={[qtyStyles.btn, { borderColor: theme.border, backgroundColor: theme.cardBackground }, (quantity <= 1 || isLoading) && qtyStyles.btnDisabled]}
                 onPress={onDecrement}
                 disabled={quantity <= 1 || isLoading}
             >
-                <Text style={qtyStyles.btnText}>−</Text>
+                <Text style={[qtyStyles.btnText, { color: theme.textPrimary }]}>−</Text>
             </TouchableOpacity>
 
             {isEditing ? (
                 <TextInput
-                    style={qtyStyles.input}
+                    style={[qtyStyles.input, { color: theme.textPrimary, borderBottomColor: theme.primary }]}
                     value={inputText}
                     onChangeText={setInputText}
                     keyboardType="numeric"
@@ -132,16 +132,16 @@ export const QuantityControl: React.FC<QuantityControlProps> = ({
                 />
             ) : (
                 <TouchableOpacity onPress={handleTextPress}>
-                    <Text style={qtyStyles.qtyText}>{quantity}</Text>
+                    <Text style={[qtyStyles.qtyText, { color: theme.textPrimary }]}>{quantity}</Text>
                 </TouchableOpacity>
             )}
 
             <TouchableOpacity
-                style={[qtyStyles.btn, (quantity >= maxQty || isLoading) && qtyStyles.btnDisabled]}
+                style={[qtyStyles.btn, { borderColor: theme.border, backgroundColor: theme.cardBackground }, (quantity >= maxQty || isLoading) && qtyStyles.btnDisabled]}
                 onPress={onIncrement}
                 disabled={quantity >= maxQty || isLoading}
             >
-                <Text style={qtyStyles.btnText}>+</Text>
+                <Text style={[qtyStyles.btnText, { color: theme.textPrimary }]}>+</Text>
             </TouchableOpacity>
         </View>
     );
@@ -158,28 +158,23 @@ const qtyStyles = StyleSheet.create({
         height: 32,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: lightPalette.border,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: lightPalette.cardBackground,
     },
     btnDisabled: { opacity: 0.35 },
-    btnText: { fontSize: 18, color: lightPalette.textPrimary, fontWeight: '600', lineHeight: 20 },
+    btnText: { fontSize: 18, fontWeight: '600', lineHeight: 20 },
     qtyText: {
         fontSize: 15,
         fontWeight: '700',
-        color: lightPalette.textPrimary,
         minWidth: 24,
         textAlign: 'center',
     },
     input: {
         fontSize: 15,
         fontWeight: '700',
-        color: lightPalette.textPrimary,
         minWidth: 32,
         textAlign: 'center',
         borderBottomWidth: 1.5,
-        borderBottomColor: lightPalette.primary,
         padding: 0,
     },
 });
@@ -212,6 +207,7 @@ export const CartItem: React.FC<CartItemProps> = ({
     onProductPress,
     isUpdating,
 }) => {
+    const { theme } = useTheme();
     const translateX = useRef(new Animated.Value(0)).current;
     const [isRevealed, setIsRevealed] = useState<boolean>(false);
 
@@ -242,30 +238,34 @@ export const CartItem: React.FC<CartItemProps> = ({
         setIsRevealed(false);
     }, [translateX]);
 
+    // Suppress unused warning for isRevealed/handleSnapBack (used indirectly via gesture)
+    void isRevealed;
+    void handleSnapBack;
+
     return (
         <View style={cartItemStyles.wrapper}>
             {/* Swipe delete background */}
-            <View style={cartItemStyles.deleteBackground}>
+            <View style={[cartItemStyles.deleteBackground, { backgroundColor: theme.error }]}>
                 <TouchableOpacity
                     style={cartItemStyles.deleteBtn}
                     onPress={() => onDelete(item.uid)}
                 >
                     <Text style={cartItemStyles.deleteBtnIcon}>🗑️</Text>
-                    <Text style={cartItemStyles.deleteBtnText}>Delete</Text>
+                    <Text style={[cartItemStyles.deleteBtnText, { color: theme.white }]}>Delete</Text>
                 </TouchableOpacity>
             </View>
 
             {/* Main card */}
             <Animated.View
-                style={[cartItemStyles.container, { transform: [{ translateX }] }]}
+                style={[cartItemStyles.container, { backgroundColor: theme.cardBackground, transform: [{ translateX }] }]}
                 {...panResponder.panHandlers}
             >
                 {/* Checkbox */}
                 <TouchableOpacity
-                    style={[cartItemStyles.checkbox, isSelected && cartItemStyles.checkboxSelected]}
+                    style={[cartItemStyles.checkbox, { borderColor: theme.border }, isSelected && { backgroundColor: theme.primary, borderColor: theme.primary }]}
                     onPress={() => onSelect(item.uid)}
                 >
-                    {isSelected && <Text style={cartItemStyles.checkmark}>✓</Text>}
+                    {isSelected && <Text style={[cartItemStyles.checkmark, { color: theme.white }]}>✓</Text>}
                 </TouchableOpacity>
 
                 {/* Thumbnail */}
@@ -278,13 +278,13 @@ export const CartItem: React.FC<CartItemProps> = ({
                                 resizeMode="cover"
                             />
                         ) : (
-                            <View style={[cartItemStyles.image, cartItemStyles.imageFallback]}>
+                            <View style={[cartItemStyles.image, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}>
                                 <Text style={cartItemStyles.imageFallbackText}>📦</Text>
                             </View>
                         )}
                         {!item.isAvailable && (
                             <View style={cartItemStyles.unavailableOverlay}>
-                                <Text style={cartItemStyles.unavailableText}>Unavailable</Text>
+                                <Text style={[cartItemStyles.unavailableText, { color: theme.white }]}>Unavailable</Text>
                             </View>
                         )}
                     </View>
@@ -292,24 +292,24 @@ export const CartItem: React.FC<CartItemProps> = ({
 
                 {/* Info */}
                 <View style={cartItemStyles.info}>
-                    <Text style={cartItemStyles.productName} numberOfLines={2}>
+                    <Text style={[cartItemStyles.productName, { color: theme.textPrimary }]} numberOfLines={2}>
                         {item.productName}
                     </Text>
-                    <Text style={cartItemStyles.variantName}>{item.variantName}</Text>
+                    <Text style={[cartItemStyles.variantName, { color: theme.textSecondary }]}>{item.variantName}</Text>
 
                     {/* Price */}
                     <View style={cartItemStyles.priceRow}>
-                        <Text style={cartItemStyles.price}>{formatPrice(item.price)}</Text>
+                        <Text style={[cartItemStyles.price, { color: theme.primary }]}>{formatPrice(item.price)}</Text>
                         {item.hasPriceChanged && (
-                            <View style={cartItemStyles.priceChangedBadge}>
-                                <Text style={cartItemStyles.priceChangedText}>Price changed</Text>
+                            <View style={[cartItemStyles.priceChangedBadge, { backgroundColor: `${theme.warning}26` }]}>
+                                <Text style={[cartItemStyles.priceChangedText, { color: theme.warning }]}>Price changed</Text>
                             </View>
                         )}
                     </View>
 
                     {/* Quantity */}
                     {isUpdating ? (
-                        <ActivityIndicator size="small" color={lightPalette.primary} style={{ alignSelf: 'flex-start', marginTop: 8 }} />
+                        <ActivityIndicator size="small" color={theme.primary} style={{ alignSelf: 'flex-start', marginTop: 8 }} />
                     ) : (
                         <View style={cartItemStyles.qtyRow}>
                             <QuantityControl
@@ -320,7 +320,7 @@ export const CartItem: React.FC<CartItemProps> = ({
                                 onManualInput={(q) => onQuantityChange(item.uid, q)}
                                 isLoading={isUpdating}
                             />
-                            <Text style={cartItemStyles.subtotal}>
+                            <Text style={[cartItemStyles.subtotal, { color: theme.textSecondary }]}>
                                 = {formatPrice(item.price * item.quantity)}
                             </Text>
                         </View>
@@ -339,17 +339,15 @@ const cartItemStyles = StyleSheet.create({
         top: 0,
         bottom: 0,
         width: 80,
-        backgroundColor: lightPalette.error,
         justifyContent: 'center',
         alignItems: 'center',
     },
     deleteBtn: { alignItems: 'center', gap: 4, padding: 8 },
     deleteBtnIcon: { fontSize: 20 },
-    deleteBtnText: { color: lightPalette.white, fontSize: 11, fontWeight: '700' },
+    deleteBtnText: { fontSize: 11, fontWeight: '700' },
     container: {
         flexDirection: 'row',
         alignItems: 'flex-start',
-        backgroundColor: lightPalette.cardBackground,
         padding: 12,
         gap: 12,
     },
@@ -358,16 +356,13 @@ const cartItemStyles = StyleSheet.create({
         height: 22,
         borderRadius: 6,
         borderWidth: 2,
-        borderColor: lightPalette.border,
         justifyContent: 'center',
         alignItems: 'center',
         marginTop: 2,
     },
-    checkboxSelected: { backgroundColor: lightPalette.primary, borderColor: lightPalette.primary },
-    checkmark: { color: lightPalette.white, fontSize: 13, fontWeight: '700' },
+    checkmark: { fontSize: 13, fontWeight: '700' },
     imageContainer: { position: 'relative' },
     image: { width: 80, height: 80, borderRadius: 10 },
-    imageFallback: { backgroundColor: lightPalette.background, justifyContent: 'center', alignItems: 'center' },
     imageFallbackText: { fontSize: 28 },
     unavailableOverlay: {
         position: 'absolute',
@@ -377,26 +372,25 @@ const cartItemStyles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    unavailableText: { color: lightPalette.white, fontSize: 10, fontWeight: '700', textAlign: 'center' },
+    unavailableText: { fontSize: 10, fontWeight: '700', textAlign: 'center' },
     info: { flex: 1 },
-    productName: { fontSize: 14, fontWeight: '700', color: lightPalette.textPrimary, lineHeight: 18 },
-    variantName: { fontSize: 12, color: lightPalette.textSecondary, marginTop: 2 },
+    productName: { fontSize: 14, fontWeight: '700', lineHeight: 18 },
+    variantName: { fontSize: 12, marginTop: 2 },
     priceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
-    price: { fontSize: 15, fontWeight: '700', color: lightPalette.primary },
+    price: { fontSize: 15, fontWeight: '700' },
     priceChangedBadge: {
-        backgroundColor: 'rgba(251,99,64,0.15)',
         paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 4,
     },
-    priceChangedText: { fontSize: 10, color: lightPalette.warning, fontWeight: '700' },
+    priceChangedText: { fontSize: 10, fontWeight: '700' },
     qtyRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
         marginTop: 10,
     },
-    subtotal: { fontSize: 13, color: lightPalette.textSecondary, fontWeight: '600' },
+    subtotal: { fontSize: 13, fontWeight: '600' },
 });
 
 // ─── CartSummary ──────────────────────────────────────────────────────────────
@@ -418,19 +412,20 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
     onCheckout,
     isCheckoutDisabled,
 }) => {
+    const { theme } = useTheme();
     return (
-        <View style={summaryStyles.container}>
+        <View style={[summaryStyles.container, { backgroundColor: theme.cardBackground, borderTopColor: theme.border }]}>
             <View style={summaryStyles.info}>
-                <Text style={summaryStyles.countText}>{selectedCount} item{selectedCount !== 1 ? 's' : ''}</Text>
-                <Text style={summaryStyles.totalLabel}>Total:</Text>
-                <Text style={summaryStyles.totalAmount}>{formatPrice(totalAmount)}</Text>
+                <Text style={[summaryStyles.countText, { color: theme.textSecondary }]}>{selectedCount} item{selectedCount !== 1 ? 's' : ''}</Text>
+                <Text style={[summaryStyles.totalLabel, { color: theme.textSecondary }]}>Total:</Text>
+                <Text style={[summaryStyles.totalAmount, { color: theme.textPrimary }]}>{formatPrice(totalAmount)}</Text>
             </View>
             <TouchableOpacity
-                style={[summaryStyles.checkoutBtn, isCheckoutDisabled && summaryStyles.checkoutBtnDisabled]}
+                style={[summaryStyles.checkoutBtn, { backgroundColor: isCheckoutDisabled ? theme.gray : theme.primary }]}
                 onPress={onCheckout}
                 disabled={isCheckoutDisabled}
             >
-                <Text style={summaryStyles.checkoutText}>
+                <Text style={[summaryStyles.checkoutText, { color: theme.white }]}>
                     {isCheckoutDisabled ? 'Select Items' : 'Checkout →'}
                 </Text>
             </TouchableOpacity>
@@ -443,9 +438,7 @@ const summaryStyles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
-        backgroundColor: lightPalette.cardBackground,
         borderTopWidth: 1,
-        borderTopColor: lightPalette.border,
         gap: 12,
         elevation: 8,
         shadowColor: '#000',
@@ -454,15 +447,13 @@ const summaryStyles = StyleSheet.create({
         shadowRadius: 6,
     },
     info: { flex: 1 },
-    countText: { fontSize: 12, color: lightPalette.textSecondary },
-    totalLabel: { fontSize: 13, color: lightPalette.textSecondary, marginTop: 2 },
-    totalAmount: { fontSize: 20, fontWeight: '700', color: lightPalette.textPrimary },
+    countText: { fontSize: 12 },
+    totalLabel: { fontSize: 13, marginTop: 2 },
+    totalAmount: { fontSize: 20, fontWeight: '700' },
     checkoutBtn: {
-        backgroundColor: lightPalette.primary,
         paddingVertical: 14,
         paddingHorizontal: 24,
         borderRadius: 14,
     },
-    checkoutBtnDisabled: { backgroundColor: lightPalette.gray },
-    checkoutText: { color: lightPalette.white, fontSize: 15, fontWeight: '700' },
+    checkoutText: { fontSize: 15, fontWeight: '700' },
 });

@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
     Image,
@@ -43,21 +44,33 @@ export function AppHeader({
                 <Text style={[styles.appTitle, { color: currentTheme.textPrimary }]}>{title}</Text>
             </View>
 
-            {showProfileIcon && (
-                <TouchableOpacity
-                    style={[styles.profileBtn, { borderColor: currentTheme.border, backgroundColor: currentTheme.background }]}
-                    onPress={() => setIsMenuVisible(true)}
-                    activeOpacity={0.7}
-                >
-                    {userAvatarUrl ? (
-                        <Image source={{ uri: userAvatarUrl }} style={styles.avatar} />
-                    ) : (
-                        <View style={[styles.avatarPlaceholder, { backgroundColor: currentTheme.primary }]}>
-                            <IconSymbol name="person.fill" size={20} color={currentTheme.white} />
-                        </View>
-                    )}
-                </TouchableOpacity>
-            )}
+            <View style={styles.rightSection}>
+                {userRole === 'buyer' && (
+                    <TouchableOpacity
+                        style={styles.cartBtn}
+                        onPress={() => router.push('/home/cart')}
+                        activeOpacity={0.7}
+                    >
+                        <IconSymbol name="cart.fill" size={24} color={currentTheme.textPrimary} />
+                    </TouchableOpacity>
+                )}
+
+                {showProfileIcon && (
+                    <TouchableOpacity
+                        style={[styles.profileBtn, { borderColor: currentTheme.border, backgroundColor: currentTheme.background }]}
+                        onPress={() => setIsMenuVisible(true)}
+                        activeOpacity={0.7}
+                    >
+                        {userAvatarUrl ? (
+                            <Image source={{ uri: userAvatarUrl }} style={styles.avatar} />
+                        ) : (
+                            <View style={[styles.avatarPlaceholder, { backgroundColor: currentTheme.primary }]}>
+                                <IconSymbol name="person.fill" size={20} color={currentTheme.white} />
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                )}
+            </View>
 
             <ProfileMenu
                 isVisible={isMenuVisible}
@@ -80,6 +93,17 @@ const styles = StyleSheet.create({
     },
     leftSection: {
         flexDirection: 'row',
+        alignItems: 'center',
+    },
+    rightSection: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    cartBtn: {
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
         alignItems: 'center',
     },
     appIcon: {

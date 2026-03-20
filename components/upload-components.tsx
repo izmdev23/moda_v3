@@ -2,7 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useRef } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { actions, RichEditor, RichToolbar } from 'react-native-pell-rich-editor';
 import { useTheme } from '../components/ui/theme-provider';
 
@@ -70,9 +70,13 @@ interface RichTextInputProps {
     label: string;
     value: string;
     onChange: (text: string) => void;
+    /** Optional callback to trigger Gemini auto-generation. If provided, an "✨ Auto-generate" button is shown. */
+    onAutoGenerate?: () => Promise<void>;
+    /** When true, shows a loading indicator on the auto-generate button. */
+    isGenerating?: boolean;
 }
 
-export const RichTextInput: React.FC<RichTextInputProps> = ({ label, value, onChange }) => {
+export const RichTextInput: React.FC<RichTextInputProps> = ({ label, value, onChange, onAutoGenerate, isGenerating }) => {
     const { theme } = useTheme();
     const editorRef = useRef<RichEditor>(null);
 
@@ -84,7 +88,23 @@ export const RichTextInput: React.FC<RichTextInputProps> = ({ label, value, onCh
 
     return (
         <View style={styles.container}>
-            <Text style={[styles.label, { color: theme.textPrimary }]}>{label}</Text>
+            {/* Label row with optional Auto-generate button */}
+            <View style={richStyles.labelRow}>
+                <Text style={[styles.label, { color: theme.textPrimary, marginBottom: 0 }]}>{label}</Text>
+                {onAutoGenerate !== undefined && (
+                    <TouchableOpacity
+                        style={[richStyles.autoGenBtn, { borderColor: theme.primary, opacity: isGenerating === true ? 0.6 : 1 }]}
+                        onPress={() => void onAutoGenerate()}
+                        disabled={isGenerating === true}
+                    >
+                        {isGenerating === true ? (
+                            <ActivityIndicator size="small" color={theme.primary} />
+                        ) : (
+                            <Text style={[richStyles.autoGenBtnText, { color: theme.primary }]}>✨ Auto-generate</Text>
+                        )}
+                    </TouchableOpacity>
+                )}
+            </View>
             <View style={[styles.editorContainer, { borderColor: theme.border }]}>
                 <RichToolbar
                     editor={editorRef}
@@ -347,4 +367,27 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderRadius: 8,
     }
+});
+
+const richStyles = StyleSheet.create({
+    labelRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    autoGenBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        borderWidth: 1.5,
+        minWidth: 44,
+        justifyContent: 'center',
+    },
+    autoGenBtnText: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
 });

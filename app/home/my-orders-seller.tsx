@@ -1,50 +1,17 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
+import type { Edge } from 'react-native-safe-area-context';
 import { OrderCard, OrderItemData } from '../../components/my-orders-components';
 import { EmptyList } from '../../components/ui/empty-list';
 import { SafeScreen } from '../../components/ui/safe-screen';
 import { useTheme } from '../../components/ui/theme-provider';
 
-// Dummy data
-const MOCK_SELLER_ORDERS: OrderItemData[] = [
-    {
-        id: 'ord_1',
-        name: 'Vintage Checkered Shirt',
-        thumbnail: 'https://picsum.photos/id/10/100',
-        quantity: 1,
-        price: 450.00,
-        status: 'pending',
-        buyerName: 'John Doe'
-    },
-    {
-        id: 'ord_2',
-        name: 'Retro Sunglasses',
-        thumbnail: 'https://picsum.photos/id/11/100',
-        quantity: 2,
-        price: 150.00,
-        status: 'confirmed',
-        deadline: new Date(Date.now() + 1000 * 60 * 60 * 24), // Ship within 24h
-        buyerName: 'Jane Smith'
-    },
-    {
-        id: 'ord_3',
-        name: 'Leather Belt',
-        thumbnail: 'https://picsum.photos/id/12/100',
-        quantity: 1,
-        price: 350.00,
-        status: 'shipped',
-        deadline: new Date(Date.now() + 1000 * 60 * 60 * 72), // 72h ETA delivery
-        buyerName: 'Mark Lee'
-    }
-];
+const SELLER_ORDERS_SAFE_AREA_EDGES: readonly Edge[] = ['top', 'left', 'right'];
 
 export default function MyOrdersSellerScreen() {
     const { theme } = useTheme();
-    // We can just keep a flatlist but ideally "grouped by buyer" as requested
-    // For UI simplicity, grouping by buyer logic:
-
-    const [orders, setOrders] = useState<OrderItemData[]>(MOCK_SELLER_ORDERS);
+    const [orders, setOrders] = useState<OrderItemData[]>([]);
 
     // grouping function
     const groupedOrders = orders.reduce((acc, order) => {
@@ -87,7 +54,7 @@ export default function MyOrdersSellerScreen() {
     };
 
     return (
-        <SafeScreen style={styles.container}>
+        <SafeScreen style={styles.container} edges={SELLER_ORDERS_SAFE_AREA_EDGES}>
             <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.cardBackground }]}>
                 <Text style={[styles.headerText, { color: theme.textPrimary }]}>Customer Orders</Text>
             </View>
@@ -98,7 +65,11 @@ export default function MyOrdersSellerScreen() {
                 contentContainerStyle={styles.listContent}
                 renderItem={renderGroup}
                 ListEmptyComponent={
-                    <EmptyList icon="inventory" message="No pending orders" submessage="Share your products to get more sales!" />
+                    <EmptyList
+                        icon={<MaterialIcons name="inventory" size={48} color={theme.textSecondary} />}
+                        message="No pending orders"
+                        submessage="Share your products to get more sales!"
+                    />
                 }
             />
         </SafeScreen>

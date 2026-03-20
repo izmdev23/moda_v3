@@ -5,16 +5,18 @@ import { ChatThreadItem, ChatThreadList } from '../../components/chat-components
 import { EmptyList } from '../../components/ui/empty-list';
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { useTheme } from '../../components/ui/theme-provider';
 import { supabase } from '../../supabase/supabaseClient';
-import { lightPalette } from '../../utils/theme';
 
-export default function ChatScreen() {
+/** ChatScreen — displays all chat threads for the logged-in user. */
+export default function ChatScreen(): React.JSX.Element {
     const router = useRouter();
+    const { theme } = useTheme();
     const [threads, setThreads] = useState<ChatThreadItem[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
 
     useEffect(() => {
-        const fetchChatThreads = async () => {
+        const fetchChatThreads = async (): Promise<void> => {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (!session?.user) {
@@ -22,9 +24,7 @@ export default function ChatScreen() {
                     return;
                 }
 
-                // Temporary mock data mapping
-                // For realism, this would interact with chat_threads table and JOIN user information
-                await new Promise((resolve) => setTimeout(resolve, 600)); // Simulate network request
+                await new Promise((resolve) => setTimeout(resolve, 600));
 
                 const mockThreads: ChatThreadItem[] = [
                     {
@@ -57,16 +57,14 @@ export default function ChatScreen() {
         void fetchChatThreads();
     }, [router]);
 
-    const handleThreadPress = (uid: string) => {
-        // We typecast as any to bypass expo-router types not picking up dynamic routing correctly 
-        // until the app restarts or we run a typegen script
-        router.push(`/home/chat-thread?thread_id=${uid}` as any);
+    const handleThreadPress = (uid: string): void => {
+        router.push(`/home/chat-thread?thread_id=${uid}` as never);
     };
 
     if (loading) {
         return (
             <SafeScreen>
-                <View style={styles.center}>
+                <View style={[styles.center, { backgroundColor: theme.background }]}>
                     <LoadingIndicator message="Loading chats..." />
                 </View>
             </SafeScreen>
@@ -75,22 +73,22 @@ export default function ChatScreen() {
 
     return (
         <SafeScreen>
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>My Chats</Text>
+            <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
+                <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>My Chats</Text>
             </View>
 
-            <View style={styles.container}>
+            <View style={[styles.container, { backgroundColor: theme.background }]}>
                 <ChatThreadList
                     items={threads}
                     onThreadPress={handleThreadPress}
                     ListEmptyComponent={
                         <EmptyList
-                            icon="chatbubbles-outline"
+                            icon={<Text style={styles.emptyIcon}>💬</Text>}
                             message="No messages yet"
                             submessage="Start a conversation with a seller to see it here."
                             actionButton={{
                                 label: "Browse Products",
-                                onPress: () => router.push('/home/catalog' as any)
+                                onPress: () => router.push('/home/catalog' as never)
                             }}
                         />
                     }
@@ -103,25 +101,23 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
     },
     header: {
-        backgroundColor: '#FFFFFF',
         paddingHorizontal: 16,
         paddingTop: 16,
         paddingBottom: 16,
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#E9ECEF',
     },
     headerTitle: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: lightPalette.textPrimary,
     },
     center: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#F8F9FA',
+    },
+    emptyIcon: {
+        fontSize: 40,
     }
 });

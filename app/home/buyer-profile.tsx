@@ -1,19 +1,60 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import type { Edge } from 'react-native-safe-area-context';
 import {
-    AvatarUploader,
-    MenuItem,
-    ProfileCompletenessBar,
-    ProfileHeader,
-    ProfileMenu
+  AvatarUploader,
+  MenuItem,
+  ProfileCompletenessBar,
+  ProfileHeader,
+  ProfileMenu
 } from '../../components/buyer-profile-components';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { SkeletonLoader } from '../../components/ui/skeleton-loader';
 import { Tables } from '../../supabase/database.types';
 import { supabase } from '../../supabase/supabaseClient';
 import { usersTable } from '../../utils/database/users-table';
+
+const BUYER_PROFILE_SAFE_AREA_EDGES: readonly Edge[] = ['top', 'left', 'right'];
+
+// ─── Profile Skeleton ─────────────────────────────────────────────────────────
+
+const ProfileSkeleton: React.FC = () => (
+    <ScrollView showsVerticalScrollIndicator={false} style={profileSkeletonStyles.container}>
+        <View style={profileSkeletonStyles.header}>
+            <SkeletonLoader width={84} height={84} borderRadius={42} style={{ marginBottom: 12 }} />
+            <SkeletonLoader height={20} width={160} style={{ marginBottom: 8 }} />
+            <SkeletonLoader height={14} width={200} />
+        </View>
+        <SkeletonLoader height={8} borderRadius={4} style={profileSkeletonStyles.bar} />
+        <View style={profileSkeletonStyles.menuGroup}>
+            {Array.from({ length: 4 }).map((_, i) => (
+                <View key={i} style={profileSkeletonStyles.menuItem}>
+                    <SkeletonLoader width={24} height={24} borderRadius={6} />
+                    <SkeletonLoader height={16} width="55%" />
+                </View>
+            ))}
+        </View>
+        <View style={[profileSkeletonStyles.menuGroup, { marginTop: 8 }]}>
+            {Array.from({ length: 3 }).map((_, i) => (
+                <View key={i} style={profileSkeletonStyles.menuItem}>
+                    <SkeletonLoader width={24} height={24} borderRadius={6} />
+                    <SkeletonLoader height={16} width="45%" />
+                </View>
+            ))}
+        </View>
+    </ScrollView>
+);
+
+const profileSkeletonStyles = StyleSheet.create({
+    container: { flex: 1 },
+    header: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 16 },
+    bar: { marginHorizontal: 16, marginBottom: 16 },
+    menuGroup: { marginHorizontal: 16, borderRadius: 12, overflow: 'hidden' },
+    menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 4 },
+});
 
 export default function BuyerProfileScreen() {
     const router = useRouter();
@@ -76,17 +117,15 @@ export default function BuyerProfileScreen() {
 
     if (loading) {
         return (
-            <SafeScreen>
-                <View style={styles.center}>
-                    <LoadingIndicator message="Loading profile..." />
-                </View>
+            <SafeScreen edges={BUYER_PROFILE_SAFE_AREA_EDGES}>
+                <ProfileSkeleton />
             </SafeScreen>
         );
     }
 
     if (!user) {
         return (
-            <SafeScreen>
+            <SafeScreen edges={BUYER_PROFILE_SAFE_AREA_EDGES}>
                 <View style={styles.center} />
             </SafeScreen>
         );
@@ -140,7 +179,7 @@ export default function BuyerProfileScreen() {
     ];
 
     return (
-        <SafeScreen>
+        <SafeScreen edges={BUYER_PROFILE_SAFE_AREA_EDGES}>
             <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
                 <ProfileHeader
                     name={`${user.first_name} ${user.last_name}`}

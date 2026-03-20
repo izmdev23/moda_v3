@@ -1,3 +1,4 @@
+import { supabase } from '@/supabase/supabaseClient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -16,9 +17,9 @@ import { Animation } from '../../utils/animation';
 
 import { OTPExpiryTimer, OTPInput, OTPResendButton } from '../../components/otp-components';
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
+import { useTheme } from '../../components/ui/theme-provider';
 import { OTP_EXPIRY_SECONDS, OTP_LENGTH, SUPABASE_EMAIL_RATE_LIMIT } from '../../utils/constants';
 import { authApi } from '../../utils/database/auth';
-import { lightPalette } from '../../utils/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -35,26 +36,25 @@ const MAGIC_LINK_URL = 'https://moda.example.com/magic'; // Placeholder
  *   - email: string — the address to verify
  *
  * On success: navigates to the home catalog.
+ * Colors are sourced from the active theme via useTheme().
  */
 export default function OTPScreen(): React.JSX.Element {
     const router = useRouter();
     const { email } = useLocalSearchParams<{ email: string }>();
-
+    const { theme } = useTheme();
 
     const [otpCode, setOtpCode] = useState<string>('');
     const [isVerifying, setIsVerifying] = useState<boolean>(false);
     const [hasError, setHasError] = useState<boolean>(false);
     const [errorMessage, setErrorMessage] = useState<string>('');
 
-    // Resend state
     const [resendCooldown, setResendCooldown] = useState<number>(0);
     const [resendCount, setResendCount] = useState<number>(0);
     const isRateLimited = resendCount >= SUPABASE_EMAIL_RATE_LIMIT;
-    const cooldownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const cooldownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // Expiry countdown — starts at OTP_EXPIRY_SECONDS (300) on mount / resend
     const [expirySeconds, setExpirySeconds] = useState<number>(OTP_EXPIRY_SECONDS);
-    const expiryIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const expiryIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // ── Timers ────────────────────────────────────────────────────────────────
 
@@ -96,11 +96,6 @@ export default function OTPScreen(): React.JSX.Element {
 
     // ── Verify OTP ────────────────────────────────────────────────────────────
 
-    /**
-     * Submits the entered OTP code to Supabase for verification.
-     * On success, navigates to the home catalog.
-     * On failure, shows an inline error message.
-     */
     const handleVerify = async (): Promise<void> => {
         if (otpCode.length !== OTP_LENGTH) {
             setHasError(true);
@@ -128,16 +123,21 @@ export default function OTPScreen(): React.JSX.Element {
             return;
         }
 
-        // Success — navigate to home
-        router.replace('/(tabs)' as Parameters<typeof router.replace>[0]);
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('auth_id', data.session.user.id)
+            .single();
+
+        if (userData?.role === 'seller') {
+            router.replace('/home/seller-dashboard' as Parameters<typeof router.replace>[0]);
+        } else {
+            router.replace('/(tabs)' as Parameters<typeof router.replace>[0]);
+        }
     };
 
     // ── Resend OTP ────────────────────────────────────────────────────────────
 
-    /**
-     * Requests a new OTP email. Enforces the SUPABASE_EMAIL_RATE_LIMIT and a
-     * 60-second cooldown between resend calls.
-     */
     const handleResend = async (): Promise<void> => {
         if (isRateLimited || resendCooldown > 0) return;
 
@@ -156,13 +156,9 @@ export default function OTPScreen(): React.JSX.Element {
         Alert.alert('Code Sent', 'A new verification code has been sent to your email.');
     };
 
-    // ── Magic Link ────────────────────────────────────────────────────────────
-
     const handleMagicLink = (): void => {
         Linking.openURL(MAGIC_LINK_URL);
     };
-
-    // ─────────────────────────────────────────────────────────────────────────
 
     return (
         <SafeScreen>
@@ -178,18 +174,15 @@ export default function OTPScreen(): React.JSX.Element {
                     showsVerticalScrollIndicator={false}
                 >
                     <View style={styles.content}>
-                        {/* Icon / Header */}
-
-                        <View style={styles.iconContainer}>
+                        <View style={[styles.iconContainer, { backgroundColor: `${theme.primary}14` }]}>
                             <Text style={styles.icon}>✉️</Text>
                         </View>
-                        <Text style={styles.title}>Verify Your Email</Text>
-                        <Text style={styles.subtitle}>
+                        <Text style={[styles.title, { color: theme.textPrimary }]}>Verify Your Email</Text>
+                        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
                             We sent a 6-digit code to{'\n'}
-                            <Text style={styles.emailHighlight}>{email}</Text>
+                            <Text style={[styles.emailHighlight, { color: theme.textPrimary }]}>{email}</Text>
                         </Text>
 
-                        {/* OTP Input */}
                         <OTPInput
                             value={otpCode}
                             onChange={(code) => {
@@ -202,21 +195,19 @@ export default function OTPScreen(): React.JSX.Element {
                             hasError={hasError}
                         />
 
-                        {/* Error message */}
                         {hasError && errorMessage.length > 0 && (
-                            <Text style={styles.errorText}>{errorMessage}</Text>
+                            <Text style={[styles.errorText, { color: theme.error }]}>{errorMessage}</Text>
                         )}
 
-                        {/* Expiry countdown */}
                         <OTPExpiryTimer secondsRemaining={expirySeconds} />
 
-                        {/* Verify button */}
                         {isVerifying ? (
                             <LoadingIndicator message="Verifying..." overlay={false} />
                         ) : (
                             <TouchableOpacity
                                 style={[
                                     styles.verifyButton,
+                                    { backgroundColor: theme.primary },
                                     (otpCode.length !== OTP_LENGTH || expirySeconds <= 0) &&
                                     styles.verifyButtonDisabled,
                                 ]}
@@ -224,11 +215,10 @@ export default function OTPScreen(): React.JSX.Element {
                                 disabled={otpCode.length !== OTP_LENGTH || expirySeconds <= 0 || isVerifying}
                                 activeOpacity={0.8}
                             >
-                                <Text style={styles.verifyButtonText}>Verify Code</Text>
+                                <Text style={[styles.verifyButtonText, { color: theme.white }]}>Verify Code</Text>
                             </TouchableOpacity>
                         )}
 
-                        {/* Resend */}
                         <OTPResendButton
                             onResend={handleResend}
                             cooldownSeconds={resendCooldown}
@@ -236,16 +226,14 @@ export default function OTPScreen(): React.JSX.Element {
                             resendCount={resendCount}
                         />
 
-                        {/* Magic link fallback */}
                         <View style={styles.magicLinkContainer}>
-                            <Text style={styles.magicLinkText}>Having trouble? </Text>
+                            <Text style={[styles.magicLinkText, { color: theme.textSecondary }]}>Having trouble? </Text>
                             <TouchableOpacity onPress={handleMagicLink} activeOpacity={0.7}>
-                                <Text style={styles.magicLinkAction}>Send Magic Link Instead</Text>
+                                <Text style={[styles.magicLinkAction, { color: theme.primary }]}>Send Magic Link Instead</Text>
                             </TouchableOpacity>
                         </View>
 
-                        {/* Spam tip */}
-                        <Text style={styles.spamTip}>
+                        <Text style={[styles.spamTip, { color: theme.gray }]}>
                             💡 Tip: Check your spam or junk folder if you don't see it in your inbox.
                         </Text>
                     </View>
@@ -255,14 +243,11 @@ export default function OTPScreen(): React.JSX.Element {
     );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles (layout & spacing only — NO color values) ─────────────────────────
 
 const styles = StyleSheet.create({
     scrollContent: {
         flexGrow: 1,
-    },
-    container: {
-        flex: 1,
     },
     keyboardAvoid: {
         flex: 1,
@@ -272,12 +257,10 @@ const styles = StyleSheet.create({
         paddingHorizontal: 28,
         alignItems: 'center',
     },
-
     iconContainer: {
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: '#FFF5F4',
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 20,
@@ -288,23 +271,19 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 26,
         fontWeight: 'bold',
-        color: '#32325D',
         marginBottom: 10,
         textAlign: 'center',
     },
     subtitle: {
         fontSize: 14,
-        color: '#525F7F',
         textAlign: 'center',
         marginBottom: 28,
         lineHeight: 20,
     },
     emailHighlight: {
-        color: '#32325D',
         fontWeight: '700',
     },
     errorText: {
-        color: lightPalette.error,
         fontSize: 13,
         textAlign: 'center',
         marginBottom: 10,
@@ -312,7 +291,6 @@ const styles = StyleSheet.create({
     },
     verifyButton: {
         width: '100%',
-        backgroundColor: lightPalette.primary,
         paddingVertical: 15,
         borderRadius: 10,
         alignItems: 'center',
@@ -322,7 +300,6 @@ const styles = StyleSheet.create({
         opacity: 0.5,
     },
     verifyButtonText: {
-        color: '#FFFFFF',
         fontSize: 16,
         fontWeight: '700',
     },
@@ -333,17 +310,14 @@ const styles = StyleSheet.create({
     },
     magicLinkText: {
         fontSize: 13,
-        color: '#525F7F',
     },
     magicLinkAction: {
         fontSize: 13,
-        color: lightPalette.primary,
         fontWeight: '600',
         textDecorationLine: 'underline',
     },
     spamTip: {
         fontSize: 12,
-        color: '#ADB5BD',
         textAlign: 'center',
         paddingHorizontal: 16,
         lineHeight: 18,

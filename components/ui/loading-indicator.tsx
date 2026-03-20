@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { lightPalette } from '../../utils/theme';
+import { useTheme } from './theme-provider';
 
 export interface LoadingIndicatorProps {
     readonly overlay?: boolean;
@@ -9,7 +9,8 @@ export interface LoadingIndicatorProps {
 }
 
 /**
- * Shared Loading Indicator component
+ * Shared Loading Indicator component.
+ * Uses the active theme's primary color by default.
  * @param props {LoadingIndicatorProps}
  * @example
  * <LoadingIndicator overlay={true} message="Uploading..." />
@@ -17,14 +18,17 @@ export interface LoadingIndicatorProps {
 export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
     overlay = false,
     message,
-    color = lightPalette.primary // Theme primary color
+    color,
 }) => {
+    const { theme } = useTheme();
+    const indicatorColor = color ?? theme.primary;
+
     if (overlay) {
         return (
             <View style={styles.overlayContainer}>
-                <View style={styles.contentBox}>
-                    <ActivityIndicator size="small" color={color} />
-                    {message && <Text style={styles.overlayMessage}>{message}</Text>}
+                <View style={[styles.contentBox, { backgroundColor: theme.cardBackground }]}>
+                    <ActivityIndicator size="small" color={indicatorColor} />
+                    {message && <Text style={[styles.overlayMessage, { color: theme.textPrimary }]}>{message}</Text>}
                 </View>
             </View>
         );
@@ -32,8 +36,8 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
 
     return (
         <View style={styles.container}>
-            <ActivityIndicator size="small" color={color} />
-            {message && <Text style={styles.message}>{message}</Text>}
+            <ActivityIndicator size="small" color={indicatorColor} />
+            {message && <Text style={[styles.message, { color: theme.textSecondary }]}>{message}</Text>}
         </View>
     );
 };
@@ -46,7 +50,6 @@ const styles = StyleSheet.create({
     },
     message: {
         marginTop: 8,
-        color: '#666',
         fontSize: 14,
         textAlign: 'center'
     },
@@ -58,7 +61,6 @@ const styles = StyleSheet.create({
         zIndex: 999
     },
     contentBox: {
-        backgroundColor: '#FFF',
         padding: 24,
         borderRadius: 12,
         alignItems: 'center',
@@ -72,7 +74,6 @@ const styles = StyleSheet.create({
     },
     overlayMessage: {
         marginTop: 12,
-        color: '#333',
         fontSize: 14,
         fontWeight: '500',
         textAlign: 'center'

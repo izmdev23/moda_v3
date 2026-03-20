@@ -7,10 +7,11 @@ import { Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, Touc
 import { ChatBubble, ChatInput, ChatMessageItem } from '../../components/chat-components';
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
 import { SafeScreen } from '../../components/ui/safe-screen';
-import { lightPalette } from '../../utils/theme';
+import { useTheme } from '../../components/ui/theme-provider';
 
-export default function ChatThreadScreen() {
+export default function ChatThreadScreen(): React.JSX.Element {
     const router = useRouter();
+    const { theme } = useTheme();
     const { thread_id, product_id } = useLocalSearchParams();
 
     const [messages, setMessages] = useState<ChatMessageItem[]>([]);
@@ -160,20 +161,20 @@ export default function ChatThreadScreen() {
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
-                <View style={styles.header}>
+                <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={24} color={lightPalette.textPrimary} />
+                        <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
                     </TouchableOpacity>
                     <View style={styles.headerInfo}>
-                        <Text style={styles.headerTitle}>Seller / Buyer Name</Text>
-                        <Text style={styles.headerSubtitle}>Active now</Text>
+                        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Seller / Buyer Name</Text>
+                        <Text style={[styles.headerSubtitle, { color: theme.success }]}>Active now</Text>
                     </View>
                 </View>
 
                 {product_id && (
-                    <View style={styles.productBanner}>
-                        <Ionicons name="pricetag-outline" size={16} color={lightPalette.textSecondary} />
-                        <Text style={styles.productBannerText} numberOfLines={1}>
+                    <View style={[styles.productBanner, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
+                        <Ionicons name="pricetag-outline" size={16} color={theme.textSecondary} />
+                        <Text style={[styles.productBannerText, { color: theme.textSecondary }]} numberOfLines={1}>
                             Talking about: Product ID {product_id}
                         </Text>
                     </View>
@@ -204,7 +205,6 @@ export default function ChatThreadScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
     },
     header: {
         flexDirection: 'row',
@@ -212,9 +212,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingTop: 16,
         paddingBottom: 16,
-        backgroundColor: '#FFFFFF',
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#E9ECEF',
     },
     backButton: {
         marginRight: 16,
@@ -226,31 +224,25 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: lightPalette.textPrimary,
     },
     headerSubtitle: {
         fontSize: 12,
-        color: lightPalette.success,
     },
     productBanner: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
         paddingHorizontal: 16,
         paddingVertical: 10,
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#E9ECEF',
     },
     productBannerText: {
         marginLeft: 8,
         fontSize: 13,
-        color: lightPalette.textSecondary,
     },
     center: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#F8F9FA',
     },
     listContent: {
         paddingVertical: 16,

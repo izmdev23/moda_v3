@@ -1,0 +1,34 @@
+﻿{
+    "id":  "12rmd77wxnrmt0cwzy7vv54cg8",
+    "model":  "prunaai/p-image-edit",
+    "version":  "hidden",
+    "input":  {
+                  "aspect_ratio":  "match_input_image",
+                  "disable_safety_checker":  true,
+                  "images":  [
+                                 "https://image.made-in-china.com/43f34j00YkyqZGQSANuc/Geometric-Print-Girls-Bikini-Set-Children-Colorful-and-Cute-Two-Piece-Swimwear.webp",
+                                 "https://www.honeybirdette.com/cdn/shop/files/Whitney_Bra_Brief_Front1_7ad25095-b8be-419d-bdc0-36225c12dd33.jpg?v=1751516782"
+                             ],
+                  "prompt":  "# i want to do clothing changes - change the outfit of image 1 to be similar to image 2. - the color of the new outfit should match to the reference image - remove any unnecessary clothing that is not found in image 2. - do not change change the face or body features",
+                  "turbo":  false
+              },
+    "logs":  "Using seed: 460390\nGeneration took 1.47 seconds\n",
+    "output":  "https://replicate.delivery/xezq/6jnCQwDY7JJKPRX8NTXh84p4lirzTscPoLmfxt0RmGAFnfRWA/output_460390.jpeg",
+    "data_removed":  false,
+    "error":  null,
+    "source":  "api",
+    "status":  "succeeded",
+    "created_at":  "2026-03-18T06:09:12.429Z",
+    "started_at":  "2026-03-18T06:09:12.445205803Z",
+    "completed_at":  "2026-03-18T06:09:14.125840182Z",
+    "urls":  {
+                 "cancel":  "https://api.replicate.com/v1/predictions/12rmd77wxnrmt0cwzy7vv54cg8/cancel",
+                 "get":  "https://api.replicate.com/v1/predictions/12rmd77wxnrmt0cwzy7vv54cg8",
+                 "stream":  "https://stream.replicate.com/v1/files/jbxs-2wxjuvpqw3gt3gln4l5llo5zf5aw24kr4e2idwtk6wo7jmqpi2fq",
+                 "web":  "https://replicate.com/p/12rmd77wxnrmt0cwzy7vv54cg8"
+             },
+    "metrics":  {
+                    "predict_time":  1.680634388,
+                    "total_time":  1.6968401819999999
+                }
+}

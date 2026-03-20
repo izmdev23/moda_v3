@@ -1,53 +1,91 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Central theme definition for the Moda app.
+ * ALL color references in screens and components MUST use this file
+ * via the `useTheme()` hook from `components/ui/theme-provider.tsx`.
+ *
+ * Never hard-code color hex values in StyleSheet or inline styles.
  */
 
-import { Platform } from 'react-native';
+// ─── ThemeColors Interface ────────────────────────────────────────────────────
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+export interface ThemeColors {
+  /** Brand primary color (used for buttons, links, accents) */
+  readonly primary: string;
+  /** Screen / page background */
+  readonly background: string;
+  /** Card / surface background */
+  readonly cardBackground: string;
+  /** High-contrast body text */
+  readonly textPrimary: string;
+  /** Lower-contrast secondary / label text */
+  readonly textSecondary: string;
+  /** Dividers, input borders, card outlines */
+  readonly border: string;
+  /** Error states and danger actions */
+  readonly error: string;
+  /** Success badges, confirmation indicators */
+  readonly success: string;
+  /** Warning / cautionary indicators */
+  readonly warning: string;
+  /** Informational highlights */
+  readonly info: string;
+  /** Pure white - overlays, text on dark backgrounds */
+  readonly white: string;
+  /** Pure black */
+  readonly black: string;
+  /** Muted grey for placeholders and icons */
+  readonly gray: string;
+  /** Yellow gold color for star ratings */
+  readonly starColor: string;
+  /** Transparent (convenience alias) */
+  readonly transparent: string;
+}
 
-export const Colors = {
-  light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
-  },
-  dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
-  },
+// ─── Light Palette ────────────────────────────────────────────────────────────
+
+export const lightPalette: ThemeColors = {
+  primary: '#F44336',
+  background: '#FAFAFA',
+  cardBackground: '#FFFFFF',
+  textPrimary: '#32325D',
+  textSecondary: '#525F7F',
+  border: '#E9ECEF',
+  error: '#F5365C',
+  success: '#2DCE89',
+  warning: '#FB6340',
+  info: '#11CDEF',
+  white: '#FFFFFF',
+  black: '#000000',
+  gray: '#ADB5BD',
+  starColor: '#FFCC00',
+  transparent: 'transparent',
 };
 
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-});
+// ─── Dark Palette ─────────────────────────────────────────────────────────────
+
+export const darkPalette: ThemeColors = {
+  primary: '#F44336',
+  background: '#202020',
+  cardBackground: '#24262D',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#ADB5BD',
+  border: '#4A5568',
+  error: '#F5365C',
+  success: '#2DCE89',
+  warning: '#FB6340',
+  info: '#11CDEF',
+  white: '#FFFFFF',
+  black: '#000000',
+  gray: '#ADB5BD',
+  starColor: '#FFCC00',
+  transparent: 'transparent',
+};
+
+// ─── Theme Map ────────────────────────────────────────────────────────────────
+
+export type ThemeType = 'light' | 'dark';
+
+export const theme: Record<ThemeType, ThemeColors> = {
+  light: lightPalette,
+  dark: darkPalette,
+};

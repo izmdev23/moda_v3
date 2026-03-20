@@ -2,10 +2,13 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
+import type { Edge } from 'react-native-safe-area-context';
 import { OrderCard, OrderItemData } from '../../components/my-orders-components';
 import { EmptyList } from '../../components/ui/empty-list';
 import { SafeScreen } from '../../components/ui/safe-screen';
 import { useTheme } from '../../components/ui/theme-provider';
+
+const BUYER_ORDERS_SAFE_AREA_EDGES: readonly Edge[] = ['top', 'left', 'right'];
 
 // Dummy data
 const MOCK_ORDERS: OrderItemData[] = [
@@ -52,7 +55,7 @@ export default function MyOrdersBuyerScreen() {
     };
 
     return (
-        <SafeScreen style={styles.container}>
+        <SafeScreen style={styles.container} edges={BUYER_ORDERS_SAFE_AREA_EDGES}>
             <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.cardBackground }]}>
                 <Text style={[styles.headerText, { color: theme.textPrimary }]}>My Orders</Text>
             </View>
@@ -77,7 +80,11 @@ export default function MyOrdersBuyerScreen() {
                     />
                 )}
                 ListEmptyComponent={
-                    <EmptyList icon="inbox" message="No active orders" submessage="Go buy some awesome clothes!" />
+                    <EmptyList
+                        icon={<MaterialIcons name="inbox" size={48} color={theme.textSecondary} />}
+                        message="No active orders"
+                        submessage="Go buy some awesome clothes!"
+                    />
                 }
             />
         </SafeScreen>

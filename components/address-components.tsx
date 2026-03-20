@@ -14,8 +14,8 @@ import {
     View,
 } from 'react-native';
 import { supabase } from '../supabase/supabaseClient';
-import { lightPalette } from '../utils/theme';
 import { BoundaryItem } from '../utils/types';
+import { useTheme } from './ui/theme-provider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +54,7 @@ export const AddressCard: React.FC<AddressCardProps> = ({
     onDelete,
     onSetDefault,
 }): React.JSX.Element => {
+    const { theme } = useTheme();
     const fullAddress = [
         address.address_detail,
         address.barangay,
@@ -65,49 +66,49 @@ export const AddressCard: React.FC<AddressCardProps> = ({
         .join(', ');
 
     return (
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
             <View style={styles.cardHeader}>
                 <View style={styles.headerLeft}>
-                    <Text style={styles.cardPhone}>📞 {address.phone_number}</Text>
+                    <Text style={[styles.cardPhone, { color: theme.textPrimary }]}>📞 {address.phone_number}</Text>
                     {address.is_default && (
-                        <View style={styles.defaultBadge}>
-                            <Text style={styles.defaultBadgeText}>Default</Text>
+                        <View style={[styles.defaultBadge, { backgroundColor: theme.primary }]}>
+                            <Text style={[styles.defaultBadgeText, { color: theme.white }]}>Default</Text>
                         </View>
                     )}
                 </View>
             </View>
 
-            <Text style={styles.cardAddress} numberOfLines={3}>
+            <Text style={[styles.cardAddress, { color: theme.textSecondary }]} numberOfLines={3}>
                 {fullAddress}
             </Text>
 
             {address.landmark !== null && address.landmark.length > 0 && (
-                <Text style={styles.cardLandmark}>📍 {address.landmark}</Text>
+                <Text style={[styles.cardLandmark, { color: theme.gray }]}>📍 {address.landmark}</Text>
             )}
 
             <View style={styles.cardActions}>
                 {!address.is_default && (
                     <TouchableOpacity
-                        style={styles.actionBtn}
+                        style={[styles.actionBtn, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}
                         onPress={() => onSetDefault(address.uid)}
                         id={`set-default-${address.uid}`}
                     >
-                        <Text style={styles.actionBtnText}>Set Default</Text>
+                        <Text style={[styles.actionBtnText, { color: theme.textPrimary }]}>Set Default</Text>
                     </TouchableOpacity>
                 )}
                 <TouchableOpacity
-                    style={styles.actionBtn}
+                    style={[styles.actionBtn, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}
                     onPress={() => onEdit(address)}
                     id={`edit-address-${address.uid}`}
                 >
-                    <Text style={styles.actionBtnText}>Edit</Text>
+                    <Text style={[styles.actionBtnText, { color: theme.textPrimary }]}>Edit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                    style={[styles.actionBtn, styles.deleteBtn]}
+                    style={[styles.actionBtn, { borderColor: theme.error, backgroundColor: `${theme.error}12` }]}
                     onPress={() => onDelete(address.uid)}
                     id={`delete-address-${address.uid}`}
                 >
-                    <Text style={styles.deleteBtnText}>Delete</Text>
+                    <Text style={[styles.deleteBtnText, { color: theme.error }]}>Delete</Text>
                 </TouchableOpacity>
             </View>
         </View>
@@ -139,6 +140,7 @@ export const CascadingDropdown: React.FC<CascadingDropdownProps> = ({
     loading = false,
     placeholder = 'Select…',
 }): React.JSX.Element => {
+    const { theme } = useTheme();
     const [open, setOpen] = useState<boolean>(false);
 
     const handleSelect = useCallback(
@@ -151,9 +153,9 @@ export const CascadingDropdown: React.FC<CascadingDropdownProps> = ({
 
     return (
         <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>{label}</Text>
+            <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{label}</Text>
             <TouchableOpacity
-                style={[styles.dropdownTrigger, disabled && styles.dropdownDisabled]}
+                style={[styles.dropdownTrigger, { borderColor: theme.border, backgroundColor: theme.cardBackground }, disabled && { backgroundColor: theme.background, borderColor: theme.border, opacity: 0.6 }]}
                 onPress={() => { if (!disabled) setOpen(true); }}
                 activeOpacity={disabled ? 1 : 0.7}
                 id={`dropdown-${label}`}
@@ -161,22 +163,22 @@ export const CascadingDropdown: React.FC<CascadingDropdownProps> = ({
                 <Text
                     style={[
                         styles.dropdownTriggerText,
-                        value.length === 0 && styles.dropdownPlaceholder,
+                        { color: value.length === 0 ? theme.gray : theme.textPrimary },
                     ]}
                     numberOfLines={1}
                 >
                     {value.length > 0 ? value : placeholder}
                 </Text>
-                <Text style={styles.dropdownChevron}>{disabled ? '—' : '▾'}</Text>
+                <Text style={[styles.dropdownChevron, { color: theme.gray }]}>{disabled ? '—' : '▾'}</Text>
             </TouchableOpacity>
 
             <Modal visible={open} transparent animationType="slide">
                 <View style={styles.sheetOverlay}>
-                    <View style={styles.sheet}>
-                        <View style={styles.sheetHeader}>
-                            <Text style={styles.sheetTitle}>{label}</Text>
+                    <View style={[styles.sheet, { backgroundColor: theme.cardBackground }]}>
+                        <View style={[styles.sheetHeader, { borderBottomColor: theme.border }]}>
+                            <Text style={[styles.sheetTitle, { color: theme.textPrimary }]}>{label}</Text>
                             <TouchableOpacity onPress={() => setOpen(false)} id={`close-dropdown-${label}`}>
-                                <Text style={styles.sheetClose}>✕</Text>
+                                <Text style={[styles.sheetClose, { color: theme.gray }]}>✕</Text>
                             </TouchableOpacity>
                         </View>
                         <FlatList
@@ -186,7 +188,8 @@ export const CascadingDropdown: React.FC<CascadingDropdownProps> = ({
                                 <TouchableOpacity
                                     style={[
                                         styles.sheetItem,
-                                        item.name === value && styles.sheetItemSelected,
+                                        { borderBottomColor: theme.border },
+                                        item.name === value && { backgroundColor: `${theme.primary}0F` },
                                     ]}
                                     onPress={() => handleSelect(item.name)}
                                     id={`option-${label}-${item.id}`}
@@ -194,22 +197,23 @@ export const CascadingDropdown: React.FC<CascadingDropdownProps> = ({
                                     <Text
                                         style={[
                                             styles.sheetItemText,
-                                            item.name === value && styles.sheetItemTextSelected,
+                                            { color: item.name === value ? theme.primary : theme.textPrimary },
+                                            item.name === value && { fontWeight: '600' },
                                         ]}
                                     >
                                         {item.name}
                                     </Text>
                                     {item.name === value && (
-                                        <Text style={styles.sheetItemCheck}>✓</Text>
+                                        <Text style={[styles.sheetItemCheck, { color: theme.primary }]}>✓</Text>
                                     )}
                                 </TouchableOpacity>
                             )}
                             ListEmptyComponent={
                                 <View style={styles.emptyDropdown}>
                                     {loading ? (
-                                        <ActivityIndicator size="small" color={lightPalette.primary} />
+                                        <ActivityIndicator size="small" color={theme.primary} />
                                     ) : (
-                                        <Text style={styles.emptyDropdownText}>No options available.</Text>
+                                        <Text style={[styles.emptyDropdownText, { color: theme.gray }]}>No options available.</Text>
                                     )}
                                 </View>
                             }
@@ -260,6 +264,7 @@ export const AddressForm: React.FC<AddressFormProps> = ({
     onCancel,
     currentCount,
 }): React.JSX.Element => {
+    const { theme } = useTheme();
     // ─── Boundary state ───────────────────────────────────────────────────
     const [countries, setCountries] = useState<BoundaryItem[]>([]);
     const [provinces, setProvinces] = useState<BoundaryItem[]>([]);
@@ -525,27 +530,27 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             >
                 {/* Header */}
                 <View style={styles.formHeader}>
-                    <Text style={styles.formTitle}>
+                    <Text style={[styles.formTitle, { color: theme.textPrimary }]}>
                         {initialData !== null && initialData !== undefined ? 'Edit Address' : 'Add New Address'}
                     </Text>
                     <TouchableOpacity onPress={onCancel} id="close-address-form">
-                        <Text style={styles.cancelText}>✕</Text>
+                        <Text style={[styles.cancelText, { color: theme.gray }]}>✕</Text>
                     </TouchableOpacity>
                 </View>
 
                 {/* Copy from shop */}
                 {shopAddress !== null && shopAddress !== undefined && initialData === null && (
                     <TouchableOpacity
-                        style={styles.copyShopBtn}
+                        style={[styles.copyShopBtn, { backgroundColor: `${theme.primary}14` }]}
                         onPress={() => { void handleCopyFromShop(); }}
                         id="copy-from-shop"
                     >
-                        <Text style={styles.copyShopText}>📋 Copy from shop address</Text>
+                        <Text style={[styles.copyShopText, { color: theme.primary }]}>📋 Copy from shop address</Text>
                     </TouchableOpacity>
                 )}
 
                 {loadingBoundary && (
-                    <ActivityIndicator size="small" color={lightPalette.primary} style={{ marginBottom: 8 }} />
+                    <ActivityIndicator size="small" color={theme.primary} style={{ marginBottom: 8 }} />
                 )}
 
                 {/* Cascading dropdowns */}
@@ -587,37 +592,37 @@ export const AddressForm: React.FC<AddressFormProps> = ({
 
                 {/* Text fields */}
                 <View style={styles.fieldGroup}>
-                    <Text style={styles.fieldLabel}>Block / Lot / Street *</Text>
+                    <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Block / Lot / Street *</Text>
                     <TextInput
-                        style={styles.textInput}
+                        style={[styles.textInput, { borderColor: theme.border, color: theme.textPrimary, backgroundColor: theme.cardBackground }]}
                         value={addressDetail}
                         onChangeText={setAddressDetail}
                         placeholder="e.g. Blk 3 Lot 12, Sampaguita St."
-                        placeholderTextColor={lightPalette.gray}
+                        placeholderTextColor={theme.gray}
                         id="address-detail-input"
                     />
                 </View>
 
                 <View style={styles.fieldGroup}>
-                    <Text style={styles.fieldLabel}>Landmark (optional)</Text>
+                    <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Landmark (optional)</Text>
                     <TextInput
-                        style={styles.textInput}
+                        style={[styles.textInput, { borderColor: theme.border, color: theme.textPrimary, backgroundColor: theme.cardBackground }]}
                         value={landmark}
                         onChangeText={setLandmark}
                         placeholder="e.g. Near SM Mall"
-                        placeholderTextColor={lightPalette.gray}
+                        placeholderTextColor={theme.gray}
                         id="landmark-input"
                     />
                 </View>
 
                 <View style={styles.fieldGroup}>
-                    <Text style={styles.fieldLabel}>Phone Number *</Text>
+                    <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Phone Number *</Text>
                     <TextInput
-                        style={styles.textInput}
+                        style={[styles.textInput, { borderColor: theme.border, color: theme.textPrimary, backgroundColor: theme.cardBackground }]}
                         value={phoneNumber}
                         onChangeText={setPhoneNumber}
                         placeholder="+63 912 345 6789"
-                        placeholderTextColor={lightPalette.gray}
+                        placeholderTextColor={theme.gray}
                         keyboardType="phone-pad"
                         id="phone-input"
                     />
@@ -625,19 +630,19 @@ export const AddressForm: React.FC<AddressFormProps> = ({
 
                 {/* Actions */}
                 <View style={styles.formActions}>
-                    <TouchableOpacity style={styles.cancelFormBtn} onPress={onCancel} id="cancel-form-btn">
-                        <Text style={styles.cancelFormText}>Cancel</Text>
+                    <TouchableOpacity style={[styles.cancelFormBtn, { backgroundColor: theme.border }]} onPress={onCancel} id="cancel-form-btn">
+                        <Text style={[styles.cancelFormText, { color: theme.textSecondary }]}>Cancel</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                        style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+                        style={[styles.saveBtn, { backgroundColor: theme.primary }, saving && styles.saveBtnDisabled]}
                         onPress={() => { void handleSave(); }}
                         disabled={saving}
                         id="save-address-btn"
                     >
                         {saving ? (
-                            <ActivityIndicator size="small" color={lightPalette.white} />
+                            <ActivityIndicator size="small" color={theme.white} />
                         ) : (
-                            <Text style={styles.saveBtnText}>Save Address</Text>
+                            <Text style={[styles.saveBtnText, { color: theme.white }]}>Save Address</Text>
                         )}
                     </TouchableOpacity>
                 </View>
@@ -651,7 +656,6 @@ export const AddressForm: React.FC<AddressFormProps> = ({
 const styles = StyleSheet.create({
     // AddressCard
     card: {
-        backgroundColor: lightPalette.cardBackground,
         borderRadius: 12,
         padding: 16,
         marginHorizontal: 16,
@@ -677,28 +681,23 @@ const styles = StyleSheet.create({
     cardPhone: {
         fontSize: 14,
         fontWeight: '600',
-        color: lightPalette.textPrimary,
     },
     defaultBadge: {
-        backgroundColor: lightPalette.primary,
         borderRadius: 6,
         paddingHorizontal: 8,
         paddingVertical: 2,
     },
     defaultBadgeText: {
-        color: lightPalette.white,
         fontSize: 11,
         fontWeight: '700',
     },
     cardAddress: {
         fontSize: 14,
-        color: lightPalette.textSecondary,
         lineHeight: 20,
         marginBottom: 4,
     },
     cardLandmark: {
         fontSize: 12,
-        color: lightPalette.gray,
         marginBottom: 8,
     },
     cardActions: {
@@ -712,22 +711,14 @@ const styles = StyleSheet.create({
         paddingVertical: 6,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: lightPalette.border,
-        backgroundColor: lightPalette.cardBackground,
     },
     actionBtnText: {
         fontSize: 13,
         fontWeight: '600',
-        color: lightPalette.textPrimary,
-    },
-    deleteBtn: {
-        borderColor: lightPalette.error,
-        backgroundColor: 'rgba(245,54,92,0.07)',
     },
     deleteBtnText: {
         fontSize: 13,
         fontWeight: '600',
-        color: lightPalette.error,
     },
 
     // CascadingDropdown
@@ -737,7 +728,6 @@ const styles = StyleSheet.create({
     fieldLabel: {
         fontSize: 13,
         fontWeight: '600',
-        color: lightPalette.textSecondary,
         marginBottom: 6,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
@@ -750,24 +740,13 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: lightPalette.border,
-        backgroundColor: lightPalette.cardBackground,
-    },
-    dropdownDisabled: {
-        backgroundColor: '#F4F4F8',
-        borderColor: '#E0E0E8',
     },
     dropdownTriggerText: {
         fontSize: 15,
-        color: lightPalette.textPrimary,
         flex: 1,
-    },
-    dropdownPlaceholder: {
-        color: lightPalette.gray,
     },
     dropdownChevron: {
         fontSize: 14,
-        color: lightPalette.gray,
         marginLeft: 8,
     },
 
@@ -778,7 +757,6 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     sheet: {
-        backgroundColor: lightPalette.cardBackground,
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
         paddingTop: 12,
@@ -792,17 +770,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingBottom: 12,
         borderBottomWidth: 1,
-        borderBottomColor: lightPalette.border,
         marginBottom: 4,
     },
     sheetTitle: {
         fontSize: 17,
         fontWeight: '700',
-        color: lightPalette.textPrimary,
     },
     sheetClose: {
         fontSize: 18,
-        color: lightPalette.gray,
         padding: 4,
     },
     sheetItem: {
@@ -811,22 +786,12 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         paddingHorizontal: 20,
         borderBottomWidth: 1,
-        borderBottomColor: lightPalette.border,
-    },
-    sheetItemSelected: {
-        backgroundColor: 'rgba(244,67,54,0.06)',
     },
     sheetItemText: {
         flex: 1,
         fontSize: 15,
-        color: lightPalette.textPrimary,
-    },
-    sheetItemTextSelected: {
-        color: lightPalette.primary,
-        fontWeight: '600',
     },
     sheetItemCheck: {
-        color: lightPalette.primary,
         fontSize: 16,
         fontWeight: '700',
     },
@@ -836,14 +801,12 @@ const styles = StyleSheet.create({
     },
     emptyDropdownText: {
         fontSize: 14,
-        color: lightPalette.gray,
         textAlign: 'center',
     },
 
     // AddressForm
     formRoot: {
         flex: 1,
-        backgroundColor: lightPalette.background,
     },
     formScroll: {
         padding: 20,
@@ -858,11 +821,9 @@ const styles = StyleSheet.create({
     formTitle: {
         fontSize: 22,
         fontWeight: '800',
-        color: lightPalette.textPrimary,
     },
     cancelText: {
         fontSize: 20,
-        color: lightPalette.gray,
         padding: 4,
     },
     copyShopBtn: {
@@ -870,23 +831,18 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 12,
         borderRadius: 10,
-        backgroundColor: 'rgba(244,67,54,0.08)',
         marginBottom: 16,
     },
     copyShopText: {
-        color: lightPalette.primary,
         fontWeight: '600',
         fontSize: 14,
     },
     textInput: {
         borderWidth: 1,
-        borderColor: lightPalette.border,
         borderRadius: 10,
         paddingHorizontal: 14,
         paddingVertical: 12,
         fontSize: 15,
-        color: lightPalette.textPrimary,
-        backgroundColor: lightPalette.cardBackground,
     },
     formActions: {
         flexDirection: 'row',
@@ -897,19 +853,16 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingVertical: 14,
         borderRadius: 12,
-        backgroundColor: lightPalette.border,
         alignItems: 'center',
     },
     cancelFormText: {
         fontSize: 15,
         fontWeight: '700',
-        color: lightPalette.textSecondary,
     },
     saveBtn: {
         flex: 2,
         paddingVertical: 14,
         borderRadius: 12,
-        backgroundColor: lightPalette.primary,
         alignItems: 'center',
     },
     saveBtnDisabled: {
@@ -918,6 +871,5 @@ const styles = StyleSheet.create({
     saveBtnText: {
         fontSize: 15,
         fontWeight: '800',
-        color: lightPalette.white,
     },
 });

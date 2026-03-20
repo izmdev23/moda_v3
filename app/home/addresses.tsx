@@ -6,8 +6,8 @@ import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { EmptyList } from '../../components/ui/empty-list';
 import { LoadingModal } from '../../components/ui/loading-modal';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { useTheme } from '../../components/ui/theme-provider';
 import { supabase } from '../../supabase/supabaseClient';
-import { lightPalette } from '../../utils/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -21,6 +21,7 @@ const MAX_ADDRESSES = 10;
  * max 10 limit enforcement, copy-from-shop for sellers, and ConfirmDialog on mutations.
  */
 export default function AddressesScreen(): React.JSX.Element {
+    const { theme } = useTheme();
     const [addresses, setAddresses] = useState<AddressData[]>([]);
     const [currentUserId, setCurrentUserId] = useState<number | null>(null);
     const [shopAddress, setShopAddress] = useState<ShopAddressData | null>(null);
@@ -232,27 +233,27 @@ export default function AddressesScreen(): React.JSX.Element {
     return (
         <SafeScreen style={styles.root}>
             {/* Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.cardBackground }]}>
                 <TouchableOpacity
                     style={styles.backBtn}
                     onPress={() => router.back()}
                     id="back-button"
                 >
-                    <Text style={styles.backText}>‹ Back</Text>
+                    <Text style={[styles.backText, { color: theme.primary }]}>‹ Back</Text>
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>My Addresses</Text>
+                <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>My Addresses</Text>
                 <TouchableOpacity
-                    style={styles.addBtn}
+                    style={[styles.addBtn, { backgroundColor: theme.primary }]}
                     onPress={handleAddPress}
                     id="add-address-button"
                 >
-                    <Text style={styles.addBtnText}>+ Add</Text>
+                    <Text style={[styles.addBtnText, { color: theme.white }]}>+ Add</Text>
                 </TouchableOpacity>
             </View>
 
             {/* Count pill */}
             <View style={styles.countRow}>
-                <Text style={styles.countText}>
+                <Text style={[styles.countText, { color: theme.textSecondary }]}>
                     {addresses.length} / {MAX_ADDRESSES} addresses
                 </Text>
             </View>
@@ -330,30 +331,24 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: lightPalette.border,
-        backgroundColor: lightPalette.cardBackground,
     },
     backBtn: {
         padding: 4,
     },
     backText: {
         fontSize: 17,
-        color: lightPalette.primary,
         fontWeight: '600',
     },
     headerTitle: {
         fontSize: 18,
         fontWeight: '800',
-        color: lightPalette.textPrimary,
     },
     addBtn: {
         paddingHorizontal: 14,
         paddingVertical: 7,
-        backgroundColor: lightPalette.primary,
         borderRadius: 20,
     },
     addBtnText: {
-        color: lightPalette.white,
         fontWeight: '800',
         fontSize: 14,
     },
@@ -363,7 +358,6 @@ const styles = StyleSheet.create({
     },
     countText: {
         fontSize: 13,
-        color: lightPalette.textSecondary,
         fontWeight: '500',
     },
     emptyIcon: { fontSize: 40 },

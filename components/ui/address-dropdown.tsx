@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useTheme } from './theme-provider';
 
 export interface Address {
     uid: string;
@@ -16,7 +17,8 @@ export interface AddressDropdownProps {
 }
 
 /**
- * AddressDropdown allows switching selected address inline
+ * AddressDropdown — allows the user to switch the selected delivery address.
+ * Colors are sourced from the active theme via useTheme().
  * @param props {AddressDropdownProps}
  */
 export const AddressDropdown: React.FC<AddressDropdownProps> = ({
@@ -25,11 +27,12 @@ export const AddressDropdown: React.FC<AddressDropdownProps> = ({
     onSelect,
     onAddAddress,
 }) => {
+    const { theme } = useTheme();
     const [modalVisible, setModalVisible] = useState(false);
 
     const selected = addresses.find(a => a.uid === selectedUid);
 
-    const handleSelect = (uid: string) => {
+    const handleSelect = (uid: string): void => {
         onSelect(uid);
         setModalVisible(false);
     };
@@ -37,29 +40,29 @@ export const AddressDropdown: React.FC<AddressDropdownProps> = ({
     return (
         <View style={styles.container}>
             <TouchableOpacity
-                style={styles.selectedBox}
+                style={[styles.selectedBox, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
                 onPress={() => setModalVisible(true)}
                 activeOpacity={0.7}
             >
                 {selected ? (
                     <View style={styles.selectedContent}>
-                        <Text style={styles.addressLabel}>{selected.label}</Text>
-                        <Text style={styles.addressText} numberOfLines={1}>{selected.fullAddress}</Text>
-                        <Text style={styles.phoneText}>{selected.phone}</Text>
+                        <Text style={[styles.addressLabel, { color: theme.textPrimary }]}>{selected.label}</Text>
+                        <Text style={[styles.addressText, { color: theme.textSecondary }]} numberOfLines={1}>{selected.fullAddress}</Text>
+                        <Text style={[styles.phoneText, { color: theme.gray }]}>{selected.phone}</Text>
                     </View>
                 ) : (
-                    <Text style={styles.emptyText}>No address selected. Tap to choose.</Text>
+                    <Text style={[styles.emptyText, { color: theme.gray }]}>No address selected. Tap to choose.</Text>
                 )}
-                <Text style={styles.dropdownIcon}>▼</Text>
+                <Text style={[styles.dropdownIcon, { color: theme.gray }]}>▼</Text>
             </TouchableOpacity>
 
             <Modal visible={modalVisible} transparent={true} animationType="slide">
                 <View style={styles.modalOverlay}>
-                    <View style={styles.bottomSheet}>
+                    <View style={[styles.bottomSheet, { backgroundColor: theme.cardBackground }]}>
                         <View style={styles.headerRow}>
-                            <Text style={styles.modalTitle}>Select Address</Text>
+                            <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Select Address</Text>
                             <TouchableOpacity onPress={() => setModalVisible(false)}>
-                                <Text style={styles.closeText}>Close</Text>
+                                <Text style={[styles.closeText, { color: theme.primary }]}>Close</Text>
                             </TouchableOpacity>
                         </View>
 
@@ -70,29 +73,37 @@ export const AddressDropdown: React.FC<AddressDropdownProps> = ({
                                 <TouchableOpacity
                                     style={[
                                         styles.addressItem,
-                                        item.uid === selectedUid && styles.addressItemSelected
+                                        { borderBottomColor: theme.border },
+                                        item.uid === selectedUid && { backgroundColor: `${theme.primary}10` }
                                     ]}
                                     onPress={() => handleSelect(item.uid)}
                                 >
                                     <View style={styles.radioContainer}>
-                                        <View style={[styles.radio, item.uid === selectedUid && styles.radioSelected]} />
+                                        <View style={[
+                                            styles.radio,
+                                            { borderColor: item.uid === selectedUid ? theme.primary : theme.gray },
+                                            item.uid === selectedUid && { backgroundColor: theme.primary },
+                                        ]} />
                                     </View>
                                     <View style={styles.itemContent}>
-                                        <Text style={styles.itemLabel}>{item.label}</Text>
-                                        <Text style={styles.itemText}>{item.fullAddress}</Text>
-                                        <Text style={styles.itemPhone}>{item.phone}</Text>
+                                        <Text style={[styles.itemLabel, { color: theme.textPrimary }]}>{item.label}</Text>
+                                        <Text style={[styles.itemText, { color: theme.textSecondary }]}>{item.fullAddress}</Text>
+                                        <Text style={[styles.itemPhone, { color: theme.gray }]}>{item.phone}</Text>
                                     </View>
                                 </TouchableOpacity>
                             )}
                             ListEmptyComponent={
                                 <View style={styles.emptyContainer}>
-                                    <Text style={styles.emptyListText}>No addresses found.</Text>
+                                    <Text style={[styles.emptyListText, { color: theme.gray }]}>No addresses found.</Text>
                                 </View>
                             }
                         />
 
-                        <TouchableOpacity style={styles.addButton} onPress={() => { setModalVisible(false); onAddAddress(); }}>
-                            <Text style={styles.addText}>+ Add New Address</Text>
+                        <TouchableOpacity
+                            style={[styles.addButton, { backgroundColor: theme.primary }]}
+                            onPress={() => { setModalVisible(false); onAddAddress(); }}
+                        >
+                            <Text style={[styles.addText, { color: theme.white }]}>+ Add New Address</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -109,10 +120,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
-        backgroundColor: '#F9F9F9',
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#EFEFEF',
     },
     selectedContent: {
         flex: 1,
@@ -120,26 +129,21 @@ const styles = StyleSheet.create({
     addressLabel: {
         fontWeight: 'bold',
         fontSize: 14,
-        color: '#333',
         marginBottom: 4,
     },
     addressText: {
         fontSize: 14,
-        color: '#666',
         marginBottom: 2,
     },
     phoneText: {
         fontSize: 12,
-        color: '#888',
     },
     emptyText: {
         flex: 1,
-        color: '#999',
         fontSize: 14,
     },
     dropdownIcon: {
         fontSize: 14,
-        color: '#999',
         marginLeft: 8,
     },
     modalOverlay: {
@@ -148,7 +152,6 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     bottomSheet: {
-        backgroundColor: '#FFF',
         borderTopLeftRadius: 16,
         borderTopRightRadius: 16,
         padding: 24,
@@ -163,20 +166,14 @@ const styles = StyleSheet.create({
     modalTitle: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#333',
     },
     closeText: {
-        color: '#007AFF',
         fontSize: 16,
     },
     addressItem: {
         flexDirection: 'row',
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#F0F0F0',
-    },
-    addressItemSelected: {
-        backgroundColor: '#F0F8FF',
     },
     radioContainer: {
         justifyContent: 'center',
@@ -187,11 +184,6 @@ const styles = StyleSheet.create({
         height: 20,
         borderRadius: 10,
         borderWidth: 2,
-        borderColor: '#CCC',
-    },
-    radioSelected: {
-        borderColor: '#007AFF',
-        backgroundColor: '#007AFF',
     },
     itemContent: {
         flex: 1,
@@ -199,27 +191,22 @@ const styles = StyleSheet.create({
     itemLabel: {
         fontWeight: 'bold',
         fontSize: 14,
-        color: '#333',
         marginBottom: 2,
     },
     itemText: {
         fontSize: 14,
-        color: '#666',
         marginBottom: 2,
     },
     itemPhone: {
         fontSize: 12,
-        color: '#888',
     },
     addButton: {
         marginTop: 16,
         padding: 16,
-        backgroundColor: '#007AFF',
         borderRadius: 8,
         alignItems: 'center',
     },
     addText: {
-        color: '#FFF',
         fontWeight: 'bold',
         fontSize: 16,
     },
@@ -227,7 +214,5 @@ const styles = StyleSheet.create({
         padding: 24,
         alignItems: 'center',
     },
-    emptyListText: {
-        color: '#999',
-    },
+    emptyListText: {},
 });

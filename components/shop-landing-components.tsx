@@ -132,9 +132,15 @@ interface TaggedProductsListProps {
 
 export const TaggedProductsList: React.FC<TaggedProductsListProps> = ({ shopUid }) => {
     // Stub for tagged products implementation
+    const { theme } = useTheme();
+
     return (
         <View style={{ flex: 1, padding: 16 }}>
-            <EmptyList icon="local-offer" message="No tags found" submessage="This shop hasn't tagged any products yet." />
+            <EmptyList
+                icon={<MaterialIcons name="local-offer" size={48} color={theme.textSecondary} />}
+                message="No tags found"
+                submessage="This shop hasn't tagged any products yet."
+            />
         </View>
     );
 };

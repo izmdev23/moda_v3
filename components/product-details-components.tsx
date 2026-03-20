@@ -1,18 +1,16 @@
 import React, { useCallback, useState } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { lightPalette } from '../utils/theme';
 import { formatPrice } from '../utils/utils';
+import { useTheme } from './ui/theme-provider';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -45,7 +43,8 @@ export interface VariantItem {
 interface ProductImageCarouselProps {
     readonly imageUrls: string[];
     readonly thumbnailUrl: string;
-    readonly onVtonPress: () => void;
+    readonly onVtonPress?: () => void;
+    readonly showVton: boolean;
 }
 
 /**
@@ -57,7 +56,9 @@ export const ProductImageCarousel: React.FC<ProductImageCarouselProps> = ({
     imageUrls,
     thumbnailUrl,
     onVtonPress,
+    showVton,
 }) => {
+    const { theme } = useTheme();
     const [activeIndex, setActiveIndex] = useState<number>(0);
     const images = imageUrls.length > 0 ? imageUrls : [thumbnailUrl];
 
@@ -67,80 +68,39 @@ export const ProductImageCarousel: React.FC<ProductImageCarouselProps> = ({
     }, []);
 
     return (
-        <View style={carouselStyles.container}>
-            <ScrollView
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                onMomentumScrollEnd={handleScroll}
-            >
+        <View style={[carouselStyles.container, { backgroundColor: theme.background }]}>
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll}>
                 {images.map((url, idx) => (
-                    <Image
-                        key={`img-${idx}`}
-                        source={{ uri: url }}
-                        style={carouselStyles.image}
-                        resizeMode="cover"
-                    />
+                    <Image key={`img-${idx}`} source={{ uri: url }} style={carouselStyles.image} resizeMode="cover" />
                 ))}
             </ScrollView>
-
-            {/* Page indicators */}
             {images.length > 1 && (
                 <View style={carouselStyles.dotsRow}>
                     {images.map((_, idx) => (
-                        <View
-                            key={`dot-${idx}`}
-                            style={[carouselStyles.dot, activeIndex === idx && carouselStyles.dotActive]}
-                        />
+                        <View key={`dot-${idx}`} style={[carouselStyles.dot, activeIndex === idx && { backgroundColor: theme.white }]} />
                     ))}
                 </View>
             )}
-
-            {/* Virtual try-on button */}
-            <TouchableOpacity style={carouselStyles.vtonBtn} onPress={onVtonPress}>
-                <Text style={carouselStyles.vtonText}>👗 Try On</Text>
-            </TouchableOpacity>
+            {showVton && typeof onVtonPress === 'function' && (
+                <TouchableOpacity style={[carouselStyles.vtonBtn, { backgroundColor: theme.primary }]} onPress={onVtonPress}>
+                    <Text style={[carouselStyles.vtonText, { color: theme.white }]}>👗 Try On</Text>
+                </TouchableOpacity>
+            )}
         </View>
     );
 };
 
 const carouselStyles = StyleSheet.create({
-    container: {
-        width: SCREEN_WIDTH,
-        height: SCREEN_WIDTH,
-        backgroundColor: lightPalette.background,
-    },
+    container: { width: SCREEN_WIDTH, height: SCREEN_WIDTH },
     image: { width: SCREEN_WIDTH, height: SCREEN_WIDTH },
-    dotsRow: {
-        position: 'absolute',
-        bottom: 12,
-        width: '100%',
-        flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 6,
-    },
-    dot: {
-        width: 7,
-        height: 7,
-        borderRadius: 3.5,
-        backgroundColor: 'rgba(255,255,255,0.5)',
-    },
-    dotActive: { backgroundColor: lightPalette.white },
+    dotsRow: { position: 'absolute', bottom: 12, width: '100%', flexDirection: 'row', justifyContent: 'center', gap: 6 },
+    dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: 'rgba(255,255,255,0.5)' },
     vtonBtn: {
-        position: 'absolute',
-        top: 12,
-        right: 12,
-        backgroundColor: lightPalette.primary,
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 20,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
+        position: 'absolute', top: 12, right: 12,
+        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+        elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4,
     },
-    vtonText: { color: lightPalette.white, fontSize: 13, fontWeight: '700' },
+    vtonText: { fontSize: 13, fontWeight: '700' },
 });
 
 // ─── ShopHeader ───────────────────────────────────────────────────────────────
@@ -156,47 +116,28 @@ interface ShopHeaderProps {
  * Shop info header shown at the top of a product details page.
  * @param props {ShopHeaderProps}
  */
-export const ShopHeader: React.FC<ShopHeaderProps> = ({
-    shopName,
-    city,
-    province,
-    onVisitShop,
-}) => {
+export const ShopHeader: React.FC<ShopHeaderProps> = ({ shopName, city, province, onVisitShop }) => {
+    const { theme } = useTheme();
     return (
-        <View style={shopHeaderStyles.container}>
+        <View style={[shopHeaderStyles.container, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
             <View style={shopHeaderStyles.info}>
-                <Text style={shopHeaderStyles.name}>🏪 {shopName}</Text>
-                <Text style={shopHeaderStyles.location}>
-                    📍 {city}, {province}
-                </Text>
+                <Text style={[shopHeaderStyles.name, { color: theme.textPrimary }]}>🏪 {shopName}</Text>
+                <Text style={[shopHeaderStyles.location, { color: theme.textSecondary }]}>📍 {city}, {province}</Text>
             </View>
-            <TouchableOpacity style={shopHeaderStyles.visitBtn} onPress={onVisitShop}>
-                <Text style={shopHeaderStyles.visitText}>Visit Shop</Text>
+            <TouchableOpacity style={[shopHeaderStyles.visitBtn, { borderColor: theme.primary }]} onPress={onVisitShop}>
+                <Text style={[shopHeaderStyles.visitText, { color: theme.primary }]}>Visit Shop</Text>
             </TouchableOpacity>
         </View>
     );
 };
 
 const shopHeaderStyles = StyleSheet.create({
-    container: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        backgroundColor: lightPalette.cardBackground,
-        borderBottomWidth: 1,
-        borderBottomColor: lightPalette.border,
-    },
+    container: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
     info: { flex: 1 },
-    name: { fontSize: 15, fontWeight: '700', color: lightPalette.textPrimary },
-    location: { fontSize: 12, color: lightPalette.textSecondary, marginTop: 2 },
-    visitBtn: {
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: lightPalette.primary,
-    },
-    visitText: { color: lightPalette.primary, fontWeight: '600', fontSize: 13 },
+    name: { fontSize: 15, fontWeight: '700' },
+    location: { fontSize: 12, marginTop: 2 },
+    visitBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
+    visitText: { fontWeight: '600', fontSize: 13 },
 });
 
 // ─── SaleCountdownTimer ────────────────────────────────────────────────────────
@@ -231,28 +172,19 @@ export const SaleCountdownTimer: React.FC<SaleCountdownTimerProps> = ({ saleEndD
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [saleEndDate]);
 
+    const { theme } = useTheme();
     return (
-        <View style={timerStyles.container}>
+        <View style={[timerStyles.container, { backgroundColor: `${theme.primary}1A` }]}>
             <Text style={timerStyles.icon}>⏰</Text>
-            <Text style={timerStyles.text}>Sale ends in: {timeLeft}</Text>
+            <Text style={[timerStyles.text, { color: theme.primary }]}>Sale ends in: {timeLeft}</Text>
         </View>
     );
 };
 
 const timerStyles = StyleSheet.create({
-    container: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: 'rgba(244,67,54,0.1)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        alignSelf: 'flex-start',
-        marginTop: 8,
-    },
+    container: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, alignSelf: 'flex-start', marginTop: 8 },
     icon: { fontSize: 14 },
-    text: { fontSize: 12, color: lightPalette.primary, fontWeight: '700' },
+    text: { fontSize: 12, fontWeight: '700' },
 });
 
 // ─── VariantSelector ──────────────────────────────────────────────────────────
@@ -269,22 +201,13 @@ interface VariantSelectorProps {
  * Disabled state for out-of-stock variants.
  * @param props {VariantSelectorProps}
  */
-export const VariantSelector: React.FC<VariantSelectorProps> = ({
-    variants,
-    selectedUid,
-    onSelect,
-}) => {
+export const VariantSelector: React.FC<VariantSelectorProps> = ({ variants, selectedUid, onSelect }) => {
+    const { theme } = useTheme();
     const now = new Date();
 
     const getEffectivePrice = (v: VariantItem): number => {
-        if (
-            v.salePrice !== null &&
-            v.salePrice !== undefined &&
-            v.saleStartDate &&
-            v.saleEndDate &&
-            new Date(v.saleStartDate) <= now &&
-            new Date(v.saleEndDate) >= now
-        ) {
+        if (v.salePrice !== null && v.salePrice !== undefined && v.saleStartDate && v.saleEndDate &&
+            new Date(v.saleStartDate) <= now && new Date(v.saleEndDate) >= now) {
             return v.salePrice;
         }
         return v.price;
@@ -292,20 +215,20 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
 
     return (
         <View style={variantStyles.container}>
-            <Text style={variantStyles.label}>Select Variant</Text>
+            <Text style={[variantStyles.label, { color: theme.textPrimary }]}>Select Variant</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={variantStyles.scroll}>
                 {variants.map((variant) => {
                     const isOutOfStock = variant.stock === 0;
                     const isSelected = selectedUid === variant.uid;
                     const effectivePrice = getEffectivePrice(variant);
                     const onSale = effectivePrice < variant.price;
-
                     return (
                         <TouchableOpacity
                             key={variant.uid}
                             style={[
                                 variantStyles.card,
-                                isSelected && variantStyles.cardSelected,
+                                { borderColor: theme.border, backgroundColor: theme.cardBackground },
+                                isSelected && { borderColor: theme.primary },
                                 isOutOfStock && variantStyles.cardDisabled,
                             ]}
                             onPress={() => !isOutOfStock && onSelect(variant)}
@@ -313,34 +236,30 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                             disabled={isOutOfStock}
                         >
                             {variant.imageUrl ? (
-                                <Image
-                                    source={{ uri: variant.imageUrl }}
-                                    style={variantStyles.image}
-                                    resizeMode="cover"
-                                />
+                                <Image source={{ uri: variant.imageUrl }} style={variantStyles.image} resizeMode="cover" />
                             ) : (
-                                <View style={variantStyles.imagePlaceholder}>
-                                    <Text style={variantStyles.imagePlaceholderText}>
+                                <View style={[variantStyles.imagePlaceholder, { backgroundColor: theme.background }]}>
+                                    <Text style={[variantStyles.imagePlaceholderText, { color: theme.gray }]}>
                                         {variant.name.charAt(0)}
                                     </Text>
                                 </View>
                             )}
-                            <Text style={[variantStyles.variantName, isSelected && variantStyles.variantNameSelected]}>
+                            <Text style={[variantStyles.variantName, { color: isSelected ? theme.primary : theme.textSecondary }]}>
                                 {variant.name}
                             </Text>
-                            <Text style={[variantStyles.price, onSale && variantStyles.priceOnSale]}>
+                            <Text style={[variantStyles.price, { color: onSale ? theme.error : theme.textPrimary }]}>
                                 {formatPrice(effectivePrice)}
                             </Text>
                             {onSale && (
-                                <Text style={variantStyles.originalPrice}>{formatPrice(variant.price)}</Text>
+                                <Text style={[variantStyles.originalPrice, { color: theme.gray }]}>{formatPrice(variant.price)}</Text>
                             )}
                             {isOutOfStock && (
                                 <View style={variantStyles.outOfStockBadge}>
-                                    <Text style={variantStyles.outOfStockText}>Out of Stock</Text>
+                                    <Text style={[variantStyles.outOfStockText, { color: theme.textSecondary }]}>Out of Stock</Text>
                                 </View>
                             )}
                             {!isOutOfStock && variant.stock <= 5 && (
-                                <Text style={variantStyles.lowStockText}>Only {variant.stock} left!</Text>
+                                <Text style={[variantStyles.lowStockText, { color: theme.warning }]}>Only {variant.stock} left!</Text>
                             )}
                         </TouchableOpacity>
                     );
@@ -352,60 +271,19 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
 
 const variantStyles = StyleSheet.create({
     container: { paddingVertical: 16 },
-    label: {
-        fontSize: 15,
-        fontWeight: '700',
-        color: lightPalette.textPrimary,
-        paddingHorizontal: 16,
-        marginBottom: 10,
-    },
+    label: { fontSize: 15, fontWeight: '700', paddingHorizontal: 16, marginBottom: 10 },
     scroll: { paddingHorizontal: 16, gap: 10 },
-    card: {
-        width: 110,
-        borderRadius: 12,
-        borderWidth: 1.5,
-        borderColor: lightPalette.border,
-        backgroundColor: lightPalette.cardBackground,
-        overflow: 'hidden',
-        alignItems: 'center',
-        paddingBottom: 10,
-    },
-    cardSelected: { borderColor: lightPalette.primary },
+    card: { width: 110, borderRadius: 12, borderWidth: 1.5, overflow: 'hidden', alignItems: 'center', paddingBottom: 10 },
     cardDisabled: { opacity: 0.4 },
     image: { width: '100%', height: 80, marginBottom: 8 },
-    imagePlaceholder: {
-        width: '100%',
-        height: 80,
-        backgroundColor: lightPalette.background,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    imagePlaceholderText: { fontSize: 28, color: lightPalette.gray, fontWeight: '700' },
-    variantName: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: lightPalette.textSecondary,
-        textAlign: 'center',
-        paddingHorizontal: 6,
-    },
-    variantNameSelected: { color: lightPalette.primary },
-    price: { fontSize: 13, fontWeight: '700', color: lightPalette.textPrimary, marginTop: 4 },
-    priceOnSale: { color: lightPalette.error },
-    originalPrice: {
-        fontSize: 11,
-        color: lightPalette.gray,
-        textDecorationLine: 'line-through',
-    },
-    outOfStockBadge: {
-        marginTop: 4,
-        backgroundColor: 'rgba(0,0,0,0.08)',
-        borderRadius: 4,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-    },
-    outOfStockText: { fontSize: 10, color: lightPalette.textSecondary, fontWeight: '600' },
-    lowStockText: { fontSize: 10, color: lightPalette.warning, fontWeight: '700', marginTop: 4 },
+    imagePlaceholder: { width: '100%', height: 80, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+    imagePlaceholderText: { fontSize: 28, fontWeight: '700' },
+    variantName: { fontSize: 12, fontWeight: '600', textAlign: 'center', paddingHorizontal: 6 },
+    price: { fontSize: 13, fontWeight: '700', marginTop: 4 },
+    originalPrice: { fontSize: 11, textDecorationLine: 'line-through' },
+    outOfStockBadge: { marginTop: 4, backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+    outOfStockText: { fontSize: 10, fontWeight: '600' },
+    lowStockText: { fontSize: 10, fontWeight: '700', marginTop: 4 },
 });
 
 // ─── AddToCartSection ─────────────────────────────────────────────────────────
@@ -422,55 +300,34 @@ interface AddToCartSectionProps {
  * @param props {AddToCartSectionProps}
  */
 export const AddToCartSection: React.FC<AddToCartSectionProps> = ({
-    onAddToCart,
-    isLoading,
-    maxStock,
-    isDisabled,
+    onAddToCart, isLoading, maxStock, isDisabled,
 }) => {
+    const { theme } = useTheme();
     const [quantity, setQuantity] = useState<number>(1);
-
     const MAX_QTY = Math.min(99, maxStock);
-
-    const increment = useCallback((): void => {
-        setQuantity((q) => Math.min(q + 1, MAX_QTY));
-    }, [MAX_QTY]);
-
-    const decrement = useCallback((): void => {
-        setQuantity((q) => Math.max(q - 1, 1));
-    }, []);
+    const increment = useCallback((): void => { setQuantity((q) => Math.min(q + 1, MAX_QTY)); }, [MAX_QTY]);
+    const decrement = useCallback((): void => { setQuantity((q) => Math.max(q - 1, 1)); }, []);
 
     return (
         <View style={cartSectionStyles.container}>
             <View style={cartSectionStyles.qtyRow}>
-                <TouchableOpacity
-                    style={[cartSectionStyles.qtyBtn, quantity <= 1 && cartSectionStyles.qtyBtnDisabled]}
-                    onPress={decrement}
-                    disabled={quantity <= 1}
-                >
-                    <Text style={cartSectionStyles.qtyBtnText}>−</Text>
+                <TouchableOpacity style={[cartSectionStyles.qtyBtn, { borderColor: theme.border, backgroundColor: theme.cardBackground }, quantity <= 1 && cartSectionStyles.qtyBtnDisabled]} onPress={decrement} disabled={quantity <= 1}>
+                    <Text style={[cartSectionStyles.qtyBtnText, { color: theme.textPrimary }]}>−</Text>
                 </TouchableOpacity>
-                <Text style={cartSectionStyles.qtyText}>{quantity}</Text>
-                <TouchableOpacity
-                    style={[cartSectionStyles.qtyBtn, quantity >= MAX_QTY && cartSectionStyles.qtyBtnDisabled]}
-                    onPress={increment}
-                    disabled={quantity >= MAX_QTY}
-                >
-                    <Text style={cartSectionStyles.qtyBtnText}>+</Text>
+                <Text style={[cartSectionStyles.qtyText, { color: theme.textPrimary }]}>{quantity}</Text>
+                <TouchableOpacity style={[cartSectionStyles.qtyBtn, { borderColor: theme.border, backgroundColor: theme.cardBackground }, quantity >= MAX_QTY && cartSectionStyles.qtyBtnDisabled]} onPress={increment} disabled={quantity >= MAX_QTY}>
+                    <Text style={[cartSectionStyles.qtyBtnText, { color: theme.textPrimary }]}>+</Text>
                 </TouchableOpacity>
             </View>
-
             <TouchableOpacity
-                style={[
-                    cartSectionStyles.addBtn,
-                    (isDisabled || isLoading) && cartSectionStyles.addBtnDisabled,
-                ]}
+                style={[cartSectionStyles.addBtn, { backgroundColor: isDisabled || isLoading ? theme.gray : theme.primary }, (isDisabled || isLoading) && cartSectionStyles.addBtnDisabled]}
                 onPress={() => onAddToCart(quantity)}
                 disabled={isDisabled || isLoading}
             >
                 {isLoading ? (
-                    <ActivityIndicator size="small" color={lightPalette.white} />
+                    <ActivityIndicator size="small" color={theme.white} />
                 ) : (
-                    <Text style={cartSectionStyles.addBtnText}>
+                    <Text style={[cartSectionStyles.addBtnText, { color: theme.white }]}>
                         {isDisabled ? '⚠️ Select a Variant' : '🛒 Add to Cart'}
                     </Text>
                 )}
@@ -480,38 +337,15 @@ export const AddToCartSection: React.FC<AddToCartSectionProps> = ({
 };
 
 const cartSectionStyles = StyleSheet.create({
-    container: {
-        paddingHorizontal: 16,
-        paddingBottom: 24,
-        gap: 12,
-    },
-    qtyRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        alignSelf: 'flex-start',
-    },
-    qtyBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 10,
-        borderWidth: 1.5,
-        borderColor: lightPalette.border,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: lightPalette.cardBackground,
-    },
+    container: { paddingHorizontal: 16, paddingBottom: 24, gap: 12 },
+    qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'flex-start' },
+    qtyBtn: { width: 40, height: 40, borderRadius: 10, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center' },
     qtyBtnDisabled: { opacity: 0.4 },
-    qtyBtnText: { fontSize: 22, color: lightPalette.textPrimary, fontWeight: '600', lineHeight: 24 },
-    qtyText: { fontSize: 17, fontWeight: '700', color: lightPalette.textPrimary, minWidth: 30, textAlign: 'center' },
-    addBtn: {
-        backgroundColor: lightPalette.primary,
-        paddingVertical: 15,
-        borderRadius: 14,
-        alignItems: 'center',
-    },
-    addBtnDisabled: { backgroundColor: lightPalette.gray },
-    addBtnText: { color: lightPalette.white, fontSize: 16, fontWeight: '700' },
+    qtyBtnText: { fontSize: 22, fontWeight: '600', lineHeight: 24 },
+    qtyText: { fontSize: 17, fontWeight: '700', minWidth: 30, textAlign: 'center' },
+    addBtn: { paddingVertical: 15, borderRadius: 14, alignItems: 'center' },
+    addBtnDisabled: { opacity: 0.6 },
+    addBtnText: { fontSize: 16, fontWeight: '700' },
 });
 
 // ─── InlineRatingStars ────────────────────────────────────────────────────────
@@ -530,69 +364,48 @@ interface InlineRatingStarsProps {
  * @param props {InlineRatingStarsProps}
  */
 export const InlineRatingStars: React.FC<InlineRatingStarsProps> = ({
-    averageRating,
-    ratingCount,
-    userRating,
-    onRate,
-    isSubmitting,
+    averageRating, ratingCount, userRating, onRate, isSubmitting,
 }) => {
+    const { theme } = useTheme();
     const [hoveredStar, setHoveredStar] = useState<number | null>(null);
     const displayRating = userRating ?? hoveredStar ?? 0;
 
     return (
-        <View style={starsStyles.container}>
+        <View style={[starsStyles.container, { backgroundColor: theme.cardBackground }]}>
             <View style={starsStyles.summaryRow}>
-                <Text style={starsStyles.avgText}>{averageRating.toFixed(1)}</Text>
+                <Text style={[starsStyles.avgText, { color: theme.textPrimary }]}>{averageRating.toFixed(1)}</Text>
                 <Text style={starsStyles.starIcon}>★</Text>
-                <Text style={starsStyles.countText}>({ratingCount} ratings)</Text>
+                <Text style={[starsStyles.countText, { color: theme.textSecondary }]}>({ratingCount} ratings)</Text>
             </View>
             <View style={starsStyles.inputRow}>
-                <Text style={starsStyles.tapLabel}>Your rating: </Text>
+                <Text style={[starsStyles.tapLabel, { color: theme.textSecondary }]}>Your rating: </Text>
                 <View style={starsStyles.starsRow}>
                     {[1, 2, 3, 4, 5].map((star) => (
-                        <TouchableOpacity
-                            key={star}
-                            onPress={() => !isSubmitting && onRate(star)}
-                            disabled={isSubmitting}
-                            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                        >
-                            <Text
-                                style={[
-                                    starsStyles.star,
-                                    star <= displayRating && starsStyles.starFilled,
-                                ]}
-                            >
-                                ★
-                            </Text>
+                        <TouchableOpacity key={star} onPress={() => !isSubmitting && onRate(star)} disabled={isSubmitting} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+                            <Text style={[starsStyles.star, { color: star <= displayRating ? theme.starColor : theme.border }]}>★</Text>
                         </TouchableOpacity>
                     ))}
                 </View>
-                {isSubmitting && <ActivityIndicator size="small" color={lightPalette.primary} style={{ marginLeft: 8 }} />}
+                {isSubmitting && <ActivityIndicator size="small" color={theme.primary} style={{ marginLeft: 8 }} />}
             </View>
             {userRating !== null && (
-                <Text style={starsStyles.thankYou}>✓ You rated this {userRating} star{userRating !== 1 ? 's' : ''}</Text>
+                <Text style={[starsStyles.thankYou, { color: theme.success }]}>✓ You rated this {userRating} star{userRating !== 1 ? 's' : ''}</Text>
             )}
         </View>
     );
 };
 
 const starsStyles = StyleSheet.create({
-    container: {
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-        backgroundColor: lightPalette.cardBackground,
-        marginBottom: 1,
-    },
+    container: { paddingHorizontal: 16, paddingVertical: 16, marginBottom: 1 },
     summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 10 },
-    avgText: { fontSize: 28, fontWeight: '700', color: lightPalette.textPrimary },
+    avgText: { fontSize: 28, fontWeight: '700' },
     starIcon: { fontSize: 24, color: '#FFCC00' },
-    countText: { fontSize: 14, color: lightPalette.textSecondary },
+    countText: { fontSize: 14 },
     inputRow: { flexDirection: 'row', alignItems: 'center' },
-    tapLabel: { fontSize: 14, color: lightPalette.textSecondary },
+    tapLabel: { fontSize: 14 },
     starsRow: { flexDirection: 'row', gap: 4 },
-    star: { fontSize: 28, color: lightPalette.border },
-    starFilled: { color: '#FFCC00' },
-    thankYou: { fontSize: 12, color: lightPalette.success, marginTop: 6, fontWeight: '600' },
+    star: { fontSize: 28 },
+    thankYou: { fontSize: 12, marginTop: 6, fontWeight: '600' },
 });
 
 // ─── ReviewCard ───────────────────────────────────────────────────────────────
@@ -606,46 +419,35 @@ interface ReviewCardProps {
  * @param props {ReviewCardProps}
  */
 export const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
-    const dateStr = new Date(review.createdAt).toLocaleDateString('en-PH', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-    });
-
+    const { theme } = useTheme();
+    const dateStr = new Date(review.createdAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
     return (
-        <View style={reviewCardStyles.container}>
+        <View style={[reviewCardStyles.container, { borderBottomColor: theme.border, backgroundColor: theme.cardBackground }]}>
             <View style={reviewCardStyles.header}>
                 <View style={reviewCardStyles.avatar}>
                     {review.avatarUrl ? (
                         <Image source={{ uri: review.avatarUrl }} style={reviewCardStyles.avatarImg} />
                     ) : (
-                        <View style={reviewCardStyles.avatarFallback}>
-                            <Text style={reviewCardStyles.avatarFallbackText}>
-                                {review.userName.charAt(0).toUpperCase()}
-                            </Text>
+                        <View style={[reviewCardStyles.avatarFallback, { backgroundColor: theme.primary }]}>
+                            <Text style={[reviewCardStyles.avatarFallbackText, { color: theme.white }]}>{review.userName.charAt(0).toUpperCase()}</Text>
                         </View>
                     )}
                 </View>
                 <View style={reviewCardStyles.meta}>
-                    <Text style={reviewCardStyles.name}>{review.userName}</Text>
+                    <Text style={[reviewCardStyles.name, { color: theme.textPrimary }]}>{review.userName}</Text>
                     <View style={reviewCardStyles.starsRow}>
                         {[1, 2, 3, 4, 5].map((s) => (
-                            <Text key={s} style={[reviewCardStyles.star, s <= review.rating && reviewCardStyles.starFilled]}>★</Text>
+                            <Text key={s} style={[reviewCardStyles.star, { color: s <= review.rating ? theme.starColor : theme.border }]}>★</Text>
                         ))}
-                        <Text style={reviewCardStyles.date}> · {dateStr}</Text>
+                        <Text style={[reviewCardStyles.date, { color: theme.textSecondary }]}> · {dateStr}</Text>
                     </View>
                 </View>
             </View>
-            <Text style={reviewCardStyles.text}>{review.reviewText}</Text>
+            <Text style={[reviewCardStyles.text, { color: theme.textPrimary }]}>{review.reviewText}</Text>
             {review.imageUrls.length > 0 && (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={reviewCardStyles.imagesScroll}>
                     {review.imageUrls.map((url, idx) => (
-                        <Image
-                            key={idx}
-                            source={{ uri: url }}
-                            style={reviewCardStyles.reviewImage}
-                            resizeMode="cover"
-                        />
+                        <Image key={idx} source={{ uri: url }} style={reviewCardStyles.reviewImage} resizeMode="cover" />
                     ))}
                 </ScrollView>
             )}
@@ -654,32 +456,18 @@ export const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
 };
 
 const reviewCardStyles = StyleSheet.create({
-    container: {
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: lightPalette.border,
-        backgroundColor: lightPalette.cardBackground,
-    },
+    container: { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
     header: { flexDirection: 'row', gap: 12, marginBottom: 10 },
     avatar: { width: 40, height: 40 },
     avatarImg: { width: 40, height: 40, borderRadius: 20 },
-    avatarFallback: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: lightPalette.primary,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    avatarFallbackText: { color: lightPalette.white, fontSize: 16, fontWeight: '700' },
+    avatarFallback: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+    avatarFallbackText: { fontSize: 16, fontWeight: '700' },
     meta: { flex: 1, justifyContent: 'center' },
-    name: { fontSize: 14, fontWeight: '700', color: lightPalette.textPrimary },
+    name: { fontSize: 14, fontWeight: '700' },
     starsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-    star: { fontSize: 13, color: lightPalette.border },
-    starFilled: { color: '#FFCC00' },
-    date: { fontSize: 11, color: lightPalette.textSecondary },
-    text: { fontSize: 14, color: lightPalette.textPrimary, lineHeight: 20 },
+    star: { fontSize: 13 },
+    date: { fontSize: 11 },
+    text: { fontSize: 14, lineHeight: 20 },
     imagesScroll: { marginTop: 10 },
     reviewImage: { width: 80, height: 80, borderRadius: 8, marginRight: 8 },
 });
@@ -698,38 +486,31 @@ interface ReviewsListProps {
  * Paginated reviews list below the rating section.
  * @param props {ReviewsListProps}
  */
-export const ReviewsList: React.FC<ReviewsListProps> = ({
-    reviews,
-    isLoading,
-    onLoadMore,
-    hasMore,
-    onWriteReview,
-}) => {
+export const ReviewsList: React.FC<ReviewsListProps> = ({ reviews, isLoading, onLoadMore, hasMore, onWriteReview }) => {
+    const { theme } = useTheme();
     return (
-        <View style={reviewsListStyles.container}>
-            <View style={reviewsListStyles.header}>
-                <Text style={reviewsListStyles.title}>Reviews</Text>
-                <TouchableOpacity style={reviewsListStyles.writeBtn} onPress={onWriteReview}>
-                    <Text style={reviewsListStyles.writeBtnText}>✏️ Write a Review</Text>
+        <View style={[reviewsListStyles.container, { backgroundColor: theme.cardBackground }]}>
+            <View style={[reviewsListStyles.header, { borderBottomColor: theme.border }]}>
+                <Text style={[reviewsListStyles.title, { color: theme.textPrimary }]}>Reviews</Text>
+                <TouchableOpacity style={[reviewsListStyles.writeBtn, { backgroundColor: `${theme.primary}1A` }]} onPress={onWriteReview}>
+                    <Text style={[reviewsListStyles.writeBtnText, { color: theme.primary }]}>✏️ Write a Review</Text>
                 </TouchableOpacity>
             </View>
-            {reviews.map((r) => (
-                <ReviewCard key={r.uid} review={r} />
-            ))}
+            {reviews.map((r) => (<ReviewCard key={r.uid} review={r} />))}
             {isLoading && (
                 <View style={reviewsListStyles.loading}>
-                    <ActivityIndicator size="small" color={lightPalette.primary} />
+                    <ActivityIndicator size="small" color={theme.primary} />
                 </View>
             )}
             {!isLoading && hasMore && (
                 <TouchableOpacity style={reviewsListStyles.loadMoreBtn} onPress={onLoadMore}>
-                    <Text style={reviewsListStyles.loadMoreText}>Load More Reviews</Text>
+                    <Text style={[reviewsListStyles.loadMoreText, { color: theme.primary }]}>Load More Reviews</Text>
                 </TouchableOpacity>
             )}
             {!isLoading && reviews.length === 0 && (
                 <View style={reviewsListStyles.empty}>
                     <Text style={reviewsListStyles.emptyIcon}>💬</Text>
-                    <Text style={reviewsListStyles.emptyText}>No reviews yet. Be the first!</Text>
+                    <Text style={[reviewsListStyles.emptyText, { color: theme.textSecondary }]}>No reviews yet. Be the first!</Text>
                 </View>
             )}
         </View>
@@ -737,30 +518,17 @@ export const ReviewsList: React.FC<ReviewsListProps> = ({
 };
 
 const reviewsListStyles = StyleSheet.create({
-    container: { backgroundColor: lightPalette.cardBackground },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: lightPalette.border,
-    },
-    title: { fontSize: 17, fontWeight: '700', color: lightPalette.textPrimary },
-    writeBtn: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        backgroundColor: 'rgba(244,67,54,0.1)',
-    },
-    writeBtnText: { color: lightPalette.primary, fontSize: 13, fontWeight: '700' },
+    container: {},
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
+    title: { fontSize: 17, fontWeight: '700' },
+    writeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+    writeBtnText: { fontSize: 13, fontWeight: '700' },
     loading: { paddingVertical: 16, alignItems: 'center' },
     loadMoreBtn: { alignItems: 'center', padding: 16 },
-    loadMoreText: { color: lightPalette.primary, fontWeight: '600', fontSize: 14 },
+    loadMoreText: { fontWeight: '600', fontSize: 14 },
     empty: { padding: 32, alignItems: 'center', gap: 8 },
     emptyIcon: { fontSize: 32 },
-    emptyText: { color: lightPalette.textSecondary, fontSize: 14 },
+    emptyText: { fontSize: 14 },
 });
 
 // ─── ChatWithSellerButton ─────────────────────────────────────────────────────
@@ -774,22 +542,16 @@ interface ChatWithSellerButtonProps {
  * Chat with seller CTA button for buyers on the product details page.
  * @param props {ChatWithSellerButtonProps}
  */
-export const ChatWithSellerButton: React.FC<ChatWithSellerButtonProps> = ({
-    onPress,
-    isLoading,
-}) => {
+export const ChatWithSellerButton: React.FC<ChatWithSellerButtonProps> = ({ onPress, isLoading }) => {
+    const { theme } = useTheme();
     return (
-        <TouchableOpacity
-            style={chatBtnStyles.container}
-            onPress={onPress}
-            disabled={isLoading}
-        >
+        <TouchableOpacity style={[chatBtnStyles.container, { borderColor: theme.primary }]} onPress={onPress} disabled={isLoading}>
             {isLoading ? (
-                <ActivityIndicator size="small" color={lightPalette.primary} />
+                <ActivityIndicator size="small" color={theme.primary} />
             ) : (
                 <>
                     <Text style={chatBtnStyles.icon}>💬</Text>
-                    <Text style={chatBtnStyles.text}>Chat with Seller</Text>
+                    <Text style={[chatBtnStyles.text, { color: theme.primary }]}>Chat with Seller</Text>
                 </>
             )}
         </TouchableOpacity>
@@ -797,93 +559,13 @@ export const ChatWithSellerButton: React.FC<ChatWithSellerButtonProps> = ({
 };
 
 const chatBtnStyles = StyleSheet.create({
-    container: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-        borderWidth: 1.5,
-        borderColor: lightPalette.primary,
-        marginHorizontal: 16,
-        marginBottom: 16,
-    },
+    container: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1.5, marginHorizontal: 16, marginBottom: 16 },
     icon: { fontSize: 18 },
-    text: { color: lightPalette.primary, fontSize: 15, fontWeight: '700' },
+    text: { fontSize: 15, fontWeight: '700' },
 });
 
 // ─── VirtualTryOnModal ────────────────────────────────────────────────────────
 
-interface VirtualTryOnModalProps {
-    readonly visible: boolean;
-    readonly onClose: () => void;
-    readonly productName: string;
-}
-
-/**
- * Placeholder Virtual try-on modal — Phase 19 will implement the full flow.
- * @param props {VirtualTryOnModalProps}
- */
-export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
-    visible,
-    onClose,
-    productName,
-}) => {
-    return (
-        <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-            <View style={vtonStyles.overlay}>
-                <Animated.View entering={FadeIn} exiting={FadeOut} style={vtonStyles.panel}>
-                    <TouchableOpacity style={vtonStyles.closeBtn} onPress={onClose}>
-                        <Text style={vtonStyles.closeBtnText}>✕</Text>
-                    </TouchableOpacity>
-                    <Text style={vtonStyles.emoji}>👗</Text>
-                    <Text style={vtonStyles.title}>Virtual Try-On</Text>
-                    <Text style={vtonStyles.subtitle}>Try on "{productName}"</Text>
-                    <Text style={vtonStyles.comingSoon}>
-                        Upload a photo of yourself to see how this item looks on you.
-                    </Text>
-                    <Text style={vtonStyles.note}>
-                        Full virtual try-on will be available in Phase 19.
-                    </Text>
-                    <TouchableOpacity style={vtonStyles.closeActionBtn} onPress={onClose}>
-                        <Text style={vtonStyles.closeActionText}>Close</Text>
-                    </TouchableOpacity>
-                </Animated.View>
-            </View>
-        </Modal>
-    );
-};
-
-const vtonStyles = StyleSheet.create({
-    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    panel: {
-        backgroundColor: lightPalette.cardBackground,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        padding: 32,
-        alignItems: 'center',
-        paddingBottom: 48,
-    },
-    closeBtn: { position: 'absolute', top: 16, right: 20 },
-    closeBtnText: { fontSize: 20, color: lightPalette.gray },
-    emoji: { fontSize: 48, marginBottom: 16 },
-    title: { fontSize: 22, fontWeight: '700', color: lightPalette.textPrimary, marginBottom: 6 },
-    subtitle: { fontSize: 14, color: lightPalette.textSecondary, marginBottom: 16, textAlign: 'center' },
-    comingSoon: {
-        fontSize: 14,
-        color: lightPalette.textPrimary,
-        textAlign: 'center',
-        lineHeight: 20,
-        marginBottom: 8,
-    },
-    note: { fontSize: 12, color: lightPalette.gray, textAlign: 'center', fontStyle: 'italic', marginBottom: 24 },
-    closeActionBtn: {
-        paddingHorizontal: 32,
-        paddingVertical: 12,
-        backgroundColor: lightPalette.primary,
-        borderRadius: 12,
-    },
-    closeActionText: { color: lightPalette.white, fontWeight: '700', fontSize: 15 },
-});
+// NOTE: The full virtual try-on modal is implemented in virtual-tryon-components.tsx
+// as TryOnModal. The placeholder below was removed in Phase 19.
+// Import TryOnModal directly from '../components/virtual-tryon-components' instead.

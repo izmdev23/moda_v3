@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Switch, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
-import { lightPalette } from '../utils/theme';
+import { useTheme } from './ui/theme-provider';
 
 // ─── SettingsHeader ─────────────────────────────────────────────────────────
 export interface SettingsHeaderProps {
@@ -9,9 +9,10 @@ export interface SettingsHeaderProps {
 }
 
 export const SettingsHeader: React.FC<SettingsHeaderProps> = ({ title }) => {
+    const { theme } = useTheme();
     return (
-        <View style={headerStyles.container}>
-            <Text style={headerStyles.title}>{title}</Text>
+        <View style={[headerStyles.container, { backgroundColor: theme.background }]}>
+            <Text style={[headerStyles.title, { color: theme.textSecondary }]}>{title}</Text>
         </View>
     );
 };
@@ -20,12 +21,10 @@ const headerStyles = StyleSheet.create({
     container: {
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: '#F8F9FA',
     },
     title: {
         fontSize: 14,
         fontWeight: 'bold',
-        color: lightPalette.textSecondary,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },
@@ -47,21 +46,22 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
     onValueChange,
     description,
 }) => {
+    const { theme } = useTheme();
     return (
-        <View style={toggleStyles.container}>
+        <View style={[toggleStyles.container, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
             <View style={toggleStyles.iconContainer}>
-                <Ionicons name={icon} size={22} color={lightPalette.textSecondary} />
+                <Ionicons name={icon} size={22} color={theme.textSecondary} />
             </View>
             <View style={toggleStyles.textContainer}>
-                <Text style={toggleStyles.label}>{label}</Text>
-                {description && <Text style={toggleStyles.description}>{description}</Text>}
+                <Text style={[toggleStyles.label, { color: theme.textPrimary }]}>{label}</Text>
+                {description && <Text style={[toggleStyles.description, { color: theme.textSecondary }]}>{description}</Text>}
             </View>
             <Switch
                 value={value}
                 onValueChange={onValueChange}
-                trackColor={{ false: '#E9ECEF', true: lightPalette.primary }}
-                thumbColor="#FFFFFF"
-                ios_backgroundColor="#E9ECEF"
+                trackColor={{ false: theme.border, true: theme.primary }}
+                thumbColor={theme.white}
+                ios_backgroundColor={theme.border}
             />
         </View>
     );
@@ -73,9 +73,7 @@ const toggleStyles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 14,
         paddingHorizontal: 16,
-        backgroundColor: '#FFFFFF',
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#E9ECEF',
     },
     iconContainer: {
         width: 36,
@@ -88,12 +86,10 @@ const toggleStyles = StyleSheet.create({
     },
     label: {
         fontSize: 16,
-        color: lightPalette.textPrimary,
         fontWeight: '500',
     },
     description: {
         fontSize: 12,
-        color: lightPalette.textSecondary,
         marginTop: 2,
     },
 });
@@ -116,9 +112,10 @@ export const SettingsNavigationItem: React.FC<SettingsNavigationItemProps> = ({
     isDestructive = false,
     style,
 }) => {
+    const { theme } = useTheme();
     return (
         <TouchableOpacity
-            style={[navStyles.container, style]}
+            style={[navStyles.container, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }, style]}
             onPress={onPress}
             activeOpacity={0.7}
         >
@@ -126,18 +123,18 @@ export const SettingsNavigationItem: React.FC<SettingsNavigationItemProps> = ({
                 <Ionicons
                     name={icon}
                     size={22}
-                    color={isDestructive ? lightPalette.error : lightPalette.textSecondary}
+                    color={isDestructive ? theme.error : theme.textSecondary}
                 />
             </View>
             <View style={navStyles.textContainer}>
-                <Text style={[navStyles.label, isDestructive && navStyles.labelDestructive]}>
+                <Text style={[navStyles.label, { color: isDestructive ? theme.error : theme.textPrimary }]}>
                     {label}
                 </Text>
             </View>
             {value && (
-                <Text style={navStyles.valueText}>{value}</Text>
+                <Text style={[navStyles.valueText, { color: theme.textSecondary }]}>{value}</Text>
             )}
-            <Ionicons name="chevron-forward" size={20} color="#ADB5BD" />
+            <Ionicons name="chevron-forward" size={20} color={theme.gray} />
         </TouchableOpacity>
     );
 };
@@ -148,9 +145,7 @@ const navStyles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 14,
         paddingHorizontal: 16,
-        backgroundColor: '#FFFFFF',
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#E9ECEF',
     },
     iconContainer: {
         width: 36,
@@ -163,15 +158,10 @@ const navStyles = StyleSheet.create({
     },
     label: {
         fontSize: 16,
-        color: lightPalette.textPrimary,
         fontWeight: '500',
-    },
-    labelDestructive: {
-        color: lightPalette.error,
     },
     valueText: {
         fontSize: 15,
-        color: lightPalette.textSecondary,
         marginRight: 8,
     },
 });

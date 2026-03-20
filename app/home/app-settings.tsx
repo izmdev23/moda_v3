@@ -12,11 +12,12 @@ import {
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { useTheme } from '../../components/ui/theme-provider';
 import { supabase } from '../../supabase/supabaseClient';
-import { lightPalette } from '../../utils/theme';
 
-export default function AppSettingsScreen() {
+export default function AppSettingsScreen(): React.JSX.Element {
     const router = useRouter();
+    const { theme } = useTheme();
     const [loading, setLoading] = useState(false);
 
     const [darkMode, setDarkMode] = useState(false);
@@ -98,11 +99,11 @@ export default function AppSettingsScreen() {
 
     return (
         <SafeScreen>
-            <View style={styles.header}>
+            <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={lightPalette.textPrimary} />
+                    <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>App Settings</Text>
+                <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>App Settings</Text>
             </View>
 
             <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -208,7 +209,6 @@ export default function AppSettingsScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
     },
     header: {
         flexDirection: 'row',
@@ -216,9 +216,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingTop: 16,
         paddingBottom: 16,
-        backgroundColor: '#FFFFFF',
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#E9ECEF',
     },
     backButton: {
         marginRight: 16,
@@ -227,7 +225,6 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: lightPalette.textPrimary,
     },
     bottomSpacer: {
         height: 60,

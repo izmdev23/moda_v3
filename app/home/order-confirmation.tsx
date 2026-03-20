@@ -3,6 +3,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Alert,
+    AppState,
+    AppStateStatus,
+    BackHandler,
     ScrollView,
     StyleSheet,
     Text,
@@ -11,8 +14,8 @@ import {
 } from 'react-native';
 import { LoadingModal } from '../../components/ui/loading-modal';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { useTheme } from '../../components/ui/theme-provider';
 import { supabase } from '../../supabase/supabaseClient';
-import { lightPalette } from '../../utils/theme';
 import { formatPrice } from '../../utils/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -21,35 +24,45 @@ type PageState = 'awaiting' | 'checking' | 'success' | 'failed';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const POLL_INTERVAL_MS: number = 3000;
-const MAX_POLL_ATTEMPTS: number = 20; // 20 × 3s = 60s timeout
+const INITIAL_POLL_INTERVAL_MS: number = 2000;
+const MAX_POLL_INTERVAL_MS: number = 10000;
+const MAX_POLL_ATTEMPTS: number = 15;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 /**
  * OrderConfirmationScreen — intermediary between checkout and final success.
- * Opens the Xendit payment URL via Linking.openURL (external browser/app),
- * then polls the transaction_history status until success or failure.
+ * In Stripe native integration, the SDK handles the URL redirect,
+ * and we land here with `status=success` or `status=failed`.
+ * If polling is needed, it checks `transaction_history` status.
  * On success: clears cart and shows success UI.
  *
- * @param paymentUrl - Xendit payment URL returned by payment-create edge function
  * @param orderId - Created order UID
  * @param transactionId - Transaction UID for polling
  * @param cartUids - Comma-separated cart item UIDs to clear on success
+ * @param status - Payment status 
  */
 export default function OrderConfirmationScreen(): React.JSX.Element {
-    const { paymentUrl, orderId, transactionId, cartUids } =
+    const { paymentUrl, orderId, transactionId, cartUids, status } =
         useLocalSearchParams<{
-            paymentUrl: string;
-            orderId: string;
-            transactionId: string;
-            cartUids: string;
+            paymentUrl?: string;
+            orderId?: string;
+            transactionId?: string;
+            cartUids?: string;
+            status?: string;
         }>();
+    const { theme } = useTheme();
 
-    const [pageState, setPageState] = useState<PageState>('awaiting');
+    const [pageState, setPageState] = useState<PageState>(() => {
+        // If we came here FROM a deep link redirect, we might already have the result
+        if (status === 'success') return 'success';
+        if (status === 'failed') return 'failed';
+        return 'awaiting';
+    });
     const [orderTotal, setOrderTotal] = useState<number>(0);
     const [pollAttempt, setPollAttempt] = useState<number>(0);
-    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const delayRef = useRef<number>(INITIAL_POLL_INTERVAL_MS);
 
     // ─── Open payment URL in external browser ─────────────────────────────
 
@@ -66,18 +79,24 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
     }, [paymentUrl]);
 
     useEffect(() => {
-        // Automatically open the URL on mount
-        void openPaymentUrl();
-    }, [openPaymentUrl]);
+        // Automatically open the URL on mount ONLY if we are starting fresh (awaiting)
+        // AND we have a valid paymentUrl.
+        // If we are already in 'success' or 'failed' state (from deep link), skip this.
+        if (pageState === 'awaiting' && paymentUrl && paymentUrl.length > 0) {
+            void openPaymentUrl();
+        }
+    }, [openPaymentUrl, pageState, paymentUrl]);
 
     // ─── Load order detail for success screen ─────────────────────────────
 
     const loadOrderTotal = useCallback(async (): Promise<void> => {
-        if (orderId === undefined || orderId.length === 0) return;
+        const oid = orderId;
+
+        if (oid === undefined || oid.length === 0) return;
         const { data } = await supabase
             .from('orders')
             .select('total_amount')
-            .eq('uid', orderId)
+            .eq('uid', oid)
             .single();
         if (data !== null) setOrderTotal(data.total_amount);
     }, [orderId]);
@@ -85,22 +104,34 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
     // ─── Clear cart on success ─────────────────────────────────────────────
 
     const clearCart = useCallback(async (): Promise<void> => {
-        if (cartUids === undefined || cartUids.trim().length === 0) return;
-        const uids = cartUids.split(',').filter((u) => u.trim().length > 0);
+        const cuids = cartUids;
+        if (cuids === undefined || cuids.trim().length === 0) return;
+        const uids = cuids.split(',').filter((u) => u.trim().length > 0);
         await supabase.from('cart_items').delete().in('uid', uids);
     }, [cartUids]);
+
+    useEffect(() => {
+        if (pageState === 'success' || status === 'success') {
+            void loadOrderTotal();
+            void clearCart();
+        }
+    }, [pageState, status, loadOrderTotal, clearCart]);
 
     // ─── Poll transaction status ───────────────────────────────────────────
 
     const stopPolling = useCallback((): void => {
         if (pollRef.current !== null) {
-            clearInterval(pollRef.current);
+            clearTimeout(pollRef.current);
             pollRef.current = null;
         }
     }, []);
 
     const checkStatus = useCallback(async (): Promise<void> => {
-        if (transactionId === undefined || transactionId.length === 0) return;
+        const tid = transactionId;
+        if (tid === undefined || tid.length === 0) {
+            stopPolling();
+            return;
+        }
 
         setPollAttempt((prev) => {
             if (prev >= MAX_POLL_ATTEMPTS) {
@@ -114,10 +145,15 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
         const { data } = await supabase
             .from('transaction_history')
             .select('status')
-            .eq('uid', transactionId)
+            .eq('uid', tid)
             .single();
 
-        if (data === null) return;
+        if (data === null) {
+            // Retry on null gracefully
+            delayRef.current = Math.min(delayRef.current * 1.5, MAX_POLL_INTERVAL_MS);
+            pollRef.current = setTimeout(() => { void checkStatus(); }, delayRef.current);
+            return;
+        }
 
         if (data.status === 'success') {
             stopPolling();
@@ -127,16 +163,19 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
         } else if (data.status === 'failed') {
             stopPolling();
             setPageState('failed');
+        } else {
+            // 'pending' — continue polling with backoff
+            delayRef.current = Math.min(delayRef.current * 1.5, MAX_POLL_INTERVAL_MS);
+            pollRef.current = setTimeout(() => { void checkStatus(); }, delayRef.current);
         }
-        // 'pending' — continue polling
     }, [transactionId, stopPolling, clearCart, loadOrderTotal]);
 
     const startPolling = useCallback((): void => {
-        if (pollRef.current !== null) return;
         setPageState('checking');
-        pollRef.current = setInterval(() => {
-            void checkStatus();
-        }, POLL_INTERVAL_MS);
+        if (pollRef.current !== null) return;
+        delayRef.current = INITIAL_POLL_INTERVAL_MS;
+        // Trigger first check immediately if we are starting a fresh poll
+        void checkStatus();
     }, [checkStatus]);
 
     // Cleanup on unmount
@@ -146,12 +185,52 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
         };
     }, [stopPolling]);
 
+    // ── Block/guard hardware back press during payment ─────────────────────────
+    // During 'checking': block entirely (polling in progress, back would leave inconsistent state)
+    // During 'awaiting': prompt the user to confirm cancellation
+    useEffect(() => {
+        const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+            if (pageState === 'checking') {
+                // Swallow — payment verification is in flight
+                return true;
+            }
+            if (pageState === 'awaiting') {
+                Alert.alert(
+                    'Cancel Payment',
+                    'Are you sure you want to cancel this payment?',
+                    [
+                        { text: 'Continue Payment', style: 'cancel' },
+                        { text: 'Cancel & Go Back', style: 'destructive', onPress: () => router.back() },
+                    ],
+                );
+                return true;
+            }
+            return false;
+        });
+        return () => subscription.remove();
+    }, [pageState]);
+
+    // ─── AppState listener for background return ──────────────────────────
+
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+            if (nextAppState === 'active' && pageState === 'awaiting') {
+                // User came back to the app, check status automatically and show spinner
+                void startPolling();
+            }
+        });
+
+        return () => {
+            subscription.remove();
+        };
+    }, [pageState, checkStatus]);
+
     // ─── Render: awaiting user action ─────────────────────────────────────
 
     if (pageState === 'awaiting') {
         return (
             <SafeScreen style={styles.root}>
-                <View style={styles.header}>
+                <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.cardBackground }]}>
                     <TouchableOpacity
                         onPress={() => {
                             Alert.alert(
@@ -170,49 +249,49 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
                         style={styles.cancelBtn}
                         id="cancel-payment"
                     >
-                        <Text style={styles.cancelBtnText}>✕ Cancel</Text>
+                        <Text style={[styles.cancelBtnText, { color: theme.error }]}>✕ Cancel</Text>
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Payment</Text>
+                    <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Payment</Text>
                     <View style={{ width: 80 }} />
                 </View>
 
                 <ScrollView contentContainerStyle={styles.awaitingContent}>
                     <Text style={styles.awaitingEmoji}>🔒</Text>
-                    <Text style={styles.awaitingTitle}>Complete Your Payment</Text>
-                    <Text style={styles.awaitingSubtitle}>
+                    <Text style={[styles.awaitingTitle, { color: theme.textPrimary }]}>Complete Your Payment</Text>
+                    <Text style={[styles.awaitingSubtitle, { color: theme.textSecondary }]}>
                         A payment page has been opened in your browser. Complete
                         the payment there, then return here to confirm your order.
                     </Text>
 
-                    <View style={styles.stepCard}>
+                    <View style={[styles.stepCard, { backgroundColor: theme.cardBackground }]}>
                         <View style={styles.step}>
-                            <View style={styles.stepNumber}><Text style={styles.stepNumberText}>1</Text></View>
-                            <Text style={styles.stepText}>Complete payment in browser/app</Text>
+                            <View style={[styles.stepNumber, { backgroundColor: theme.primary }]}><Text style={[styles.stepNumberText, { color: theme.white }]}>1</Text></View>
+                            <Text style={[styles.stepText, { color: theme.textPrimary }]}>Complete payment in browser/app</Text>
                         </View>
                         <View style={styles.step}>
-                            <View style={styles.stepNumber}><Text style={styles.stepNumberText}>2</Text></View>
-                            <Text style={styles.stepText}>Return to this screen</Text>
+                            <View style={[styles.stepNumber, { backgroundColor: theme.primary }]}><Text style={[styles.stepNumberText, { color: theme.white }]}>2</Text></View>
+                            <Text style={[styles.stepText, { color: theme.textPrimary }]}>Return to this screen</Text>
                         </View>
                         <View style={styles.step}>
-                            <View style={styles.stepNumber}><Text style={styles.stepNumberText}>3</Text></View>
-                            <Text style={styles.stepText}>Tap "I've Paid" to confirm</Text>
+                            <View style={[styles.stepNumber, { backgroundColor: theme.primary }]}><Text style={[styles.stepNumberText, { color: theme.white }]}>3</Text></View>
+                            <Text style={[styles.stepText, { color: theme.textPrimary }]}>Tap "I've Paid" to confirm</Text>
                         </View>
                     </View>
 
                     <TouchableOpacity
-                        style={styles.paidBtn}
+                        style={[styles.paidBtn, { backgroundColor: theme.primary }]}
                         onPress={startPolling}
                         id="ive-paid-button"
                     >
-                        <Text style={styles.paidBtnText}>I've Paid ✓</Text>
+                        <Text style={[styles.paidBtnText, { color: theme.white }]}>I've Paid ✓</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={styles.reopenBtn}
+                        style={[styles.reopenBtn, { borderColor: theme.border }]}
                         onPress={() => { void openPaymentUrl(); }}
                         id="reopen-payment-url"
                     >
-                        <Text style={styles.reopenBtnText}>↗ Open Payment Page Again</Text>
+                        <Text style={[styles.reopenBtnText, { color: theme.textSecondary }]}>↗ Open Payment Page Again</Text>
                     </TouchableOpacity>
                 </ScrollView>
             </SafeScreen>
@@ -239,32 +318,32 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
             <SafeScreen style={styles.root}>
                 <ScrollView contentContainerStyle={styles.outcomeContainer}>
                     <Text style={styles.successEmoji}>🎉</Text>
-                    <Text style={styles.outcomeTitle}>Order Placed!</Text>
-                    <Text style={styles.outcomeSubtitle}>
+                    <Text style={[styles.outcomeTitle, { color: theme.textPrimary }]}>Order Placed!</Text>
+                    <Text style={[styles.outcomeSubtitle, { color: theme.textSecondary }]}>
                         Your payment of {formatPrice(orderTotal)} was successful.
                     </Text>
-                    <Text style={styles.outcomeDetail}>
+                    <Text style={[styles.outcomeDetail, { color: theme.gray }]}>
                         You'll receive a confirmation email shortly. Track your order in My Orders.
                     </Text>
 
                     <TouchableOpacity
-                        style={styles.primaryBtn}
+                        style={[styles.primaryBtn, { backgroundColor: theme.primary }]}
                         onPress={() =>
                             router.replace('/home/catalog' as Parameters<typeof router.replace>[0])
                         }
                         id="go-to-catalog"
                     >
-                        <Text style={styles.primaryBtnText}>Continue Shopping</Text>
+                        <Text style={[styles.primaryBtnText, { color: theme.white }]}>Continue Shopping</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={styles.secondaryBtn}
+                        style={[styles.secondaryBtn, { borderColor: theme.border }]}
                         onPress={() =>
                             router.push('/home/catalog' as Parameters<typeof router.push>[0])
                         }
                         id="view-orders"
                     >
-                        <Text style={styles.secondaryBtnText}>View My Orders</Text>
+                        <Text style={[styles.secondaryBtnText, { color: theme.textPrimary }]}>View My Orders</Text>
                     </TouchableOpacity>
                 </ScrollView>
             </SafeScreen>
@@ -277,30 +356,30 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
         <SafeScreen style={styles.root}>
             <ScrollView contentContainerStyle={styles.outcomeContainer}>
                 <Text style={styles.failEmoji}>❌</Text>
-                <Text style={styles.outcomeTitle}>Payment Failed</Text>
-                <Text style={styles.outcomeSubtitle}>
+                <Text style={[styles.outcomeTitle, { color: theme.textPrimary }]}>Payment Failed</Text>
+                <Text style={[styles.outcomeSubtitle, { color: theme.textSecondary }]}>
                     Your payment could not be processed. You have not been charged.
                 </Text>
-                <Text style={styles.outcomeDetail}>
+                <Text style={[styles.outcomeDetail, { color: theme.gray }]}>
                     Please check your payment details and try again. If the problem persists, contact support.
                 </Text>
 
                 <TouchableOpacity
-                    style={styles.primaryBtn}
+                    style={[styles.primaryBtn, { backgroundColor: theme.primary }]}
                     onPress={() => router.back()}
                     id="retry-payment"
                 >
-                    <Text style={styles.primaryBtnText}>Try Again</Text>
+                    <Text style={[styles.primaryBtnText, { color: theme.white }]}>Try Again</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={styles.secondaryBtn}
+                    style={[styles.secondaryBtn, { borderColor: theme.border }]}
                     onPress={() =>
                         router.replace('/home/catalog' as Parameters<typeof router.replace>[0])
                     }
                     id="go-to-catalog-failed"
                 >
-                    <Text style={styles.secondaryBtnText}>Go to Catalog</Text>
+                    <Text style={[styles.secondaryBtnText, { color: theme.textPrimary }]}>Go to Catalog</Text>
                 </TouchableOpacity>
             </ScrollView>
         </SafeScreen>
@@ -318,15 +397,12 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: lightPalette.border,
-        backgroundColor: lightPalette.cardBackground,
     },
     cancelBtn: { padding: 4, minWidth: 80 },
-    cancelBtnText: { fontSize: 14, color: lightPalette.error, fontWeight: '700' },
+    cancelBtnText: { fontSize: 14, fontWeight: '700' },
     headerTitle: {
         fontSize: 18,
         fontWeight: '800',
-        color: lightPalette.textPrimary,
     },
 
     // Awaiting screen
@@ -341,20 +417,17 @@ const styles = StyleSheet.create({
     awaitingTitle: {
         fontSize: 24,
         fontWeight: '900',
-        color: lightPalette.textPrimary,
         marginBottom: 12,
         textAlign: 'center',
     },
     awaitingSubtitle: {
         fontSize: 15,
-        color: lightPalette.textSecondary,
         textAlign: 'center',
         lineHeight: 22,
         marginBottom: 28,
     },
     stepCard: {
         width: '100%',
-        backgroundColor: lightPalette.cardBackground,
         borderRadius: 14,
         padding: 20,
         marginBottom: 28,
@@ -374,18 +447,15 @@ const styles = StyleSheet.create({
         width: 30,
         height: 30,
         borderRadius: 15,
-        backgroundColor: lightPalette.primary,
         justifyContent: 'center',
         alignItems: 'center',
     },
     stepNumberText: {
-        color: lightPalette.white,
         fontWeight: '900',
         fontSize: 14,
     },
     stepText: {
         fontSize: 14,
-        color: lightPalette.textPrimary,
         flex: 1,
         lineHeight: 20,
     },
@@ -393,12 +463,10 @@ const styles = StyleSheet.create({
         width: '100%',
         paddingVertical: 16,
         borderRadius: 14,
-        backgroundColor: lightPalette.primary,
         alignItems: 'center',
         marginBottom: 12,
     },
     paidBtnText: {
-        color: lightPalette.white,
         fontWeight: '800',
         fontSize: 17,
     },
@@ -407,11 +475,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: lightPalette.border,
         alignItems: 'center',
     },
     reopenBtnText: {
-        color: lightPalette.textSecondary,
         fontSize: 14,
         fontWeight: '600',
     },
@@ -428,20 +494,17 @@ const styles = StyleSheet.create({
     outcomeTitle: {
         fontSize: 28,
         fontWeight: '900',
-        color: lightPalette.textPrimary,
         marginBottom: 10,
         textAlign: 'center',
     },
     outcomeSubtitle: {
         fontSize: 16,
-        color: lightPalette.textSecondary,
         textAlign: 'center',
         lineHeight: 24,
         marginBottom: 10,
     },
     outcomeDetail: {
         fontSize: 14,
-        color: lightPalette.gray,
         textAlign: 'center',
         lineHeight: 20,
         marginBottom: 40,
@@ -450,12 +513,10 @@ const styles = StyleSheet.create({
         width: '100%',
         paddingVertical: 16,
         borderRadius: 14,
-        backgroundColor: lightPalette.primary,
         alignItems: 'center',
         marginBottom: 12,
     },
     primaryBtnText: {
-        color: lightPalette.white,
         fontWeight: '800',
         fontSize: 16,
     },
@@ -464,11 +525,9 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         borderRadius: 14,
         borderWidth: 1.5,
-        borderColor: lightPalette.border,
         alignItems: 'center',
     },
     secondaryBtnText: {
-        color: lightPalette.textPrimary,
         fontWeight: '700',
         fontSize: 15,
     },

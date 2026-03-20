@@ -71,3 +71,81 @@ export const decryptData = (ciphertext: string): string => {
     const bytes = CryptoJS.AES.decrypt(ciphertext, SECRET_KEY);
     return bytes.toString(CryptoJS.enc.Utf8);
 };
+
+/**
+ * Extracts and logs detailed information about an error, including the function, file, and line number.
+ * Ensures an organized print block for debugging purposes.
+ * 
+ * @param error - The error object caught in a try/catch block.
+ * @param context - Optional string providing context about where the error was caught.
+ * 
+ * @example
+ * // Correct Usage:
+ * try {
+ *   throw new Error("Something failed");
+ * } catch (error) {
+ *   logError(error, "Failed during fetch");
+ * }
+ */
+export const logError = (error: unknown, context?: string): void => {
+    let errorMessage = 'Unknown Error';
+    let functionName = 'Unknown';
+    let filePath = 'Unknown';
+    let lineNumber = 'Unknown';
+
+    if (error instanceof Error) {
+        errorMessage = error.message;
+
+        if (error.stack) {
+            const stackLines = error.stack.split('\n');
+            const targetLine = stackLines[1] || stackLines[0]; // Usually the second line has the exact caller info
+
+            if (targetLine) {
+                // Match Node/V8 style: "at FunctionName (path/to/file:line:col)"
+                const fullMatch = targetLine.match(/at\s+(.*)\s+\((.*):(\d+):(\d+)\)/);
+                // Match Node/V8 minimal style: "at path/to/file:line:col"
+                const fileMatch = targetLine.match(/at\s+(.*):(\d+):(\d+)/);
+                // Match React Native / Safari style: "FunctionName@path/to/file:line:col"
+                const rnMatch = targetLine.match(/(.*)@(.*):(\d+):(\d+)/);
+
+                if (fullMatch && fullMatch.length === 5) {
+                    functionName = fullMatch[1].trim();
+                    filePath = fullMatch[2].trim();
+                    lineNumber = fullMatch[3].trim();
+                } else if (rnMatch && rnMatch.length === 5) {
+                    functionName = rnMatch[1].trim() || 'Anonymous';
+                    filePath = rnMatch[2].trim();
+                    lineNumber = rnMatch[3].trim();
+                } else if (fileMatch && fileMatch.length === 4) {
+                    functionName = '<anonymous>';
+                    filePath = fileMatch[1].trim();
+                    lineNumber = fileMatch[2].trim();
+                }
+            }
+        }
+    } else if (typeof error === 'string') {
+        errorMessage = error;
+    } else {
+        try {
+            errorMessage = JSON.stringify(error);
+        } catch (_) {
+            errorMessage = "Unparseable Error Object";
+        }
+    }
+
+    // Format output
+    const output = [
+        "",
+        "================================================",
+        "🚨 ERROR LOG",
+        "================================================",
+        `Message:  ${context ? `[${context}] ` : ''}${errorMessage}`,
+        `Function: ${functionName}`,
+        `File:     ${filePath}`,
+        `Line:     ${lineNumber}`,
+        "================================================",
+        ""
+    ].join('\n');
+
+    console.error(output);
+};

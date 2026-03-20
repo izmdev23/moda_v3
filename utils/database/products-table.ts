@@ -23,7 +23,17 @@ export class ProductsApi extends BaseApi<'products'> {
 
     return { data: data as Tables<'products'>[] | null, error };
   }
+  /**
+   * Fetches all products given a shop ID.
+   */
+  async getByShopId(shopId: number): Promise<DatabaseResult<Tables<'products'>[]>> {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('shop_id' as any, shopId);
 
+    return { data: data as Tables<'products'>[] | null, error };
+  }
   /**
    * Fetches products with specific filters (category, price range).
    */

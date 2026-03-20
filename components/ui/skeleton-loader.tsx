@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import { lightPalette } from '../../utils/theme';
 
 export interface SkeletonLoaderProps {
     readonly width?: number | string;
@@ -9,7 +10,8 @@ export interface SkeletonLoaderProps {
 }
 
 /**
- * Animated placeholder for content loading
+ * Animated placeholder for content loading.
+ * Uses the border color from the light palette as the skeleton base color.
  * @param props {SkeletonLoaderProps}
  */
 export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
@@ -55,6 +57,6 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
 
 const styles = StyleSheet.create({
     skeleton: {
-        backgroundColor: '#E1E9EE',
+        backgroundColor: lightPalette.border,
     },
 });

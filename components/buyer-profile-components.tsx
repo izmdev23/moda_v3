@@ -3,7 +3,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { lightPalette } from '../utils/theme';
+import { useTheme } from './ui/theme-provider';
 
 // ─── ProfileHeader ─────────────────────────────────────────────────────────────
 export interface ProfileHeaderProps {
@@ -13,24 +13,29 @@ export interface ProfileHeaderProps {
     readonly onAvatarPress: () => void;
 }
 
+/**
+ * ProfileHeader — displays user avatar with edit badge, name, and email.
+ * Tapping the avatar triggers the onAvatarPress handler for avatar upload.
+ */
 export const ProfileHeader: React.FC<ProfileHeaderProps> = ({ name, email, avatarUrl, onAvatarPress }) => {
+    const { theme } = useTheme();
     return (
-        <View style={headerStyles.container}>
+        <View style={[headerStyles.container, { backgroundColor: theme.cardBackground }]}>
             <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.7} style={headerStyles.avatarContainer}>
                 {avatarUrl ? (
                     <Image source={{ uri: avatarUrl }} style={headerStyles.avatar} />
                 ) : (
-                    <View style={headerStyles.placeholderAvatar}>
-                        <Ionicons name="person" size={40} color="#FFFFFF" />
+                    <View style={[headerStyles.placeholderAvatar, { backgroundColor: theme.gray }]}>
+                        <Ionicons name="person" size={40} color={theme.white} />
                     </View>
                 )}
-                <View style={headerStyles.editBadge}>
-                    <Ionicons name="camera" size={14} color="#FFFFFF" />
+                <View style={[headerStyles.editBadge, { backgroundColor: theme.primary, borderColor: theme.white }]}>
+                    <Ionicons name="camera" size={14} color={theme.white} />
                 </View>
             </TouchableOpacity>
             <View style={headerStyles.infoContainer}>
-                <Text style={headerStyles.name}>{name}</Text>
-                <Text style={headerStyles.email}>{email}</Text>
+                <Text style={[headerStyles.name, { color: theme.textPrimary }]}>{name}</Text>
+                <Text style={[headerStyles.email, { color: theme.textSecondary }]}>{email}</Text>
             </View>
         </View>
     );
@@ -41,7 +46,6 @@ const headerStyles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         padding: 20,
-        backgroundColor: '#FFFFFF',
     },
     avatarContainer: {
         position: 'relative',
@@ -56,7 +60,6 @@ const headerStyles = StyleSheet.create({
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: '#ADB5BD',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -64,14 +67,12 @@ const headerStyles = StyleSheet.create({
         position: 'absolute',
         bottom: 0,
         right: 0,
-        backgroundColor: lightPalette.primary,
         width: 28,
         height: 28,
         borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 2,
-        borderColor: '#FFFFFF',
     },
     infoContainer: {
         flex: 1,
@@ -79,12 +80,10 @@ const headerStyles = StyleSheet.create({
     name: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: lightPalette.textPrimary,
         marginBottom: 4,
     },
     email: {
         fontSize: 14,
-        color: lightPalette.textSecondary,
     },
 });
 
@@ -100,27 +99,31 @@ export interface ProfileMenuProps {
     readonly items: readonly MenuItem[];
 }
 
+/**
+ * ProfileMenu — renders a list of tappable menu items with icons and optional destructive styling.
+ */
 export const ProfileMenu: React.FC<ProfileMenuProps> = ({ items }) => {
+    const { theme } = useTheme();
     return (
-        <View style={menuStyles.container}>
+        <View style={[menuStyles.container, { backgroundColor: theme.cardBackground }]}>
             {items.map((item, index) => (
                 <TouchableOpacity
                     key={item.label}
-                    style={[menuStyles.menuItem, index !== items.length - 1 && menuStyles.borderBottom]}
+                    style={[menuStyles.menuItem, index !== items.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }]}
                     onPress={item.onPress}
                     activeOpacity={0.7}
                 >
                     <Ionicons
                         name={item.icon}
                         size={24}
-                        color={item.isDestructive ? lightPalette.error : lightPalette.textSecondary}
+                        color={item.isDestructive ? theme.error : theme.textSecondary}
                         style={menuStyles.icon}
                     />
-                    <Text style={[menuStyles.label, item.isDestructive && menuStyles.labelDestructive]}>
+                    <Text style={[menuStyles.label, { color: item.isDestructive ? theme.error : theme.textPrimary }]}>
                         {item.label}
                     </Text>
                     {!item.isDestructive && (
-                        <Ionicons name="chevron-forward" size={20} color="#ADB5BD" />
+                        <Ionicons name="chevron-forward" size={20} color={theme.gray} />
                     )}
                 </TouchableOpacity>
             ))}
@@ -130,7 +133,6 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({ items }) => {
 
 const menuStyles = StyleSheet.create({
     container: {
-        backgroundColor: '#FFFFFF',
         borderRadius: 12,
         marginHorizontal: 16,
         marginBottom: 20,
@@ -141,20 +143,12 @@ const menuStyles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 16,
     },
-    borderBottom: {
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#E9ECEF',
-    },
     icon: {
         marginRight: 16,
     },
     label: {
         flex: 1,
         fontSize: 16,
-        color: lightPalette.textPrimary,
-    },
-    labelDestructive: {
-        color: lightPalette.error,
     },
 });
 
@@ -163,24 +157,29 @@ export interface ProfileCompletenessBarProps {
     readonly percentage: number; // 0 to 100
 }
 
+/**
+ * ProfileCompletenessBar — shows a progress bar for profile completeness percentage.
+ * Hidden when percentage reaches 100.
+ */
 export const ProfileCompletenessBar: React.FC<ProfileCompletenessBarProps> = ({ percentage }) => {
+    const { theme } = useTheme();
     if (percentage >= 100) return null;
 
     return (
-        <View style={completenessStyles.container}>
+        <View style={[completenessStyles.container, { backgroundColor: theme.cardBackground }]}>
             <View style={completenessStyles.header}>
-                <Text style={completenessStyles.title}>Profile Completeness</Text>
-                <Text style={completenessStyles.percentage}>{percentage}%</Text>
+                <Text style={[completenessStyles.title, { color: theme.textPrimary }]}>Profile Completeness</Text>
+                <Text style={[completenessStyles.percentage, { color: theme.primary }]}>{percentage}%</Text>
             </View>
-            <View style={completenessStyles.barBackground}>
+            <View style={[completenessStyles.barBackground, { backgroundColor: theme.border }]}>
                 <View
                     style={[
                         completenessStyles.barFill,
-                        { width: `${percentage}%` as any },
+                        { width: `${percentage}%` as `${number}%`, backgroundColor: theme.primary },
                     ]}
                 />
             </View>
-            <Text style={completenessStyles.subtitle}>
+            <Text style={[completenessStyles.subtitle, { color: theme.textSecondary }]}>
                 Complete your profile to get personalized recommendations!
             </Text>
         </View>
@@ -189,7 +188,6 @@ export const ProfileCompletenessBar: React.FC<ProfileCompletenessBarProps> = ({ 
 
 const completenessStyles = StyleSheet.create({
     container: {
-        backgroundColor: '#FFFFFF',
         marginHorizontal: 16,
         marginBottom: 20,
         padding: 16,
@@ -203,27 +201,22 @@ const completenessStyles = StyleSheet.create({
     title: {
         fontSize: 14,
         fontWeight: 'bold',
-        color: lightPalette.textPrimary,
     },
     percentage: {
         fontSize: 14,
         fontWeight: 'bold',
-        color: lightPalette.primary,
     },
     barBackground: {
         height: 8,
-        backgroundColor: '#E9ECEF',
         borderRadius: 4,
         marginBottom: 8,
         overflow: 'hidden',
     },
     barFill: {
         height: '100%',
-        backgroundColor: lightPalette.primary,
     },
     subtitle: {
         fontSize: 12,
-        color: lightPalette.textSecondary,
     },
 });
 
@@ -234,10 +227,15 @@ export interface AvatarUploaderProps {
     readonly onUpload: (uri: string) => Promise<void>;
 }
 
+/**
+ * AvatarUploader — an overlay modal that lets users pick and upload a profile photo.
+ * Uses expo-image-picker and resizes via expo-image-manipulator.
+ */
 export const AvatarUploader: React.FC<AvatarUploaderProps> = ({ visible, onClose, onUpload }) => {
+    const { theme } = useTheme();
     if (!visible) return null;
 
-    const handlePickImage = async () => {
+    const handlePickImage = async (): Promise<void> => {
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -266,14 +264,14 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({ visible, onClose
 
     return (
         <View style={uploaderStyles.overlay}>
-            <View style={uploaderStyles.modal}>
-                <Text style={uploaderStyles.title}>Change Profile Picture</Text>
-                <TouchableOpacity style={uploaderStyles.button} onPress={handlePickImage}>
-                    <Ionicons name="images" size={24} color="#FFFFFF" style={uploaderStyles.btnIcon} />
-                    <Text style={uploaderStyles.buttonText}>Choose from Gallery</Text>
+            <View style={[uploaderStyles.modal, { backgroundColor: theme.cardBackground }]}>
+                <Text style={[uploaderStyles.title, { color: theme.textPrimary }]}>Change Profile Picture</Text>
+                <TouchableOpacity style={[uploaderStyles.button, { backgroundColor: theme.primary }]} onPress={handlePickImage}>
+                    <Ionicons name="images" size={24} color={theme.white} style={uploaderStyles.btnIcon} />
+                    <Text style={[uploaderStyles.buttonText, { color: theme.white }]}>Choose from Gallery</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[uploaderStyles.button, uploaderStyles.cancelButton]} onPress={onClose}>
-                    <Text style={uploaderStyles.cancelButtonText}>Cancel</Text>
+                <TouchableOpacity style={[uploaderStyles.button, { backgroundColor: theme.background }]} onPress={onClose}>
+                    <Text style={[uploaderStyles.cancelButtonText, { color: theme.textPrimary }]}>Cancel</Text>
                 </TouchableOpacity>
             </View>
         </View>
@@ -290,7 +288,6 @@ const uploaderStyles = StyleSheet.create({
         zIndex: 1000,
     },
     modal: {
-        backgroundColor: '#FFFFFF',
         width: '80%',
         borderRadius: 16,
         padding: 24,
@@ -300,10 +297,8 @@ const uploaderStyles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         marginBottom: 20,
-        color: lightPalette.textPrimary,
     },
     button: {
-        backgroundColor: lightPalette.primary,
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: 12,
@@ -317,15 +312,10 @@ const uploaderStyles = StyleSheet.create({
         marginRight: 8,
     },
     buttonText: {
-        color: '#FFFFFF',
         fontSize: 16,
         fontWeight: 'bold',
     },
-    cancelButton: {
-        backgroundColor: '#F8F9FA',
-    },
     cancelButtonText: {
-        color: lightPalette.textPrimary,
         fontSize: 16,
         fontWeight: 'bold',
     },
