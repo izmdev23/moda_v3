@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { useTheme } from './ui/theme-provider';
 
 // ─── ProfileHeader ─────────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({ name, email, avata
     const { theme } = useTheme();
     return (
         <View style={[headerStyles.container, { backgroundColor: theme.cardBackground }]}>
-            <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.7} style={headerStyles.avatarContainer}>
+            <RipplePressable onPress={onAvatarPress} activeOpacity={0.7} style={headerStyles.avatarContainer}>
                 {avatarUrl ? (
                     <Image source={{ uri: avatarUrl }} style={headerStyles.avatar} />
                 ) : (
@@ -32,7 +33,7 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({ name, email, avata
                 <View style={[headerStyles.editBadge, { backgroundColor: theme.primary, borderColor: theme.white }]}>
                     <Ionicons name="camera" size={14} color={theme.white} />
                 </View>
-            </TouchableOpacity>
+            </RipplePressable>
             <View style={headerStyles.infoContainer}>
                 <Text style={[headerStyles.name, { color: theme.textPrimary }]}>{name}</Text>
                 <Text style={[headerStyles.email, { color: theme.textSecondary }]}>{email}</Text>
@@ -107,7 +108,7 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({ items }) => {
     return (
         <View style={[menuStyles.container, { backgroundColor: theme.cardBackground }]}>
             {items.map((item, index) => (
-                <TouchableOpacity
+                <RipplePressable
                     key={item.label}
                     style={[menuStyles.menuItem, index !== items.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }]}
                     onPress={item.onPress}
@@ -125,7 +126,7 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({ items }) => {
                     {!item.isDestructive && (
                         <Ionicons name="chevron-forward" size={20} color={theme.gray} />
                     )}
-                </TouchableOpacity>
+                </RipplePressable>
             ))}
         </View>
     );
@@ -266,13 +267,13 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({ visible, onClose
         <View style={uploaderStyles.overlay}>
             <View style={[uploaderStyles.modal, { backgroundColor: theme.cardBackground }]}>
                 <Text style={[uploaderStyles.title, { color: theme.textPrimary }]}>Change Profile Picture</Text>
-                <TouchableOpacity style={[uploaderStyles.button, { backgroundColor: theme.primary }]} onPress={handlePickImage}>
+                <RipplePressable style={[uploaderStyles.button, { backgroundColor: theme.primary }]} onPress={handlePickImage}>
                     <Ionicons name="images" size={24} color={theme.white} style={uploaderStyles.btnIcon} />
                     <Text style={[uploaderStyles.buttonText, { color: theme.white }]}>Choose from Gallery</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[uploaderStyles.button, { backgroundColor: theme.background }]} onPress={onClose}>
+                </RipplePressable>
+                <RipplePressable style={[uploaderStyles.button, { backgroundColor: theme.background }]} onPress={onClose}>
                     <Text style={[uploaderStyles.cancelButtonText, { color: theme.textPrimary }]}>Cancel</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             </View>
         </View>
     );

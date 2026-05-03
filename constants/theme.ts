@@ -89,3 +89,28 @@ export const theme: Record<ThemeType, ThemeColors> = {
   light: lightPalette,
   dark: darkPalette,
 };
+
+// Backward-compatible exports used by template components.
+export const Colors = {
+  light: {
+    text: lightPalette.textPrimary,
+    background: lightPalette.background,
+    tint: lightPalette.primary,
+    icon: lightPalette.gray,
+    tabIconDefault: lightPalette.gray,
+    tabIconSelected: lightPalette.primary,
+  },
+  dark: {
+    text: darkPalette.textPrimary,
+    background: darkPalette.background,
+    tint: darkPalette.primary,
+    icon: darkPalette.gray,
+    tabIconDefault: darkPalette.gray,
+    tabIconSelected: darkPalette.primary,
+  },
+} as const;
+
+export const Fonts = {
+  rounded: 'System',
+  mono: 'monospace',
+} as const;

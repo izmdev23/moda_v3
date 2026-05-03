@@ -1,14 +1,9 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
-    Alert,
-    FlatList,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+    FlatList, Modal, ScrollView, StyleSheet, Text, View
 } from 'react-native';
 import {
     AddCardForm,
@@ -81,7 +76,7 @@ export default function PaymentsScreen(): React.JSX.Element {
 
     // Wizard state
     const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
-    const [tempPaymentMethodId, setTempPaymentMethodId] = useState<string | null>(null);
+    const [tempCardAccountNumber, setTempCardAccountNumber] = useState<string | null>(null);
     const [confirmSaveDialog, setConfirmSaveDialog] = useState<boolean>(false);
 
     // Confirm dialog state
@@ -96,11 +91,11 @@ export default function PaymentsScreen(): React.JSX.Element {
 
     const handleSubmitAdd = useCallback(async (): Promise<void> => {
         if (newType === null || newType === 'card') {
-            Alert.alert('Select Type', 'Please choose GCash or Maya.');
+            AppAlert.alert('Select Type', 'Please choose GCash or Maya.');
             return;
         }
         if (!ACCOUNT_NUMBER_REGEX.test(newAccountNumber.trim())) {
-            Alert.alert('Invalid Number', 'Please enter a valid mobile/account number (7–20 digits).');
+            AppAlert.alert('Invalid Number', 'Please enter a valid mobile/account number (7–20 digits).');
             return;
         }
         if (userId === null) return;
@@ -120,31 +115,31 @@ export default function PaymentsScreen(): React.JSX.Element {
                 if (returnTo === 'checkout') router.back();
             },
             onError: () => {
-                Alert.alert('Error', 'Failed to save payment method. Please try again.');
+                AppAlert.alert('Error', 'Failed to save payment method. Please try again.');
             },
             onSettled: () => setIsSubmitting(false),
         });
     }, [newType, newAccountNumber, userId, methods.length, returnTo, addMethodMutation]);
 
-    const handleAddCard = useCallback((paymentMethodId: string): void => {
+    const handleAddCard = useCallback((storedCardAccountNumber: string): void => {
         if (userId === null) return;
 
         setIsSubmitting(true);
         addMethodMutation.mutate({
             userId,
             type: 'card',
-            accountNumber: paymentMethodId,
+            accountNumber: storedCardAccountNumber,
             isFirst: methods.length === 0,
         }, {
             onSuccess: () => {
                 setShowAddForm(false);
                 setNewType(null);
                 setWizardStep(1);
-                setTempPaymentMethodId(null);
+                setTempCardAccountNumber(null);
                 if (returnTo === 'checkout') router.back();
             },
             onError: () => {
-                Alert.alert('Error', 'Failed to save card. Please try again.');
+                AppAlert.alert('Error', 'Failed to save card. Please try again.');
             },
             onSettled: () => setIsSubmitting(false),
         });
@@ -160,7 +155,7 @@ export default function PaymentsScreen(): React.JSX.Element {
             onConfirm: () => {
                 setConfirmDialog((d) => ({ ...d, visible: false }));
                 deleteMethodMutation.mutate(uid, {
-                    onError: () => Alert.alert('Error', 'Failed to remove payment method.'),
+                    onError: () => AppAlert.alert('Error', 'Failed to remove payment method.'),
                 });
             },
         });
@@ -170,54 +165,50 @@ export default function PaymentsScreen(): React.JSX.Element {
 
     const handleSetDefault = useCallback((uid: string): void => {
         setDefaultMutation.mutate(uid, {
-            onError: () => Alert.alert('Error', 'Failed to set default payment method.'),
+            onError: () => AppAlert.alert('Error', 'Failed to set default payment method.'),
         });
     }, [setDefaultMutation]);
 
     // ─── Render ───────────────────────────────────────────────────────────
 
-    if (isLoading) {
-        return (
-            <SafeScreen style={styles.root}>
-                <PaymentsSkeleton />
-            </SafeScreen>
-        );
-    }
-
     return (
         <SafeScreen style={styles.root}>
             {/* Header */}
             <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.cardBackground }]}>
-                <TouchableOpacity onPress={() => router.back()} id="back-btn" style={styles.backBtn}>
+                <RipplePressable onPress={() => router.back()} id="back-btn" style={styles.backBtn}>
                     <Text style={[styles.backText, { color: theme.primary }]}>‹ Back</Text>
-                </TouchableOpacity>
+                </RipplePressable>
                 <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Payment Methods</Text>
             </View>
 
-            <FlatList
-                data={methods}
-                keyExtractor={(item: StoredPaymentMethod) => item.uid}
-                renderItem={({ item }) => (
-                    <PaymentMethodCard
-                        method={item}
-                        onDelete={handleDelete}
-                        onSetDefault={handleSetDefault}
-                    />
-                )}
-                ListHeaderComponent={null}
-                ListEmptyComponent={
-                    !showAddForm ? (
-                        <EmptyList
-                            icon={<Text style={styles.emptyIcon}>💳</Text>}
-                            message="No payment methods yet!"
-                            submessage="Add a GCash, Maya, or Card to enable checkout."
-                            actionButton={{ label: 'Add Payment Method', onPress: () => setShowAddForm(true) }}
+            {isLoading ? (
+                <PaymentsSkeleton />
+            ) : (
+                <FlatList
+                    data={methods}
+                    keyExtractor={(item: StoredPaymentMethod) => item.uid}
+                    renderItem={({ item }) => (
+                        <PaymentMethodCard
+                            method={item}
+                            onDelete={handleDelete}
+                            onSetDefault={handleSetDefault}
                         />
-                    ) : null
-                }
-                contentContainerStyle={methods.length === 0 && !showAddForm ? { flex: 1 } : { paddingBottom: 32 }}
-                showsVerticalScrollIndicator={false}
-            />
+                    )}
+                    ListHeaderComponent={null}
+                    ListEmptyComponent={
+                        !showAddForm ? (
+                            <EmptyList
+                                icon={<Text style={styles.emptyIcon}>💳</Text>}
+                                message="No payment methods yet!"
+                                submessage="Add a GCash, Maya, or Card to enable checkout."
+                                actionButton={{ label: 'Add Payment Method', onPress: () => setShowAddForm(true) }}
+                            />
+                        ) : null
+                    }
+                    contentContainerStyle={methods.length === 0 && !showAddForm ? { flex: 1 } : { paddingBottom: 32 }}
+                    showsVerticalScrollIndicator={false}
+                />
+            )}
 
             {/* Confirm dialog */}
             <ConfirmDialog
@@ -232,13 +223,13 @@ export default function PaymentsScreen(): React.JSX.Element {
             />
             {/* Floating Add Button */}
             {!showAddForm && (
-                <TouchableOpacity
+                <RipplePressable
                     style={[styles.fab, { backgroundColor: theme.primary }]}
                     onPress={() => setShowAddForm(true)}
                     id="fab-add-payment-btn"
                 >
                     <Text style={[styles.fabText, { color: theme.white }]}>+</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             )}
 
             {/* Add Payment Modal */}
@@ -251,24 +242,24 @@ export default function PaymentsScreen(): React.JSX.Element {
                     setNewType(null);
                     setNewAccountNumber('');
                     setWizardStep(1);
-                    setTempPaymentMethodId(null);
+                    setTempCardAccountNumber(null);
                 }}
             >
                 <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
                     <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
                         <View style={styles.modalHeader}>
                             <Text style={[styles.formTitle, { color: theme.textPrimary, marginBottom: 0 }]}>Add Payment Method</Text>
-                            <TouchableOpacity
+                            <RipplePressable
                                 onPress={() => {
                                     setShowAddForm(false);
                                     setNewType(null);
                                     setNewAccountNumber('');
                                     setWizardStep(1);
-                                    setTempPaymentMethodId(null);
+                                    setTempCardAccountNumber(null);
                                 }}
                             >
                                 <Text style={{ color: theme.textSecondary, fontSize: 16 }}>Close</Text>
-                            </TouchableOpacity>
+                            </RipplePressable>
                         </View>
 
                         {wizardStep === 1 && (
@@ -280,7 +271,7 @@ export default function PaymentsScreen(): React.JSX.Element {
                                             const labels: Record<StoredPaymentType, string> = { gcash: 'GCash', paymaya: 'Maya', card: 'Card' };
                                             const isDisabled = type === 'gcash';
                                             return (
-                                                <TouchableOpacity
+                                                <RipplePressable
                                                     key={type}
                                                     style={[
                                                         styles.typeChip,
@@ -301,19 +292,19 @@ export default function PaymentsScreen(): React.JSX.Element {
                                                     >
                                                         {labels[type]}
                                                     </Text>
-                                                </TouchableOpacity>
+                                                </RipplePressable>
                                             );
                                         })}
                                     </View>
                                     <View style={[styles.formActions, { marginTop: 16 }]}>
-                                        <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: theme.border }]} onPress={() => {
+                                        <RipplePressable style={[styles.cancelBtn, { backgroundColor: theme.border }]} onPress={() => {
                                             setShowAddForm(false);
                                             setNewType(null);
                                             setWizardStep(1);
                                         }}>
                                             <Text style={[styles.cancelBtnText, { color: theme.textSecondary }]}>Cancel</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
+                                        </RipplePressable>
+                                        <RipplePressable
                                             style={[styles.submitBtn, { backgroundColor: theme.primary }, newType === null && styles.submitBtnDisabled]}
                                             onPress={() => {
                                                 if (newType !== null) setWizardStep(2);
@@ -321,7 +312,7 @@ export default function PaymentsScreen(): React.JSX.Element {
                                             disabled={newType === null}
                                         >
                                             <Text style={[styles.submitBtnText, { color: theme.white }]}>Next</Text>
-                                        </TouchableOpacity>
+                                        </RipplePressable>
                                     </View>
                                 </View>
                             </View>
@@ -336,8 +327,8 @@ export default function PaymentsScreen(): React.JSX.Element {
                             >
                                 {newType === 'card' ? (
                                     <AddCardForm
-                                        onSubmit={(pmId) => {
-                                            setTempPaymentMethodId(pmId);
+                                        onSubmit={(storedCardAccountNumber) => {
+                                            setTempCardAccountNumber(storedCardAccountNumber);
                                             setWizardStep(3);
                                         }}
                                         onCancel={() => {
@@ -353,7 +344,7 @@ export default function PaymentsScreen(): React.JSX.Element {
                                         onAccountNumberChange={setNewAccountNumber}
                                         onSubmit={() => {
                                             if (!ACCOUNT_NUMBER_REGEX.test(newAccountNumber.trim())) {
-                                                Alert.alert('Invalid Number', 'Please enter a valid mobile/account number (7–20 digits).');
+                                                AppAlert.alert('Invalid Number', 'Please enter a valid mobile/account number (7–20 digits).');
                                                 return;
                                             }
                                             setWizardStep(3);
@@ -393,15 +384,15 @@ export default function PaymentsScreen(): React.JSX.Element {
                                     )}
 
                                     <View style={[styles.formActions, { marginTop: 8 }]}>
-                                        <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: theme.border }]} onPress={() => setWizardStep(2)}>
+                                        <RipplePressable style={[styles.cancelBtn, { backgroundColor: theme.border }]} onPress={() => setWizardStep(2)}>
                                             <Text style={[styles.cancelBtnText, { color: theme.textSecondary }]}>Back</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
+                                        </RipplePressable>
+                                        <RipplePressable
                                             style={[styles.submitBtn, { backgroundColor: theme.primary }]}
                                             onPress={() => setConfirmSaveDialog(true)}
                                         >
                                             <Text style={[styles.submitBtnText, { color: theme.white }]}>Save</Text>
-                                        </TouchableOpacity>
+                                        </RipplePressable>
                                     </View>
                                 </View>
                             </View>
@@ -416,8 +407,8 @@ export default function PaymentsScreen(): React.JSX.Element {
                 message="Are you sure you want to save this new payment method?"
                 onConfirm={() => {
                     setConfirmSaveDialog(false);
-                    if (newType === 'card' && tempPaymentMethodId) {
-                        handleAddCard(tempPaymentMethodId);
+                    if (newType === 'card' && tempCardAccountNumber) {
+                        handleAddCard(tempCardAccountNumber);
                     } else {
                         void handleSubmitAdd();
                     }

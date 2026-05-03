@@ -1,7 +1,8 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { supabase } from '@/supabase/supabaseClient';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { SafeScreen } from '../../components/ui/safe-screen';
 import { Animation } from '../../utils/animation';
@@ -9,6 +10,11 @@ import { Animation } from '../../utils/animation';
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
 import { useTheme } from '../../components/ui/theme-provider';
 import { authApi } from '../../utils/database/auth';
+
+function normalizeUserRole(role: unknown): string {
+    if (typeof role !== 'string') return '';
+    return role.trim().toLowerCase();
+}
 
 /**
  * Email verification landing screen — shown when the user opens a magic link
@@ -45,11 +51,14 @@ export default function VerifyScreen(): React.JSX.Element {
                 .eq('auth_id', data.session.user.id)
                 .single();
 
-            if (userData?.role === 'seller') {
-                router.replace('/home/seller-dashboard' as Parameters<typeof router.replace>[0]);
-            } else {
-                router.replace('/(tabs)' as Parameters<typeof router.replace>[0]);
+            const normalizedRole = normalizeUserRole(userData?.role);
+            const targetRoute = normalizedRole === 'seller' ? '/home/seller-dashboard' : '/home/catalog';
+
+            if (router.canDismiss()) {
+                router.dismissAll();
             }
+
+            router.replace(targetRoute as Parameters<typeof router.replace>[0]);
         } else {
             setStatus('error');
             setErrorMessage(
@@ -71,7 +80,7 @@ export default function VerifyScreen(): React.JSX.Element {
             <SafeScreen>
                 <Animated.View
                     entering={Animation.Presets.FadeInDown}
-                    exiting={Animation.Presets.FadeOutUp}
+                    exiting={Animation.Presets.FadeOutDown}
                     style={styles.centered}>
                     <LoadingIndicator message="Verifying your email..." overlay={false} />
                 </Animated.View>
@@ -83,7 +92,7 @@ export default function VerifyScreen(): React.JSX.Element {
         <SafeScreen>
             <Animated.View
                 entering={Animation.Presets.FadeInDown}
-                exiting={Animation.Presets.FadeOutUp}
+                exiting={Animation.Presets.FadeOutDown}
                 style={styles.centered}>
 
                 <Text style={styles.errorIcon}>✉️</Text>
@@ -91,21 +100,21 @@ export default function VerifyScreen(): React.JSX.Element {
                 <Text style={[styles.title, { color: theme.textPrimary }]}>Verification Failed</Text>
                 <Text style={[styles.message, { color: theme.textSecondary }]}>{errorMessage}</Text>
 
-                <TouchableOpacity
+                <RipplePressable
                     style={[styles.button, { backgroundColor: theme.primary }]}
                     onPress={handleRetry}
                     activeOpacity={0.8}
                 >
                     <Text style={[styles.buttonText, { color: theme.white }]}>Try Again</Text>
-                </TouchableOpacity>
+                </RipplePressable>
 
-                <TouchableOpacity
+                <RipplePressable
                     style={styles.secondaryButton}
                     onPress={handleGoToOTP}
                     activeOpacity={0.7}
                 >
                     <Text style={[styles.secondaryButtonText, { color: theme.textSecondary }]}>Back to Login</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             </Animated.View>
         </SafeScreen>
     );

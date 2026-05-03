@@ -1,11 +1,9 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+    StyleSheet, Text, View
 } from 'react-native';
 import { IconSymbol } from './icon-symbol';
 import { ProfileMenu } from './profile-menu';
@@ -39,36 +37,37 @@ export function AppHeader({
                 <Image
                     source={require('../../assets/images/app-icon-dark.png')}
                     style={styles.appIcon}
-                    resizeMode="contain"
+                    contentFit="contain"
+                    cachePolicy="memory-disk"
                 />
                 <Text style={[styles.appTitle, { color: currentTheme.textPrimary }]}>{title}</Text>
             </View>
 
             <View style={styles.rightSection}>
                 {userRole === 'buyer' && (
-                    <TouchableOpacity
+                    <RipplePressable
                         style={styles.cartBtn}
                         onPress={() => router.push('/home/cart')}
                         activeOpacity={0.7}
                     >
                         <IconSymbol name="cart.fill" size={24} color={currentTheme.textPrimary} />
-                    </TouchableOpacity>
+                    </RipplePressable>
                 )}
 
                 {showProfileIcon && (
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[styles.profileBtn, { borderColor: currentTheme.border, backgroundColor: currentTheme.background }]}
                         onPress={() => setIsMenuVisible(true)}
                         activeOpacity={0.7}
                     >
                         {userAvatarUrl ? (
-                            <Image source={{ uri: userAvatarUrl }} style={styles.avatar} />
+                            <Image source={{ uri: userAvatarUrl }} style={styles.avatar} contentFit="cover" cachePolicy="memory-disk" transition={100} />
                         ) : (
                             <View style={[styles.avatarPlaceholder, { backgroundColor: currentTheme.primary }]}>
                                 <IconSymbol name="person.fill" size={20} color={currentTheme.white} />
                             </View>
                         )}
-                    </TouchableOpacity>
+                    </RipplePressable>
                 )}
             </View>
 

@@ -1,7 +1,7 @@
 // Types
 export type UserRole = 'buyer' | 'seller';
 export type Gender = 'male' | 'female' | 'non-binary';
-export type ProductCategory = 'headwear' | 'tops' | 'bottoms' | 'footwear' | 'full_body' | 'accessory';
+export type ProductCategory = 'headwear' | 'upperwear' | 'lowerwear' | 'footwear' | 'accessory';
 export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
 export type PaymentStatus = 'pending' | 'success' | 'failed' | 'refunded';
 export type ActivityType = 'view' | 'search' | 'purchase' | 'cart_add';

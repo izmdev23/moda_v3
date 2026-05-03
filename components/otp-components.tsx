@@ -1,12 +1,6 @@
 import React, { useRef } from 'react';
-import {
-    Clipboard,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { Clipboard, StyleSheet, Text, TextInput, View } from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { OTP_LENGTH, SUPABASE_EMAIL_RATE_LIMIT } from '../utils/constants';
 import { useTheme } from './ui/theme-provider';
 
@@ -161,9 +155,9 @@ export const OTPResendButton: React.FC<OTPResendButtonProps> = ({
                     Resend code in <Text style={[resendStyles.cooldownTimer, { color: theme.textPrimary }]}>{cooldownSeconds}s</Text>
                 </Text>
             ) : (
-                <TouchableOpacity onPress={onResend} disabled={!canResend} activeOpacity={0.7}>
+                <RipplePressable onPress={onResend} disabled={!canResend} activeOpacity={0.7}>
                     <Text style={[resendStyles.resendText, { color: theme.primary }]}>Didn't receive a code? Resend</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             )}
 
             {resendCount > 0 && resendCount < SUPABASE_EMAIL_RATE_LIMIT && (

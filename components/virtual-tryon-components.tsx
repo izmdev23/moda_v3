@@ -1,15 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Dimensions, FlatList, Image, Linking, Modal, StyleSheet, Text, View } from 'react-native';
 import {
     deleteVtonHistoryRecord,
     getVtonHistory,
@@ -170,7 +162,7 @@ export const TryOnResult: React.FC<TryOnResultProps> = ({
             <Text style={[resultStyles.subtitle, { color: theme.textSecondary }]}>"{productName}"</Text>
 
             {/* Thumbnail — overflow:hidden required for borderRadius on Android */}
-            <TouchableOpacity
+            <RipplePressable
                 activeOpacity={0.9}
                 style={[resultStyles.imageWrapper, { backgroundColor: theme.border }]}
                 onPress={() => { setFsImageError(false); setIsFullscreen(true); }}
@@ -183,26 +175,26 @@ export const TryOnResult: React.FC<TryOnResultProps> = ({
                 <View style={[resultStyles.tapHint, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
                     <Text style={resultStyles.tapHintText}>Tap to expand</Text>
                 </View>
-            </TouchableOpacity>
+            </RipplePressable>
 
             <View style={resultStyles.btnColumn}>
-                <TouchableOpacity
+                <RipplePressable
                     style={[resultStyles.primaryBtn, { backgroundColor: theme.primary }]}
                     onPress={() => { setFsImageError(false); setIsFullscreen(true); }}
                 >
                     <Text style={[resultStyles.primaryBtnText, { color: theme.white }]}>🔍 View Full Image</Text>
-                </TouchableOpacity>
+                </RipplePressable>
                 <View style={resultStyles.rowBtns}>
-                    <TouchableOpacity style={[resultStyles.secondaryBtn, { borderColor: theme.primary }]} onPress={onTryAgain}>
+                    <RipplePressable style={[resultStyles.secondaryBtn, { borderColor: theme.primary }]} onPress={onTryAgain}>
                         <Text style={[resultStyles.secondaryBtnText, { color: theme.primary }]}>🔄 Try Again</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[resultStyles.secondaryBtn, { borderColor: theme.border }]} onPress={onViewGallery}>
+                    </RipplePressable>
+                    <RipplePressable style={[resultStyles.secondaryBtn, { borderColor: theme.border }]} onPress={onViewGallery}>
                         <Text style={[resultStyles.secondaryBtnText, { color: theme.textSecondary }]}>🗂️ My Try-ons</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 </View>
-                <TouchableOpacity onPress={onClose}>
+                <RipplePressable onPress={onClose}>
                     <Text style={[resultStyles.closeText, { color: theme.textSecondary }]}>Close</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             </View>
 
             {/* Full-screen image modal */}
@@ -227,13 +219,13 @@ export const TryOnResult: React.FC<TryOnResultProps> = ({
                             <Text style={resultStyles.fsErrorText}>Image failed to load</Text>
                         </View>
                     )}
-                    <TouchableOpacity
+                    <RipplePressable
                         style={resultStyles.modalClose}
                         onPress={() => setIsFullscreen(false)}
                         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                     >
                         <Text style={resultStyles.modalCloseText}>✕</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 </View>
             </Modal>
         </View>
@@ -317,18 +309,18 @@ export const TryOnImagePreview: React.FC<TryOnImagePreviewProps> = ({
             </View>
 
             <View style={previewStyles.actionRow}>
-                <TouchableOpacity
+                <RipplePressable
                     style={[previewStyles.cancelBtn, { borderColor: theme.border }]}
                     onPress={onCancel}
                 >
                     <Text style={[previewStyles.cancelText, { color: theme.textSecondary }]}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                </RipplePressable>
+                <RipplePressable
                     style={[previewStyles.proceedBtn, { backgroundColor: theme.primary }]}
                     onPress={onProceed}
                 >
                     <Text style={[previewStyles.proceedText, { color: theme.white }]}>Proceed to VTON</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             </View>
         </View>
     );
@@ -476,11 +468,33 @@ export const TryOnGallery: React.FC<TryOnGalleryProps> = ({ userId, onClose }) =
             setDeleteTarget(null);
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unable to delete image. Please try again.';
-            Alert.alert('Delete Failed', message);
+            AppAlert.alert('Delete Failed', message);
         } finally {
             setIsDeleting(false);
         }
     };
+
+    const handleDownloadFullscreenImage = useCallback(async (): Promise<void> => {
+        const targetUrl = fullscreenRecord?.resultUrl ?? null;
+
+        if (targetUrl === null) {
+            AppAlert.alert('Download Unavailable', 'No image URL found for this try-on result.');
+            return;
+        }
+
+        try {
+            const canOpenUrl = await Linking.canOpenURL(targetUrl);
+            if (!canOpenUrl) {
+                AppAlert.alert('Download Unavailable', 'Unable to open this image URL on your device.');
+                return;
+            }
+
+            await Linking.openURL(targetUrl);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Unable to open the image URL.';
+            AppAlert.alert('Download Failed', message);
+        }
+    }, [fullscreenRecord?.resultUrl]);
 
     const renderEmpty = (): React.JSX.Element => (
         <View style={galleryStyles.empty}>
@@ -494,12 +508,12 @@ export const TryOnGallery: React.FC<TryOnGalleryProps> = ({ userId, onClose }) =
         <View style={galleryStyles.empty}>
             <Text style={galleryStyles.emptyIcon}>🗂️</Text>
             <Text style={[galleryStyles.emptyText, { color: theme.textSecondary }]}>No images in this folder</Text>
-            <TouchableOpacity
+            <RipplePressable
                 style={[galleryStyles.backToFoldersBtn, { borderColor: theme.border }]}
                 onPress={() => setSelectedProductId(null)}
             >
                 <Text style={[galleryStyles.backToFoldersText, { color: theme.primary }]}>Back to folders</Text>
-            </TouchableOpacity>
+            </RipplePressable>
         </View>
     );
 
@@ -519,13 +533,13 @@ export const TryOnGallery: React.FC<TryOnGalleryProps> = ({ userId, onClose }) =
 
                 <View style={galleryStyles.headerActions}>
                     {selectedProductId !== null && (
-                        <TouchableOpacity onPress={() => setSelectedProductId(null)}>
+                        <RipplePressable onPress={() => setSelectedProductId(null)}>
                             <Text style={[galleryStyles.secondaryHeaderBtn, { color: theme.textSecondary }]}>Folders</Text>
-                        </TouchableOpacity>
+                        </RipplePressable>
                     )}
-                    <TouchableOpacity onPress={onClose}>
+                    <RipplePressable onPress={onClose}>
                         <Text style={[galleryStyles.closeBtn, { color: theme.primary }]}>Done</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 </View>
             </View>
             {isLoading ? (
@@ -542,7 +556,7 @@ export const TryOnGallery: React.FC<TryOnGalleryProps> = ({ userId, onClose }) =
                     contentContainerStyle={galleryStyles.list}
                     ListEmptyComponent={renderEmpty}
                     renderItem={({ item }) => (
-                        <TouchableOpacity
+                        <RipplePressable
                             style={[galleryStyles.folderCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
                             onPress={() => setSelectedProductId(item.productId)}
                             activeOpacity={0.85}
@@ -563,7 +577,7 @@ export const TryOnGallery: React.FC<TryOnGalleryProps> = ({ userId, onClose }) =
                                     Last try-on: {new Date(item.latestUsedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
                                 </Text>
                             </View>
-                        </TouchableOpacity>
+                        </RipplePressable>
                     )}
                 />
             ) : (
@@ -577,7 +591,7 @@ export const TryOnGallery: React.FC<TryOnGalleryProps> = ({ userId, onClose }) =
                     ListEmptyComponent={renderFolderEmpty}
                     renderItem={({ item }) =>
                         item.resultUrl !== null ? (
-                            <TouchableOpacity
+                            <RipplePressable
                                 style={galleryStyles.thumb}
                                 onPress={() => setFullscreenRecord(item)}
                                 activeOpacity={0.85}
@@ -589,17 +603,17 @@ export const TryOnGallery: React.FC<TryOnGalleryProps> = ({ userId, onClose }) =
                                         style={galleryStyles.thumbImg}
                                         resizeMode="contain"
                                     />
-                                    <TouchableOpacity
+                                    <RipplePressable
                                         style={galleryStyles.deleteThumbBtn}
                                         onPress={() => openDeleteDialog(item)}
                                     >
                                         <Text style={galleryStyles.deleteThumbText}>Delete</Text>
-                                    </TouchableOpacity>
+                                    </RipplePressable>
                                 </View>
                                 <Text style={[galleryStyles.thumbDate, { color: theme.textSecondary }]}>
                                     {new Date(item.usedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
                                 </Text>
-                            </TouchableOpacity>
+                            </RipplePressable>
                         ) : null
                     }
                 />
@@ -621,21 +635,29 @@ export const TryOnGallery: React.FC<TryOnGalleryProps> = ({ userId, onClose }) =
                             resizeMode="contain"
                         />
                     )}
-                    {fullscreenRecord !== null && (
-                        <TouchableOpacity
-                            style={galleryStyles.modalDelete}
-                            onPress={() => openDeleteDialog(fullscreenRecord)}
+                    <View style={galleryStyles.modalActionRow}>
+                        <RipplePressable
+                            style={galleryStyles.modalDownload}
+                            onPress={() => { void handleDownloadFullscreenImage(); }}
                         >
-                            <Text style={galleryStyles.modalDeleteText}>Delete Image</Text>
-                        </TouchableOpacity>
-                    )}
-                    <TouchableOpacity
+                            <Text style={galleryStyles.modalDownloadText}>Download</Text>
+                        </RipplePressable>
+                        {fullscreenRecord !== null && (
+                            <RipplePressable
+                                style={galleryStyles.modalDelete}
+                                onPress={() => openDeleteDialog(fullscreenRecord)}
+                            >
+                                <Text style={galleryStyles.modalDeleteText}>Delete Image</Text>
+                            </RipplePressable>
+                        )}
+                    </View>
+                    <RipplePressable
                         style={galleryStyles.modalClose}
                         onPress={() => setFullscreenRecord(null)}
                         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                     >
                         <Text style={galleryStyles.modalCloseText}>✕</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 </View>
             </Modal>
 
@@ -715,9 +737,21 @@ const galleryStyles = StyleSheet.create({
     backToFoldersText: { fontSize: 13, fontWeight: '600' },
     skeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     modalBg: { backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
-    modalDelete: {
+    modalActionRow: {
         position: 'absolute',
         bottom: 32,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    modalDownload: {
+        backgroundColor: 'rgba(0,0,0,0.75)',
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+    },
+    modalDownloadText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+    modalDelete: {
         backgroundColor: 'rgba(0,0,0,0.75)',
         borderRadius: 10,
         paddingHorizontal: 14,

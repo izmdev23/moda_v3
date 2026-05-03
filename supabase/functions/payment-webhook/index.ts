@@ -79,29 +79,6 @@ Deno.serve(async (req) => {
                 .from("orders")
                 .update({ status: "cancelled" })
                 .eq("id", transaction.order_id);
-
-            // Restore stock
-            const { data: items } = await supabaseClient
-                .from("order_items")
-                .select("*")
-                .eq("order_id", transaction.order_id);
-
-            if (items) {
-                for (const item of items) {
-                    const { data: variant } = await supabaseClient
-                        .from("product_variants")
-                        .select("stock")
-                        .eq("id", item.variant_id)
-                        .single();
-
-                    if (variant) {
-                        await supabaseClient
-                            .from("product_variants")
-                            .update({ stock: variant.stock + item.quantity })
-                            .eq("id", item.variant_id);
-                    }
-                }
-            }
         }
 
         return new Response("OK", { status: 200 });

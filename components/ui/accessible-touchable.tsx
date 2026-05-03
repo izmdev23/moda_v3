@@ -1,7 +1,9 @@
 import React, { useCallback, useRef } from 'react';
-import { AccessibilityRole, TouchableOpacity, TouchableOpacityProps, ViewStyle } from 'react-native';
+import { AccessibilityRole } from 'react-native';
 
-export interface AccessibleTouchableProps extends TouchableOpacityProps {
+import { RipplePressable, RipplePressableProps } from '@/components/ui/ripple-pressable';
+
+export interface AccessibleTouchableProps extends Omit<RipplePressableProps, 'onPress'> {
     readonly accessibilityRole?: AccessibilityRole;
     readonly accessibilityLabel: string;
     readonly accessibilityHint?: string;
@@ -36,10 +38,10 @@ export const AccessibleTouchable: React.FC<AccessibleTouchableProps> = ({
     }, [onPress, debounceTimeMs]);
 
     return (
-        <TouchableOpacity
+        <RipplePressable
             onPress={debouncedOnPress}
             activeOpacity={activeOpacity}
-            style={style as ViewStyle}
+            style={style}
             accessible={true}
             accessibilityLabel={accessibilityLabel}
             accessibilityHint={accessibilityHint}
@@ -47,6 +49,6 @@ export const AccessibleTouchable: React.FC<AccessibleTouchableProps> = ({
             {...rest}
         >
             {children}
-        </TouchableOpacity>
+        </RipplePressable>
     );
 };

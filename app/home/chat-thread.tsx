@@ -1,13 +1,41 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { ChatBubble, ChatInput, ChatMessageItem } from '../../components/chat-components';
-import { LoadingIndicator } from '../../components/ui/loading-indicator';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { SkeletonLoader } from '../../components/ui/skeleton-loader';
 import { useTheme } from '../../components/ui/theme-provider';
+
+const THREAD_SKELETON_ROW_COUNT = 6;
+
+function ThreadSkeleton(): React.JSX.Element {
+    return (
+        <View style={styles.threadSkeletonWrap}>
+            {Array.from({ length: THREAD_SKELETON_ROW_COUNT }).map((_, index) => {
+                const isOwnBubble = index % 2 === 0;
+
+                return (
+                    <View
+                        key={`thread-skeleton-${index}`}
+                        style={[styles.threadSkeletonRow, isOwnBubble ? styles.threadSkeletonOwn : styles.threadSkeletonOther]}
+                    >
+                        <SkeletonLoader
+                            width={isOwnBubble ? '65%' : '72%'}
+                            height={14}
+                            style={styles.threadSkeletonLine}
+                        />
+                        <SkeletonLoader width={isOwnBubble ? '40%' : '35%'} height={14} />
+                    </View>
+                );
+            })}
+        </View>
+    );
+}
 
 export default function ChatThreadScreen(): React.JSX.Element {
     const router = useRouter();
@@ -73,6 +101,7 @@ export default function ChatThreadScreen(): React.JSX.Element {
     }, [thread_id]);
 
     const handleSendText = async () => {
+        if (loading) return;
         if (!inputText.trim()) return;
 
         setIsSending(true);
@@ -102,6 +131,7 @@ export default function ChatThreadScreen(): React.JSX.Element {
     };
 
     const handleAttachImage = async () => {
+        if (loading) return;
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -139,20 +169,10 @@ export default function ChatThreadScreen(): React.JSX.Element {
             }
         } catch (error) {
             console.error('Error attaching image: ', error);
-            Alert.alert("Error", "Could not attach image.");
+            AppAlert.alert("Error", "Could not attach image.");
             setIsSending(false);
         }
     };
-
-    if (loading) {
-        return (
-            <SafeScreen>
-                <View style={styles.center}>
-                    <LoadingIndicator message="Loading discussion..." />
-                </View>
-            </SafeScreen>
-        );
-    }
 
     return (
         <SafeScreen>
@@ -162,9 +182,9 @@ export default function ChatThreadScreen(): React.JSX.Element {
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
                 <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <RipplePressable onPress={() => router.back()} style={styles.backButton}>
                         <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
-                    </TouchableOpacity>
+                    </RipplePressable>
                     <View style={styles.headerInfo}>
                         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Seller / Buyer Name</Text>
                         <Text style={[styles.headerSubtitle, { color: theme.success }]}>Active now</Text>
@@ -180,22 +200,26 @@ export default function ChatThreadScreen(): React.JSX.Element {
                     </View>
                 )}
 
-                <FlatList
-                    ref={flatListRef}
-                    data={messages}
-                    keyExtractor={(item) => item.uid}
-                    renderItem={({ item }) => <ChatBubble message={item} />}
-                    inverted // Scroll up naturally
-                    contentContainerStyle={styles.listContent}
-                    showsVerticalScrollIndicator={false}
-                />
+                {loading ? (
+                    <ThreadSkeleton />
+                ) : (
+                    <FlatList
+                        ref={flatListRef}
+                        data={messages}
+                        keyExtractor={(item) => item.uid}
+                        renderItem={({ item }) => <ChatBubble message={item} />}
+                        inverted // Scroll up naturally
+                        contentContainerStyle={styles.listContent}
+                        showsVerticalScrollIndicator={false}
+                    />
+                )}
 
                 <ChatInput
                     value={inputText}
                     onChangeText={setInputText}
                     onSend={handleSendText}
                     onAttachImage={handleAttachImage}
-                    isSending={isSending}
+                    isSending={isSending || loading}
                 />
             </KeyboardAvoidingView>
         </SafeScreen>
@@ -243,6 +267,27 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    threadSkeletonWrap: {
+        flex: 1,
+        paddingTop: 18,
+        paddingHorizontal: 16,
+    },
+    threadSkeletonRow: {
+        borderRadius: 14,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        marginBottom: 10,
+        maxWidth: '82%',
+    },
+    threadSkeletonOwn: {
+        alignSelf: 'flex-end',
+    },
+    threadSkeletonOther: {
+        alignSelf: 'flex-start',
+    },
+    threadSkeletonLine: {
+        marginBottom: 8,
     },
     listContent: {
         paddingVertical: 16,

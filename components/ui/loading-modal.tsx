@@ -34,8 +34,8 @@ export const LoadingModal: React.FC<LoadingModalProps> = ({ isVisible, message }
         >
             <View style={styles.overlay}>
                 <Animated.View
-                    entering={Animation.Presets.FadeIn}
-                    exiting={Animation.Presets.FadeOut}
+                        entering={Animation.Presets.FadeInDown}
+                        exiting={Animation.Presets.FadeOutDown}
                     style={[styles.container, { backgroundColor: theme.cardBackground }]}
                 >
                     <ActivityIndicator size="small" color={theme.primary} />

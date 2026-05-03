@@ -102,12 +102,6 @@ Deno.serve(async (req) => {
                 throw new Error(`Insufficient stock for ${item.productName}`);
             }
 
-            // Decrement stock
-            await supabaseClient
-                .from("product_variants")
-                .update({ stock: variant.stock - item.quantity })
-                .eq("id", item.variantId);
-
             orderItemsPayload.push({
                 order_id: orderId,
                 product_id: item.productId,

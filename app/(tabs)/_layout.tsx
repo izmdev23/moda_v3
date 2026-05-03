@@ -1,4 +1,5 @@
 import { useTheme } from '@/components/ui/theme-provider';
+import { Animation } from '@/utils/animation';
 import { Stack } from 'expo-router';
 import React from 'react';
 
@@ -18,6 +19,8 @@ export default function TabsLayout(): React.JSX.Element {
         <Stack
             screenOptions={{
                 headerShown: false,
+                animation: 'fade_from_bottom',
+                animationDuration: Animation.DefaultAnimationSpeed,
                 contentStyle: { backgroundColor: theme.background },
             }}
         />

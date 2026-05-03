@@ -1,18 +1,20 @@
+import { AppAlert } from '@/utils/app-alert';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import type { Edge } from 'react-native-safe-area-context';
 import {
-  AvatarUploader,
-  MenuItem,
-  ProfileCompletenessBar,
-  ProfileHeader,
-  ProfileMenu
+    AvatarUploader,
+    MenuItem,
+    ProfileCompletenessBar,
+    ProfileHeader,
+    ProfileMenu
 } from '../../components/buyer-profile-components';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
 import { SafeScreen } from '../../components/ui/safe-screen';
 import { SkeletonLoader } from '../../components/ui/skeleton-loader';
+import { useTheme } from '../../components/ui/theme-provider';
 import { Tables } from '../../supabase/database.types';
 import { supabase } from '../../supabase/supabaseClient';
 import { usersTable } from '../../utils/database/users-table';
@@ -57,6 +59,7 @@ const profileSkeletonStyles = StyleSheet.create({
 });
 
 export default function BuyerProfileScreen() {
+    const { theme } = useTheme();
     const router = useRouter();
     const [user, setUser] = useState<Tables<'users'> | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
@@ -94,7 +97,7 @@ export default function BuyerProfileScreen() {
         // Here we would upload the image to Supabase Storage 'user-avatars' bucket
         // and update the user record. For now, just a placeholder.
         console.log('Uploading avatar: ', uri);
-        Alert.alert('Avatar Update', 'Avatar upload functionality will be implemented soon.');
+        AppAlert.alert('Avatar Update', 'Avatar upload functionality will be implemented soon.');
     };
 
     const confirmAccountDeletion = () => {
@@ -115,26 +118,12 @@ export default function BuyerProfileScreen() {
         }, 2000);
     };
 
-    if (loading) {
-        return (
-            <SafeScreen edges={BUYER_PROFILE_SAFE_AREA_EDGES}>
-                <ProfileSkeleton />
-            </SafeScreen>
-        );
-    }
-
-    if (!user) {
-        return (
-            <SafeScreen edges={BUYER_PROFILE_SAFE_AREA_EDGES}>
-                <View style={styles.center} />
-            </SafeScreen>
-        );
-    }
+    const hasUserProfile = user !== null;
 
     // Calculate arbitrary completely profile percentage
     let completeness = 50;
-    if (user.avatar_url) completeness += 20;
-    if (user.date_of_birth) completeness += 30;
+    if (user?.avatar_url) completeness += 20;
+    if (user?.date_of_birth) completeness += 30;
 
     const mainMenuItems: readonly MenuItem[] = [
         {
@@ -166,11 +155,6 @@ export default function BuyerProfileScreen() {
             onPress: () => router.push('/home/app-settings' as any),
         },
         {
-            icon: 'swap-horizontal-outline',
-            label: 'Switch to Seller Account',
-            onPress: () => router.push('/home/seller-profile' as any), // This would actually route to a Switch To Seller flow
-        },
-        {
             icon: 'trash-outline',
             label: 'Delete Account',
             onPress: confirmAccountDeletion,
@@ -180,18 +164,29 @@ export default function BuyerProfileScreen() {
 
     return (
         <SafeScreen edges={BUYER_PROFILE_SAFE_AREA_EDGES}>
-            <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-                <ProfileHeader
-                    name={`${user.first_name} ${user.last_name}`}
-                    email={user.email}
-                    avatarUrl={user.avatar_url}
-                    onAvatarPress={() => setAvatarUploaderVisible(true)}
-                />
+            <ScrollView
+                style={[styles.container, { backgroundColor: theme.background }]}
+                showsVerticalScrollIndicator={false}
+            >
+                {loading ? (
+                    <ProfileSkeleton />
+                ) : hasUserProfile ? (
+                    <>
+                        <ProfileHeader
+                            name={`${user.first_name} ${user.last_name}`}
+                            email={user.email}
+                            avatarUrl={user.avatar_url}
+                            onAvatarPress={() => setAvatarUploaderVisible(true)}
+                        />
 
-                <ProfileCompletenessBar percentage={completeness} />
+                        <ProfileCompletenessBar percentage={completeness} />
 
-                <ProfileMenu items={mainMenuItems} />
-                <ProfileMenu items={accountMenuItems} />
+                        <ProfileMenu items={mainMenuItems} />
+                        <ProfileMenu items={accountMenuItems} />
+                    </>
+                ) : (
+                    <View style={[styles.center, { backgroundColor: theme.background }]} />
+                )}
             </ScrollView>
 
             <AvatarUploader
@@ -223,13 +218,11 @@ export default function BuyerProfileScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
     },
     center: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#F8F9FA',
     },
     overlay: {
         ...StyleSheet.absoluteFillObject,

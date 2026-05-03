@@ -1,15 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
-import {
-    ActivityIndicator,
-    Animated,
-    Image,
-    PanResponder,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { ActivityIndicator, Animated, Image, PanResponder, StyleSheet, Text, TextInput, View } from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { formatPrice } from '../utils/utils';
 import { useTheme } from './ui/theme-provider';
 
@@ -111,13 +102,13 @@ export const QuantityControl: React.FC<QuantityControlProps> = ({
 
     return (
         <View style={qtyStyles.container}>
-            <TouchableOpacity
+            <RipplePressable
                 style={[qtyStyles.btn, { borderColor: theme.border, backgroundColor: theme.cardBackground }, (quantity <= 1 || isLoading) && qtyStyles.btnDisabled]}
                 onPress={onDecrement}
                 disabled={quantity <= 1 || isLoading}
             >
                 <Text style={[qtyStyles.btnText, { color: theme.textPrimary }]}>−</Text>
-            </TouchableOpacity>
+            </RipplePressable>
 
             {isEditing ? (
                 <TextInput
@@ -131,18 +122,18 @@ export const QuantityControl: React.FC<QuantityControlProps> = ({
                     maxLength={2}
                 />
             ) : (
-                <TouchableOpacity onPress={handleTextPress}>
+                <RipplePressable onPress={handleTextPress}>
                     <Text style={[qtyStyles.qtyText, { color: theme.textPrimary }]}>{quantity}</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             )}
 
-            <TouchableOpacity
+            <RipplePressable
                 style={[qtyStyles.btn, { borderColor: theme.border, backgroundColor: theme.cardBackground }, (quantity >= maxQty || isLoading) && qtyStyles.btnDisabled]}
                 onPress={onIncrement}
                 disabled={quantity >= maxQty || isLoading}
             >
                 <Text style={[qtyStyles.btnText, { color: theme.textPrimary }]}>+</Text>
-            </TouchableOpacity>
+            </RipplePressable>
         </View>
     );
 };
@@ -246,13 +237,13 @@ export const CartItem: React.FC<CartItemProps> = ({
         <View style={cartItemStyles.wrapper}>
             {/* Swipe delete background */}
             <View style={[cartItemStyles.deleteBackground, { backgroundColor: theme.error }]}>
-                <TouchableOpacity
+                <RipplePressable
                     style={cartItemStyles.deleteBtn}
                     onPress={() => onDelete(item.uid)}
                 >
                     <Text style={cartItemStyles.deleteBtnIcon}>🗑️</Text>
                     <Text style={[cartItemStyles.deleteBtnText, { color: theme.white }]}>Delete</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             </View>
 
             {/* Main card */}
@@ -261,15 +252,15 @@ export const CartItem: React.FC<CartItemProps> = ({
                 {...panResponder.panHandlers}
             >
                 {/* Checkbox */}
-                <TouchableOpacity
+                <RipplePressable
                     style={[cartItemStyles.checkbox, { borderColor: theme.border }, isSelected && { backgroundColor: theme.primary, borderColor: theme.primary }]}
                     onPress={() => onSelect(item.uid)}
                 >
                     {isSelected && <Text style={[cartItemStyles.checkmark, { color: theme.white }]}>✓</Text>}
-                </TouchableOpacity>
+                </RipplePressable>
 
                 {/* Thumbnail */}
-                <TouchableOpacity onPress={() => onProductPress(item.productUid)} activeOpacity={0.8}>
+                <RipplePressable onPress={() => onProductPress(item.productUid)} activeOpacity={0.8}>
                     <View style={cartItemStyles.imageContainer}>
                         {item.thumbnailUrl ? (
                             <Image
@@ -288,7 +279,7 @@ export const CartItem: React.FC<CartItemProps> = ({
                             </View>
                         )}
                     </View>
-                </TouchableOpacity>
+                </RipplePressable>
 
                 {/* Info */}
                 <View style={cartItemStyles.info}>
@@ -420,7 +411,7 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
                 <Text style={[summaryStyles.totalLabel, { color: theme.textSecondary }]}>Total:</Text>
                 <Text style={[summaryStyles.totalAmount, { color: theme.textPrimary }]}>{formatPrice(totalAmount)}</Text>
             </View>
-            <TouchableOpacity
+            <RipplePressable
                 style={[summaryStyles.checkoutBtn, { backgroundColor: isCheckoutDisabled ? theme.gray : theme.primary }]}
                 onPress={onCheckout}
                 disabled={isCheckoutDisabled}
@@ -428,7 +419,7 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
                 <Text style={[summaryStyles.checkoutText, { color: theme.white }]}>
                     {isCheckoutDisabled ? 'Select Items' : 'Checkout →'}
                 </Text>
-            </TouchableOpacity>
+            </RipplePressable>
         </View>
     );
 };

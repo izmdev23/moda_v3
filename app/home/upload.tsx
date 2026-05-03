@@ -1,22 +1,32 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { ActivityIndicator, Alert, InteractionManager, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, InteractionManager, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { Edge } from 'react-native-safe-area-context';
 import { FormInput } from '../../components/ui/form-input';
 import { DropdownOption, InlineDropdown } from '../../components/ui/inline-dropdown';
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
+import { SafeScreen } from '../../components/ui/safe-screen';
 import { useTheme } from '../../components/ui/theme-provider';
 import { ImageDetail, ImageUploader, RichTextInput, TagsInput, VariantData, VariantFieldGroup } from '../../components/upload-components';
 import { TablesInsert } from '../../supabase/database.types';
 import { supabase } from '../../supabase/supabaseClient';
+import { vtonUserPhotosBucket } from '../../utils/database/vton-results-bucket';
 import { ProductCategory } from '../../utils/types';
+import {
+    isAccessoryCategory,
+    normalizeExtractionResultUrl,
+    parseVariantPayloads,
+    type ParsedVariantPayload,
+} from '../../utils/upload-product-utils';
 
 const PRODUCT_CATEGORY_ENUM_VALUES: readonly ProductCategory[] = [
     'headwear',
-    'tops',
-    'bottoms',
+    'upperwear',
+    'lowerwear',
     'footwear',
-    'full_body',
     'accessory',
 ];
 
@@ -24,6 +34,8 @@ const CATEGORY_LABEL_SANITIZE_REGEX = /[^a-zA-Z0-9]+/g;
 const CATEGORY_LABEL_WORD_SEPARATOR = ' ';
 const CATEGORY_PLACEHOLDER = 'Select category';
 const PRODUCT_IMAGES_BUCKET = 'product-images';
+const VTON_USER_PHOTOS_BUCKET = 'vton-user-photos';
+const OUTFIT_RESULTS_BUCKET = 'outfit-results';
 const MAX_UPLOAD_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_UPLOAD_MIME_TYPES: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
 const IMAGE_EXTENSION_MAP: Readonly<Record<string, string>> = {
@@ -31,18 +43,29 @@ const IMAGE_EXTENSION_MAP: Readonly<Record<string, string>> = {
     'image/png': 'png',
     'image/webp': 'webp',
 };
+const EXTRACTION_POLL_INTERVAL_MS = 2500;
+const EXTRACTION_MAX_POLL_ATTEMPTS = 60;
+const EXTRACTION_SOURCE_UPLOAD_TIMEOUT_MS = 30000;
+const EXTRACTION_FUNCTION_START_TIMEOUT_MS = 20000;
+const EXTRACTION_FUNCTION_CHECK_TIMEOUT_MS = 20000;
+const UPLOAD_SAFE_AREA_EDGES: readonly Edge[] = ['top', 'left', 'right'];
 
 interface UploadedImageResult {
     readonly path: string;
     readonly publicUrl: string;
 }
 
-interface ParsedVariantPayload {
-    readonly name: string;
-    readonly price: number;
-    readonly stock: number;
-    readonly salePrice: number | null;
-    readonly saleEndDate: string | null;
+interface ExtractOutfitStartResponse {
+    readonly predictionId?: string;
+    readonly status?: string;
+    readonly error?: string;
+}
+
+interface ExtractOutfitCheckResponse {
+    readonly status: 'starting' | 'processing' | 'succeeded' | 'failed';
+    readonly resultUrl?: string | readonly string[] | { readonly url?: string; readonly href?: string };
+    readonly storagePath?: string;
+    readonly error?: string;
 }
 
 function inferMimeTypeFromUri(fileUri: string): string {
@@ -65,6 +88,87 @@ function normalizeUploadMimeType(image: ImageDetail): string {
         return inferMimeTypeFromUri(image.uri);
     }
     return rawMimeType;
+}
+
+function resolveUploadExtension(image: ImageDetail): string {
+    const mimeType = normalizeUploadMimeType(image);
+    return IMAGE_EXTENSION_MAP[mimeType] ?? 'jpg';
+}
+
+function delay(milliseconds: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+        setTimeout(resolve, milliseconds);
+    });
+}
+
+function withTimeout<T>(operation: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            reject(new Error(timeoutMessage));
+        }, timeoutMs);
+
+        operation
+            .then((result) => {
+                clearTimeout(timeoutId);
+                resolve(result);
+            })
+            .catch((error: unknown) => {
+                clearTimeout(timeoutId);
+                reject(error);
+            });
+    });
+}
+
+async function resolveInvokeErrorMessage(
+    error: { readonly message?: string; readonly context?: Response },
+    fallbackMessage: string,
+): Promise<string> {
+    const context = error.context;
+    if (context === undefined) {
+        console.error('[upload-product] extract-outfit invoke error (no response context):', {
+            message: error.message ?? fallbackMessage,
+        });
+        return error.message ?? fallbackMessage;
+    }
+
+    const responseText = await context.text();
+    console.error('[upload-product] extract-outfit invoke error response:', {
+        status: context.status,
+        body: responseText,
+    });
+
+    if (responseText.trim().length === 0) {
+        return error.message ?? fallbackMessage;
+    }
+
+    try {
+        const parsedBody = JSON.parse(responseText) as { readonly error?: unknown };
+        if (typeof parsedBody.error === 'string' && parsedBody.error.trim().length > 0) {
+            return parsedBody.error;
+        }
+    } catch {
+        // Ignore parsing errors and fallback to raw response text.
+    }
+
+    return responseText;
+}
+
+async function removeStorageObjectIfExists(bucketName: string, storagePath: string | null): Promise<void> {
+    if (storagePath === null || storagePath.trim().length === 0) {
+        return;
+    }
+
+    const { error } = await supabase.storage
+        .from(bucketName)
+        .remove([storagePath]);
+
+    if (error !== null) {
+        console.warn('[upload-product] Failed to remove stale storage object:', {
+            bucketName,
+            storagePath,
+            message: error.message,
+        });
+    }
 }
 
 function readLocalUriAsBlob(fileUri: string): Promise<Blob> {
@@ -100,49 +204,6 @@ function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
             reject(reader.error ?? new Error('Failed to process one of the selected images for upload.'));
         };
         reader.readAsArrayBuffer(blob);
-    });
-}
-
-function parsePositiveNumber(rawValue: string, fieldLabel: string): number {
-    const parsedValue = Number(rawValue);
-    if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-        throw new Error(`${fieldLabel} must be greater than 0.`);
-    }
-    return parsedValue;
-}
-
-function parseNonNegativeInteger(rawValue: string, fieldLabel: string): number {
-    const parsedValue = Number(rawValue);
-    if (!Number.isInteger(parsedValue) || parsedValue < 0) {
-        throw new Error(`${fieldLabel} must be a valid whole number.`);
-    }
-    return parsedValue;
-}
-
-function parseOptionalSalePrice(rawValue: string): number | null {
-    const trimmedValue = rawValue.trim();
-    if (trimmedValue.length === 0) {
-        return null;
-    }
-
-    return parsePositiveNumber(trimmedValue, 'Sale price');
-}
-
-function parseVariantPayloads(variants: readonly VariantData[]): ParsedVariantPayload[] {
-    return variants.map((variant, index) => {
-        const variantLabel = `Variant ${index + 1}`;
-        const variantName = variant.name.trim();
-        if (variantName.length === 0) {
-            throw new Error(`${variantLabel} name is required.`);
-        }
-
-        return {
-            name: variantName,
-            price: parsePositiveNumber(variant.price, `${variantLabel} price`),
-            stock: parseNonNegativeInteger(variant.stock, `${variantLabel} stock`),
-            salePrice: parseOptionalSalePrice(variant.sale_price),
-            saleEndDate: variant.sale_end_date ? variant.sale_end_date.toISOString() : null,
-        };
     });
 }
 
@@ -227,8 +288,24 @@ export default function UploadProductScreen() {
     const [thumbnail, setThumbnail] = useState<ImageDetail[]>([]);
     const [description, setDescription] = useState('');
     const [tags, setTags] = useState<string[]>([]);
+    const [selectedCategory, setSelectedCategory] = useState<ProductCategory | ''>('');
     const [variants, setVariants] = useState<VariantData[]>([
-        { id: '1', name: '', price: '', stock: '', sale_price: '', sale_end_date: undefined }
+        {
+            id: '1',
+            name: '',
+            price: '',
+            stock: '',
+            sale_price: '',
+            sale_end_date: undefined,
+            is_full_body: false,
+            try_on_image: null,
+            try_on_image_url: null,
+            try_on_image_storage_path: null,
+            extracted_outfit_url: null,
+            extracted_outfit_storage_path: null,
+            extraction_error: null,
+            is_extracting: false,
+        }
     ]);
     const [isLoading, setIsLoading] = useState(false);
     const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -248,47 +325,236 @@ export default function UploadProductScreen() {
         };
     }, []);
 
+    const hasExtractingVariants = variants.some((variant) => variant.is_extracting);
+
+    const handleSelectTryOnImage = useCallback(async (variantId: string, image: ImageDetail): Promise<void> => {
+        if (selectedCategory === '' || isAccessoryCategory(selectedCategory)) {
+            throw new Error('Virtual try-on image selection is disabled for accessories.');
+        }
+
+        const previousVariant = variants.find((variant) => variant.id === variantId) ?? null;
+        const previousTryOnImageUrl = previousVariant?.try_on_image_url ?? null;
+        const previousTryOnStoragePath = previousVariant?.try_on_image_storage_path ?? null;
+        const previousExtractedOutfitUrl = previousVariant?.extracted_outfit_url ?? null;
+        const previousExtractedOutfitStoragePath = previousVariant?.extracted_outfit_storage_path ?? null;
+        const variantIsFullBody = previousVariant?.is_full_body === true;
+        let currentTryOnUploadPath: string | null = null;
+
+        setVariants((previousVariants) => previousVariants.map((variant) => {
+            if (variant.id !== variantId) {
+                return variant;
+            }
+
+            return {
+                ...variant,
+                try_on_image: image,
+                extraction_error: null,
+                is_extracting: true,
+            };
+        }));
+
+        try {
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) {
+                throw new Error(sessionError.message);
+            }
+
+            const authUserId = sessionData.session?.user?.id;
+            if (!authUserId) {
+                throw new Error('You must be logged in to extract outfit images.');
+            }
+
+            const tryOnUploadPath = `${authUserId}/${Date.now()}-${variantId}.${resolveUploadExtension(image)}`;
+            currentTryOnUploadPath = tryOnUploadPath;
+            const sourceUpload = await withTimeout(
+                vtonUserPhotosBucket.upload(tryOnUploadPath, image.uri, normalizeUploadMimeType(image)),
+                EXTRACTION_SOURCE_UPLOAD_TIMEOUT_MS,
+                'Uploading source image took too long. Please try a different image or retry.',
+            );
+
+            const { data: startData, error: startError } = await withTimeout(
+                supabase.functions.invoke('extract-outfit', {
+                    body: {
+                        action: 'start',
+                        sourceImageUrl: sourceUpload.publicUrl,
+                        productCategory: selectedCategory,
+                        isFullBody: variantIsFullBody,
+                    },
+                }),
+                EXTRACTION_FUNCTION_START_TIMEOUT_MS,
+                'Starting extraction took too long. Please retry.',
+            );
+
+            if (startError !== null) {
+                const message = await resolveInvokeErrorMessage(
+                    startError as { readonly message?: string; readonly context?: Response },
+                    'Failed to start extraction.',
+                );
+                throw new Error(message);
+            }
+
+            const startPayload = startData as ExtractOutfitStartResponse;
+            if (startPayload.error) {
+                throw new Error(startPayload.error);
+            }
+
+            if (!startPayload.predictionId) {
+                throw new Error('Extraction service did not return a prediction ID.');
+            }
+
+            let extractedOutfitUrl = '';
+            let extractedStoragePath: string | null = null;
+
+            for (let attempt = 0; attempt < EXTRACTION_MAX_POLL_ATTEMPTS; attempt += 1) {
+                await delay(EXTRACTION_POLL_INTERVAL_MS);
+
+                const { data: checkData, error: checkError } = await withTimeout(
+                    supabase.functions.invoke('extract-outfit', {
+                        body: {
+                            action: 'check',
+                            predictionId: startPayload.predictionId,
+                        },
+                    }),
+                    EXTRACTION_FUNCTION_CHECK_TIMEOUT_MS,
+                    'Checking extraction status timed out. Please retry.',
+                );
+
+                if (checkError !== null) {
+                    const message = await resolveInvokeErrorMessage(
+                        checkError as { readonly message?: string; readonly context?: Response },
+                        'Failed to poll extraction status.',
+                    );
+                    throw new Error(message);
+                }
+
+                const checkPayload = checkData as ExtractOutfitCheckResponse;
+                if (!checkPayload.status) {
+                    throw new Error('Extraction status response was invalid. Please retry.');
+                }
+
+                if (checkPayload.status === 'failed') {
+                    throw new Error(checkPayload.error ?? 'Outfit extraction failed.');
+                }
+
+                if (checkPayload.status === 'succeeded') {
+                    extractedOutfitUrl = normalizeExtractionResultUrl(checkPayload.resultUrl);
+                    extractedStoragePath = typeof checkPayload.storagePath === 'string'
+                        ? checkPayload.storagePath
+                        : null;
+                    break;
+                }
+            }
+
+            if (extractedOutfitUrl.length === 0) {
+                throw new Error('Outfit extraction timed out. Please try again.');
+            }
+
+            setVariants((previousVariants) => previousVariants.map((variant) => {
+                if (variant.id !== variantId) {
+                    return variant;
+                }
+
+                return {
+                    ...variant,
+                    try_on_image: image,
+                    try_on_image_url: sourceUpload.publicUrl,
+                    try_on_image_storage_path: tryOnUploadPath,
+                    extracted_outfit_url: extractedOutfitUrl,
+                    extracted_outfit_storage_path: extractedStoragePath,
+                    extraction_error: null,
+                    is_extracting: false,
+                };
+            }));
+
+            if (previousTryOnStoragePath !== null && previousTryOnStoragePath !== tryOnUploadPath) {
+                await removeStorageObjectIfExists(VTON_USER_PHOTOS_BUCKET, previousTryOnStoragePath);
+            }
+
+            if (
+                previousExtractedOutfitStoragePath !== null
+                && previousExtractedOutfitStoragePath !== extractedStoragePath
+            ) {
+                await removeStorageObjectIfExists(OUTFIT_RESULTS_BUCKET, previousExtractedOutfitStoragePath);
+            }
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Failed to extract outfit image.';
+            console.error('[upload-product] Outfit extraction failed:', {
+                variantId,
+                selectedCategory,
+                message,
+                error,
+            });
+
+            if (currentTryOnUploadPath !== null && currentTryOnUploadPath !== previousTryOnStoragePath) {
+                await removeStorageObjectIfExists(VTON_USER_PHOTOS_BUCKET, currentTryOnUploadPath);
+            }
+
+            setVariants((previousVariants) => previousVariants.map((variant) => {
+                if (variant.id !== variantId) {
+                    return variant;
+                }
+
+                return {
+                    ...variant,
+                    try_on_image: image,
+                    try_on_image_url: previousTryOnImageUrl,
+                    try_on_image_storage_path: previousTryOnStoragePath,
+                    extracted_outfit_url: previousExtractedOutfitUrl,
+                    extracted_outfit_storage_path: previousExtractedOutfitStoragePath,
+                    extraction_error: message,
+                    is_extracting: false,
+                };
+            }));
+
+            throw new Error(message);
+        }
+    }, [selectedCategory, variants]);
+
     const onSubmit = async (formData: UploadProductFormValues): Promise<void> => {
-        if (images.length === 0) {
-            Alert.alert('Error', 'Please add at least one product image.');
-            return;
-        }
-        if (thumbnail.length === 0) {
-            Alert.alert('Error', 'Please add a thumbnail.');
-            return;
-        }
         if (!description) {
-            Alert.alert('Error', 'Description is required.');
+            AppAlert.alert('Error', 'Description is required.');
+            return;
+        }
+        if (variants.length === 0) {
+            AppAlert.alert('Error', 'At least one variant is required.');
             return;
         }
         if (variants.some(v => !v.name || !v.price || !v.stock)) {
-            Alert.alert('Error', 'All variant fields must be filled.');
+            AppAlert.alert('Error', 'All variant fields must be filled.');
+            return;
+        }
+        if (hasExtractingVariants) {
+            AppAlert.alert('Error', 'Please wait for all outfit extraction tasks to finish before publishing.');
             return;
         }
         if (formData.category === '') {
-            Alert.alert('Error', 'Category is required.');
+            AppAlert.alert('Error', 'Category is required.');
+            return;
+        }
+        if (isAccessoryCategory(formData.category) && thumbnail.length === 0) {
+            AppAlert.alert('Error', 'Accessories require a manual thumbnail image.');
             return;
         }
 
         const normalizedName = formData.name.trim();
         const normalizedDescription = description.trim();
         if (normalizedName.length === 0) {
-            Alert.alert('Error', 'Product name is required.');
+            AppAlert.alert('Error', 'Product name is required.');
             return;
         }
         if (normalizedDescription.length === 0) {
-            Alert.alert('Error', 'Description is required.');
+            AppAlert.alert('Error', 'Description is required.');
             return;
         }
 
         let parsedVariants: ParsedVariantPayload[] = [];
         try {
-            parsedVariants = parseVariantPayloads(variants);
+            parsedVariants = parseVariantPayloads(variants, formData.category);
         } catch (variantParseError: unknown) {
             const variantErrorMessage = variantParseError instanceof Error
                 ? variantParseError.message
                 : 'One or more variants are invalid.';
-            Alert.alert('Error', variantErrorMessage);
+            AppAlert.alert('Error', variantErrorMessage);
             return;
         }
 
@@ -336,15 +602,25 @@ export default function UploadProductScreen() {
             }
 
             const productUploadKey = buildProductUploadKey(userData.id);
+            let resolvedThumbnailUrl = '';
 
-            const thumbnailUpload = await uploadProductImage(
-                thumbnail[0],
-                userData.id,
-                productUploadKey,
-                'thumbnail',
-                0,
-            );
-            uploadedPaths.push(thumbnailUpload.path);
+            if (isAccessoryCategory(formData.category)) {
+                const thumbnailUpload = await uploadProductImage(
+                    thumbnail[0],
+                    userData.id,
+                    productUploadKey,
+                    'thumbnail',
+                    0,
+                );
+                uploadedPaths.push(thumbnailUpload.path);
+                resolvedThumbnailUrl = thumbnailUpload.publicUrl;
+            } else {
+                const extractedVariant = parsedVariants.find((variant) => variant.extractedOutfitUrl !== null);
+                if (!extractedVariant || extractedVariant.extractedOutfitUrl === null) {
+                    throw new Error('At least one extracted outfit image is required for non-accessory products.');
+                }
+                resolvedThumbnailUrl = extractedVariant.extractedOutfitUrl;
+            }
 
             const galleryUploads: UploadedImageResult[] = [];
             for (let imageIndex = 0; imageIndex < images.length; imageIndex += 1) {
@@ -369,7 +645,7 @@ export default function UploadProductScreen() {
                 name: normalizedName,
                 category: formData.category,
                 description: normalizedDescription,
-                thumbnail_url: thumbnailUpload.publicUrl,
+                thumbnail_url: resolvedThumbnailUrl,
                 shop_id: shopData.id,
                 shop_name: shopData.shop_name,
                 tags: normalizedTags,
@@ -413,6 +689,9 @@ export default function UploadProductScreen() {
                     stock: variant.stock,
                     sale_price: variant.salePrice,
                     sale_end_date: variant.saleEndDate,
+                    is_full_body: variant.isFullBody,
+                    try_on_image_url: variant.tryOnImageUrl,
+                    extracted_outfit_url: variant.extractedOutfitUrl,
                 };
             });
 
@@ -424,8 +703,8 @@ export default function UploadProductScreen() {
                 throw new Error(variantInsertError.message);
             }
 
-            Alert.alert('Success', 'Product published successfully!', [
-                { text: 'OK', onPress: () => router.replace('/home/seller-dashboard') }
+            AppAlert.alert('Success', 'Product published successfully!', [
+                { text: 'OK', onPress: () => router.push('/home/seller-dashboard') }
             ]);
         } catch (e: unknown) {
             const message = e instanceof Error ? e.message : 'Failed to publish product.';
@@ -444,7 +723,7 @@ export default function UploadProductScreen() {
                 console.warn('[upload-product] Rollback cleanup failed:', cleanupError);
             }
 
-            Alert.alert('Error', message);
+            AppAlert.alert('Error', message);
         } finally {
             setIsLoading(false);
         }
@@ -457,7 +736,7 @@ export default function UploadProductScreen() {
      */
     const handleAutoGenerate = useCallback(async (): Promise<void> => {
         if (thumbnail.length === 0) {
-            Alert.alert('No Thumbnail', 'Please add a thumbnail image first.');
+            AppAlert.alert('No Thumbnail', 'Please add a thumbnail image first.');
             return;
         }
 
@@ -496,18 +775,18 @@ export default function UploadProductScreen() {
 
             if (res.description) {
                 setDescription(res.description);
-                Alert.alert('Done!', 'Description generated. You can edit it before publishing.');
+                AppAlert.alert('Done!', 'Description generated. You can edit it before publishing.');
             }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Failed to generate description';
-            Alert.alert('Generation Failed', msg);
+            AppAlert.alert('Generation Failed', msg);
         } finally {
             setIsGenerating(false);
         }
     }, [thumbnail]);
 
     return (
-        <View style={[styles.screen, { backgroundColor: theme.background }]}>
+        <SafeScreen style={[styles.screen, { backgroundColor: theme.background }]} edges={UPLOAD_SAFE_AREA_EDGES}>
             <ScrollView style={styles.container}>
                 <View style={styles.formContainer}>
                 <Text style={[styles.headerText, { color: theme.textPrimary }]}>Upload New Product</Text>
@@ -531,7 +810,26 @@ export default function UploadProductScreen() {
                                 label="Category"
                                 value={value}
                                 options={PRODUCT_CATEGORY_OPTIONS}
-                                onSelect={onChange}
+                                onSelect={(nextCategoryValue) => {
+                                    onChange(nextCategoryValue);
+                                    setSelectedCategory(nextCategoryValue);
+
+                                    if (nextCategoryValue === 'accessory') {
+                                        setVariants((previousVariants) => previousVariants.map((variant) => {
+                                            return {
+                                                ...variant,
+                                                is_full_body: false,
+                                                try_on_image: null,
+                                                try_on_image_url: null,
+                                                try_on_image_storage_path: null,
+                                                extracted_outfit_url: null,
+                                                extracted_outfit_storage_path: null,
+                                                extraction_error: null,
+                                                is_extracting: false,
+                                            };
+                                        }));
+                                    }
+                                }}
                                 placeholder={CATEGORY_PLACEHOLDER}
                                 error={errors.category?.message as string | undefined}
                             />
@@ -539,13 +837,23 @@ export default function UploadProductScreen() {
                     }}
                 />
 
-                <ImageUploader
-                    label="Thumbnail (Max 1)"
-                    images={thumbnail}
-                    maxCount={1}
-                    onAdd={(img) => setThumbnail([img])}
-                    onRemove={() => setThumbnail([])}
-                />
+                {selectedCategory === 'accessory' ? (
+                    <ImageUploader
+                        label="Thumbnail (Max 1)"
+                        images={thumbnail}
+                        maxCount={1}
+                        onAdd={(img) => setThumbnail([img])}
+                        onRemove={() => setThumbnail([])}
+                    />
+                ) : (
+                    <View style={[styles.thumbnailInfoContainer, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}>
+                        <Text style={[styles.thumbnailInfoText, { color: theme.textSecondary }]}>
+                            {selectedCategory === ''
+                                ? 'Select a category to configure thumbnail behavior. Accessories require manual thumbnail upload.'
+                                : 'Non-accessory products use extracted outfit images as the product thumbnail automatically.'}
+                        </Text>
+                    </View>
+                )}
 
                 <ImageUploader
                     label="Product Images (Max 3)"
@@ -579,21 +887,23 @@ export default function UploadProductScreen() {
                 <VariantFieldGroup
                     variants={variants}
                     onChange={setVariants}
+                    isAccessoryCategory={selectedCategory === 'accessory'}
+                    onSelectTryOnImage={handleSelectTryOnImage}
                 />
 
-                <TouchableOpacity
-                    style={[styles.submitBtn, { backgroundColor: theme.primary, opacity: isLoading ? 0.7 : 1 }]}
+                <RipplePressable
+                    style={[styles.submitBtn, { backgroundColor: theme.primary, opacity: (isLoading || hasExtractingVariants) ? 0.7 : 1 }]}
                     onPress={handleSubmit(onSubmit)}
-                    disabled={isLoading}
+                    disabled={isLoading || hasExtractingVariants}
                 >
-                    <Text style={styles.submitBtnText}>{isLoading ? 'Publishing...' : 'Publish Product'}</Text>
-                </TouchableOpacity>
+                    <Text style={styles.submitBtnText}>{isLoading ? 'Publishing...' : hasExtractingVariants ? 'Waiting for extraction...' : 'Publish Product'}</Text>
+                </RipplePressable>
                     <View style={{ height: 40 }} />
                 </View>
             </ScrollView>
 
             {isLoading && <LoadingIndicator overlay={true} message="Publishing product..." />}
-        </View>
+        </SafeScreen>
     );
 }
 
@@ -633,5 +943,16 @@ const styles = StyleSheet.create({
     },
     editorLoadingText: {
         fontSize: 13,
+    },
+    thumbnailInfoContainer: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        marginBottom: 20,
+    },
+    thumbnailInfoText: {
+        fontSize: 13,
+        lineHeight: 18,
     },
 });

@@ -61,7 +61,7 @@ export default function Index(): React.ReactNode {
             <SafeScreen>
                 <Animated.View
                     entering={Animation.Presets.FadeInDown}
-                    exiting={Animation.Presets.FadeOutUp}
+                    exiting={Animation.Presets.FadeOutDown}
                     style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                     <ActivityIndicator size="small" color={theme.primary} />
                 </Animated.View>
@@ -73,7 +73,7 @@ export default function Index(): React.ReactNode {
         <SafeScreen>
             <Animated.View
                 entering={Animation.Presets.FadeInDown}
-                exiting={Animation.Presets.FadeOutUp}
+                exiting={Animation.Presets.FadeOutDown}
                 style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <ActivityIndicator size="small" color={theme.primary} />
             </Animated.View>

@@ -1,16 +1,10 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
 import * as Linking from 'expo-linking';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    AppState,
-    AppStateStatus,
-    BackHandler,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+    AppState, AppStateStatus, BackHandler, ScrollView, StyleSheet, Text, View
 } from 'react-native';
 import { LoadingModal } from '../../components/ui/loading-modal';
 import { SafeScreen } from '../../components/ui/safe-screen';
@@ -68,13 +62,13 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
 
     const openPaymentUrl = useCallback(async (): Promise<void> => {
         if (paymentUrl === undefined || paymentUrl.length === 0) {
-            Alert.alert('Error', 'No payment URL available.');
+            AppAlert.alert('Error', 'No payment URL available.');
             return;
         }
         try {
             await Linking.openURL(paymentUrl);
         } catch {
-            Alert.alert('Error', 'Unable to open payment page. Please try again.');
+            AppAlert.alert('Error', 'Unable to open payment page. Please try again.');
         }
     }, [paymentUrl]);
 
@@ -195,7 +189,7 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
                 return true;
             }
             if (pageState === 'awaiting') {
-                Alert.alert(
+                AppAlert.alert(
                     'Cancel Payment',
                     'Are you sure you want to cancel this payment?',
                     [
@@ -231,9 +225,9 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
         return (
             <SafeScreen style={styles.root}>
                 <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.cardBackground }]}>
-                    <TouchableOpacity
+                    <RipplePressable
                         onPress={() => {
-                            Alert.alert(
+                            AppAlert.alert(
                                 'Cancel Payment',
                                 'Are you sure you want to cancel this payment?',
                                 [
@@ -250,7 +244,7 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
                         id="cancel-payment"
                     >
                         <Text style={[styles.cancelBtnText, { color: theme.error }]}>✕ Cancel</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                     <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Payment</Text>
                     <View style={{ width: 80 }} />
                 </View>
@@ -278,21 +272,21 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
                         </View>
                     </View>
 
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[styles.paidBtn, { backgroundColor: theme.primary }]}
                         onPress={startPolling}
                         id="ive-paid-button"
                     >
                         <Text style={[styles.paidBtnText, { color: theme.white }]}>I've Paid ✓</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
 
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[styles.reopenBtn, { borderColor: theme.border }]}
                         onPress={() => { void openPaymentUrl(); }}
                         id="reopen-payment-url"
                     >
                         <Text style={[styles.reopenBtnText, { color: theme.textSecondary }]}>↗ Open Payment Page Again</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 </ScrollView>
             </SafeScreen>
         );
@@ -326,17 +320,17 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
                         You'll receive a confirmation email shortly. Track your order in My Orders.
                     </Text>
 
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[styles.primaryBtn, { backgroundColor: theme.primary }]}
                         onPress={() =>
-                            router.replace('/home/catalog' as Parameters<typeof router.replace>[0])
+                            router.push('/home/catalog' as Parameters<typeof router.push>[0])
                         }
                         id="go-to-catalog"
                     >
                         <Text style={[styles.primaryBtnText, { color: theme.white }]}>Continue Shopping</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
 
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[styles.secondaryBtn, { borderColor: theme.border }]}
                         onPress={() =>
                             router.push('/home/catalog' as Parameters<typeof router.push>[0])
@@ -344,7 +338,7 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
                         id="view-orders"
                     >
                         <Text style={[styles.secondaryBtnText, { color: theme.textPrimary }]}>View My Orders</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 </ScrollView>
             </SafeScreen>
         );
@@ -364,23 +358,23 @@ export default function OrderConfirmationScreen(): React.JSX.Element {
                     Please check your payment details and try again. If the problem persists, contact support.
                 </Text>
 
-                <TouchableOpacity
+                <RipplePressable
                     style={[styles.primaryBtn, { backgroundColor: theme.primary }]}
                     onPress={() => router.back()}
                     id="retry-payment"
                 >
                     <Text style={[styles.primaryBtnText, { color: theme.white }]}>Try Again</Text>
-                </TouchableOpacity>
+                </RipplePressable>
 
-                <TouchableOpacity
+                <RipplePressable
                     style={[styles.secondaryBtn, { borderColor: theme.border }]}
                     onPress={() =>
-                        router.replace('/home/catalog' as Parameters<typeof router.replace>[0])
+                        router.push('/home/catalog' as Parameters<typeof router.push>[0])
                     }
                     id="go-to-catalog-failed"
                 >
                     <Text style={[styles.secondaryBtnText, { color: theme.textPrimary }]}>Go to Catalog</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             </ScrollView>
         </SafeScreen>
     );

@@ -11,6 +11,9 @@ export type { CatalogProductItem, ShopCardItem };
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 export const CATALOG_PAGE_SIZE = 20;
+const CATALOG_CACHE_STALE_TIME_MS = 10 * 60 * 1000;
+const CATALOG_CACHE_GC_TIME_MS = 30 * 60 * 1000;
+const CATALOG_QUERY_TIMEOUT_MS = 12000;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,11 +23,34 @@ type ProductWithVariants = Tables<'products'> & {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+async function withTimeout<T>(
+    promise: PromiseLike<T>,
+    label: string,
+    timeoutMs: number = CATALOG_QUERY_TIMEOUT_MS
+): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+            reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+    });
+
+    try {
+        return await Promise.race([Promise.resolve(promise), timeoutPromise]);
+    } finally {
+        if (timeoutId !== null) {
+            clearTimeout(timeoutId);
+        }
+    }
+}
+
 export const transformProduct = (row: ProductWithVariants): CatalogProductItem => {
     const variants = row.product_variants ?? [];
     const prices = variants.map((v) => v.price);
     const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
     const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+    const totalStock = variants.reduce((sum, variant) => sum + variant.stock, 0);
     const now = new Date();
 
     const saleVariant = variants.find(
@@ -42,6 +68,7 @@ export const transformProduct = (row: ProductWithVariants): CatalogProductItem =
         thumbnailUrl: row.thumbnail_url ?? '',
         minPrice,
         maxPrice,
+        totalStock,
         salePrice: saleVariant?.sale_price ?? null,
         originalPriceForSale: saleVariant ? saleVariant.price : null,
         rating: row.rating_avg ?? 0,
@@ -80,7 +107,11 @@ async function fetchProductsPage(
 
     q = q.range(pageParam, pageParam + CATALOG_PAGE_SIZE - 1);
 
-    const { data } = await q;
+    const { data, error } = await withTimeout(q, 'catalog.products.page');
+    if (error) {
+        throw new Error(error.message);
+    }
+
     let transformed = ((data ?? []) as ProductWithVariants[]).map(transformProduct);
 
     // Client-side price filter (variant data required)
@@ -102,12 +133,19 @@ async function fetchProductsPage(
 
 async function fetchFeaturedShops(): Promise<ShopCardItem[]> {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const { data } = await supabase
+    const { data, error } = await withTimeout(
+        supabase
         .from('order_items')
         .select('shop_id')
         .gte('created_at', sevenDaysAgo)
         .not('shop_id', 'is', null)
-        .limit(100);
+        .limit(100),
+        'catalog.shops.order_items'
+    );
+
+    if (error) {
+        throw new Error(error.message);
+    }
 
     if (!data || data.length === 0) return [];
 
@@ -123,10 +161,17 @@ async function fetchFeaturedShops(): Promise<ShopCardItem[]> {
 
     if (topShopIds.length === 0) return [];
 
-    const { data: shopData } = await supabase
+    const { data: shopData, error: shopError } = await withTimeout(
+        supabase
         .from('shops')
         .select('uid, shop_name, city, province, banner_url, id')
-        .in('id', topShopIds);
+        .in('id', topShopIds),
+        'catalog.shops.details'
+    );
+
+    if (shopError) {
+        throw new Error(shopError.message);
+    }
 
     return (shopData ?? []).map((s) => ({
         uid: s.uid,
@@ -140,11 +185,18 @@ async function fetchFeaturedShops(): Promise<ShopCardItem[]> {
 
 async function fetchTrendingProducts(): Promise<CatalogProductItem[]> {
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-    const { data: viewData } = await supabase
+    const { data: viewData, error: viewError } = await withTimeout(
+        supabase
         .from('product_views')
         .select('product_id')
         .gte('viewed_at', twoDaysAgo)
-        .limit(200);
+        .limit(200),
+        'catalog.trending.views'
+    );
+
+    if (viewError) {
+        throw new Error(viewError.message);
+    }
 
     if (!viewData || viewData.length === 0) return [];
 
@@ -157,40 +209,68 @@ async function fetchTrendingProducts(): Promise<CatalogProductItem[]> {
         .slice(0, 20)
         .map(([id]) => Number(id));
 
-    const { data: prodData } = await supabase
+    const { data: prodData, error: prodError } = await withTimeout(
+        supabase
         .from('products')
         .select('*, product_variants(*)')
         .in('id', topIds)
-        .is('deleted_at', null);
+        .is('deleted_at', null),
+        'catalog.trending.products'
+    );
+
+    if (prodError) {
+        throw new Error(prodError.message);
+    }
 
     return ((prodData ?? []) as ProductWithVariants[]).map(transformProduct);
 }
 
 async function fetchRecommendations(userId: number): Promise<{ products: CatalogProductItem[]; hasActivity: boolean }> {
-    const { data: actData } = await supabase
+    const { data: actData, error: activityError } = await withTimeout(
+        supabase
         .from('user_activity_log')
         .select('id')
         .eq('user_id', userId)
-        .limit(1);
+        .limit(1),
+        'catalog.recommendations.activity'
+    );
+
+    if (activityError) {
+        throw new Error(activityError.message);
+    }
 
     const hasActivity = (actData?.length ?? 0) > 0;
     if (!hasActivity) return { products: [], hasActivity: false };
 
-    const { data: recData } = await supabase
+    const { data: recData, error: recommendationsError } = await withTimeout(
+        supabase
         .from('user_recommendations')
         .select('product_id, score')
         .eq('user_id', userId)
         .order('score', { ascending: false })
-        .limit(20);
+        .limit(20),
+        'catalog.recommendations.list'
+    );
+
+    if (recommendationsError) {
+        throw new Error(recommendationsError.message);
+    }
 
     if (!recData || recData.length === 0) return { products: [], hasActivity: true };
 
     const productIds = recData.map((r) => r.product_id);
-    const { data: prodData } = await supabase
+    const { data: prodData, error: productsError } = await withTimeout(
+        supabase
         .from('products')
         .select('*, product_variants(*)')
         .in('id', productIds)
-        .is('deleted_at', null);
+        .is('deleted_at', null),
+        'catalog.recommendations.products'
+    );
+
+    if (productsError) {
+        throw new Error(productsError.message);
+    }
 
     return {
         products: ((prodData ?? []) as ProductWithVariants[]).map(transformProduct),
@@ -213,7 +293,13 @@ export function useCatalogProducts(filters: CatalogFilters) {
             fetchProductsPage(filters, pageParam as number),
         initialPageParam: 0,
         getNextPageParam: (lastPage) => lastPage.nextOffset,
-        staleTime: 2 * 60 * 1000,
+        placeholderData: (previousData) => previousData,
+        staleTime: CATALOG_CACHE_STALE_TIME_MS,
+        gcTime: CATALOG_CACHE_GC_TIME_MS,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        retry: 0,
     });
 }
 
@@ -225,7 +311,13 @@ export function useFeaturedShops() {
     return useQuery({
         queryKey: queryKeys.products.featured,
         queryFn: fetchFeaturedShops,
-        staleTime: 5 * 60 * 1000,
+        placeholderData: (previousData) => previousData,
+        staleTime: CATALOG_CACHE_STALE_TIME_MS,
+        gcTime: CATALOG_CACHE_GC_TIME_MS,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        retry: 0,
     });
 }
 
@@ -237,7 +329,13 @@ export function useTrendingProducts() {
     return useQuery({
         queryKey: queryKeys.products.trending,
         queryFn: fetchTrendingProducts,
-        staleTime: 2 * 60 * 1000,
+        placeholderData: (previousData) => previousData,
+        staleTime: CATALOG_CACHE_STALE_TIME_MS,
+        gcTime: CATALOG_CACHE_GC_TIME_MS,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        retry: 0,
     });
 }
 
@@ -250,6 +348,12 @@ export function useRecommendations(userId: number | null) {
         queryKey: queryKeys.products.recommendations(userId ?? 0),
         queryFn: () => fetchRecommendations(userId!),
         enabled: userId !== null,
-        staleTime: 5 * 60 * 1000,
+        placeholderData: (previousData) => previousData,
+        staleTime: CATALOG_CACHE_STALE_TIME_MS,
+        gcTime: CATALOG_CACHE_GC_TIME_MS,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        retry: 0,
     });
 }

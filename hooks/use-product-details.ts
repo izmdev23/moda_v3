@@ -89,7 +89,7 @@ async function fetchProductImages(productId: number): Promise<string[]> {
 async function fetchProductVariants(productId: number): Promise<VariantItem[]> {
     const { data } = await supabase
         .from('product_variants')
-        .select('*')
+        .select('id, uid, name, price, sale_price, sale_start_date, sale_end_date, stock, image_url, extracted_outfit_url, is_full_body')
         .eq('product_id', productId);
 
     return (data ?? []).map((v) => ({
@@ -102,6 +102,8 @@ async function fetchProductVariants(productId: number): Promise<VariantItem[]> {
         saleEndDate: v.sale_end_date,
         stock: v.stock,
         imageUrl: v.image_url,
+        extractedOutfitUrl: v.extracted_outfit_url,
+        isFullBody: v.is_full_body,
     }));
 }
 

@@ -1,15 +1,26 @@
+import { ImageProps as ExpoImageProps, Image, ImageContentFit } from 'expo-image';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Animated, ImageProps, ImageStyle, StyleProp, StyleSheet, Text, View } from 'react-native';
+import { ImageStyle, StyleProp, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from './theme-provider';
 
 const MAX_IMAGE_RETRY_ATTEMPTS = 3;
 const IMAGE_RETRY_DELAY_MS = 700;
+const IMAGE_TRANSITION_MS = 220;
 
-export interface ImageWithFallbackProps extends Omit<ImageProps, 'source'> {
+type SupportedResizeMode = 'cover' | 'contain' | 'stretch' | 'repeat' | 'center';
+
+export interface ImageWithFallbackProps extends Omit<ExpoImageProps, 'source' | 'contentFit' | 'style'> {
     readonly uri?: string | null;
+    readonly src?: string | null;
     readonly style?: StyleProp<ImageStyle>;
-    readonly resizeMode?: 'cover' | 'contain' | 'stretch' | 'repeat' | 'center';
+    readonly resizeMode?: SupportedResizeMode;
     readonly showProgressive?: boolean;
+}
+
+function mapResizeModeToContentFit(resizeMode: SupportedResizeMode): ImageContentFit {
+    if (resizeMode === 'contain' || resizeMode === 'center') return 'contain';
+    if (resizeMode === 'stretch') return 'fill';
+    return 'cover';
 }
 
 /**
@@ -20,6 +31,7 @@ export interface ImageWithFallbackProps extends Omit<ImageProps, 'source'> {
  */
 export const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
     uri,
+    src,
     style,
     resizeMode = 'cover',
     showProgressive = true,
@@ -27,23 +39,22 @@ export const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
 }) => {
     const { theme } = useTheme();
     const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-    const [opacity] = useState(new Animated.Value(showProgressive ? 0 : 1));
     const [retryAttempt, setRetryAttempt] = useState<number>(0);
+    const resolvedSourceUri = uri ?? src ?? '';
 
     useEffect((): void => {
         setStatus('loading');
         setRetryAttempt(0);
-        opacity.setValue(showProgressive ? 0 : 1);
-    }, [uri, showProgressive, opacity]);
+    }, [resolvedSourceUri, showProgressive]);
 
     const resolvedUri = useMemo((): string => {
-        if (!uri) return '';
-        if (retryAttempt === 0) return uri;
-        const joiner = uri.includes('?') ? '&' : '?';
-        return `${uri}${joiner}retry=${retryAttempt}`;
-    }, [uri, retryAttempt]);
+        if (!resolvedSourceUri) return '';
+        if (retryAttempt === 0) return resolvedSourceUri;
+        const joiner = resolvedSourceUri.includes('?') ? '&' : '?';
+        return `${resolvedSourceUri}${joiner}retry=${retryAttempt}`;
+    }, [resolvedSourceUri, retryAttempt]);
 
-    if (!uri) {
+    if (!resolvedSourceUri) {
         return (
             <View style={[styles.placeholder, { backgroundColor: theme.border }, style]}>
                 <Text style={[styles.errorText, { color: theme.gray }]}>No Image</Text>
@@ -53,13 +64,6 @@ export const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
 
     const onLoad = (): void => {
         setStatus('success');
-        if (showProgressive) {
-            Animated.timing(opacity, {
-                toValue: 1,
-                duration: 300,
-                useNativeDriver: true,
-            }).start();
-        }
     };
 
     const onError = (): void => {
@@ -86,12 +90,15 @@ export const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
                     <Text style={[styles.errorText, { color: theme.error }]}>Image Failed</Text>
                 </View>
             ) : (
-                <Animated.Image
+                <Image
                     source={{ uri: resolvedUri }}
-                    style={[StyleSheet.absoluteFill, { opacity }]}
-                    resizeMode={resizeMode}
+                    style={StyleSheet.absoluteFill}
+                    contentFit={mapResizeModeToContentFit(resizeMode)}
+                    transition={showProgressive ? IMAGE_TRANSITION_MS : 0}
+                    cachePolicy="memory-disk"
                     onLoad={onLoad}
                     onError={onError}
+                    recyclingKey={resolvedUri}
                     {...rest}
                 />
             )}

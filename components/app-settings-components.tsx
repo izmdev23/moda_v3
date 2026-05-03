@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Switch, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { StyleSheet, Switch, Text, View, ViewStyle } from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { useTheme } from './ui/theme-provider';
 
 // ─── SettingsHeader ─────────────────────────────────────────────────────────
@@ -114,7 +115,7 @@ export const SettingsNavigationItem: React.FC<SettingsNavigationItemProps> = ({
 }) => {
     const { theme } = useTheme();
     return (
-        <TouchableOpacity
+        <RipplePressable
             style={[navStyles.container, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }, style]}
             onPress={onPress}
             activeOpacity={0.7}
@@ -135,7 +136,7 @@ export const SettingsNavigationItem: React.FC<SettingsNavigationItemProps> = ({
                 <Text style={[navStyles.valueText, { color: theme.textSecondary }]}>{value}</Text>
             )}
             <Ionicons name="chevron-forward" size={20} color={theme.gray} />
-        </TouchableOpacity>
+        </RipplePressable>
     );
 };
 

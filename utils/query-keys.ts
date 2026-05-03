@@ -12,10 +12,12 @@
  * queryClient.invalidateQueries({ queryKey: queryKeys.products.byUid(uid) });
  */
 
+import type { ProductCategory } from './types';
+
 export type CatalogFilters = {
     query: string;
     isShopSearch: boolean;
-    category: string | null;
+    category: ProductCategory | null;
     minPrice: number | null;
     maxPrice: number | null;
     minRating: number | null;

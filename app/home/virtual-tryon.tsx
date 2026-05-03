@@ -1,13 +1,11 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+    ScrollView, StyleSheet, Text, View
 } from 'react-native';
 import { SafeScreen } from '../../components/ui/safe-screen';
 import { SkeletonLoader } from '../../components/ui/skeleton-loader';
@@ -21,6 +19,16 @@ import {
     UsageLimitIndicator,
 } from '../../components/virtual-tryon-components';
 import { supabase } from '../../supabase/supabaseClient';
+import {
+    VTON_FAST_POLL_ATTEMPTS,
+    VTON_FAST_POLL_INTERVAL_MS,
+    VTON_FIRST_POLL_DELAY_MS,
+    VTON_MAX_CONSECUTIVE_POLL_ERRORS,
+    VTON_STEADY_POLL_INTERVAL_MS,
+    VTON_TIMEOUT_MS,
+    VTON_UPLOAD_COMPRESS_QUALITY,
+    VTON_UPLOAD_MAX_DIMENSION_PX,
+} from '../../utils/constants';
 import { vtonUserPhotosBucket } from '../../utils/database/vton-results-bucket';
 import {
     checkVtonLimits,
@@ -32,10 +40,10 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type TryOnStep = 'idle' | 'preview' | 'uploading' | 'processing' | 'result' | 'gallery' | 'error';
-type SupportedVtonCategory = 'tops' | 'bottoms' | 'full_body';
+type SupportedVtonCategory = 'headwear' | 'upperwear' | 'lowerwear' | 'footwear';
 
-const SUPPORTED_VTON_CATEGORIES: readonly SupportedVtonCategory[] = ['tops', 'bottoms', 'full_body'];
-const VTON_CATEGORY_DISABLED_MESSAGE = 'Virtual try-on is only available for tops, bottoms, and full_body products.';
+const SUPPORTED_VTON_CATEGORIES: readonly SupportedVtonCategory[] = ['headwear', 'upperwear', 'lowerwear', 'footwear'];
+const VTON_CATEGORY_DISABLED_MESSAGE = 'Virtual try-on is only available for headwear, upperwear, lowerwear, and footwear products.';
 
 function isSupportedVtonCategory(category: string): category is SupportedVtonCategory {
     return SUPPORTED_VTON_CATEGORIES.includes(category as SupportedVtonCategory);
@@ -65,15 +73,11 @@ type ActivePrediction = {
 type PendingSelectedImage = {
     readonly uri: string;
     readonly mimeType: string;
+    readonly width: number;
+    readonly height: number;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-/** How often (ms) the client polls the edge function for prediction status. */
-const POLL_INTERVAL_MS = 3_000;
-
-/** Delay (ms) before the first poll after starting a prediction. */
-const FIRST_POLL_DELAY_MS = 2_000;
 
 const DEFAULT_VTON_LIMITS: VtonUsageLimits = {
     canUse: true,
@@ -83,6 +87,30 @@ const DEFAULT_VTON_LIMITS: VtonUsageLimits = {
     monthlyResetAt: '',
     limitType: null,
 };
+
+function resolveUploadExtension(mimeType: string): 'jpg' | 'png' | 'webp' {
+    const normalizedMimeType = mimeType.trim().toLowerCase();
+    if (normalizedMimeType === 'image/png') return 'png';
+    if (normalizedMimeType === 'image/webp') return 'webp';
+    return 'jpg';
+}
+
+function resolveImageResizeAction(width: number, height: number): ImageManipulator.Action[] {
+    if (width <= 0 || height <= 0) {
+        return [];
+    }
+
+    const maxDimension = Math.max(width, height);
+    if (maxDimension <= VTON_UPLOAD_MAX_DIMENSION_PX) {
+        return [];
+    }
+
+    if (width >= height) {
+        return [{ resize: { width: VTON_UPLOAD_MAX_DIMENSION_PX } }];
+    }
+
+    return [{ resize: { height: VTON_UPLOAD_MAX_DIMENSION_PX } }];
+}
 
 function normalizeResultUrl(raw: CheckResponse['resultUrl']): string {
     if (typeof raw === 'string') {
@@ -114,12 +142,13 @@ function normalizeResultUrl(raw: CheckResponse['resultUrl']): string {
  *
  * Uses a two-phase async architecture:
  *  1. `start` — submits the Replicate prediction, returns immediately.
- *  2. `check` — polled every {@link POLL_INTERVAL_MS}ms by the client.
+ *  2. `check` — client-polled with an adaptive interval strategy.
  *
  * Params (all strings per Expo Router):
  *   productId       – numeric product id as string
  *   productName     – display name of the product
  *   garmentImageUrl – URL of the garment image
+ *   isFullBody      – whether the selected variant should be treated as full-body
  *   userId          – numeric user id as string, omitted when unauthenticated
  */
 export default function VirtualTryOnScreen(): React.JSX.Element {
@@ -129,6 +158,7 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
         productName: string;
         garmentImageUrl: string;
         productCategory: string;
+        isFullBody?: string;
         userId: string;
     }>();
 
@@ -136,6 +166,7 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
     const productName = params.productName ?? '';
     const garmentImageUrl = params.garmentImageUrl ?? '';
     const productCategory = params.productCategory ?? '';
+    const isFullBody = (params.isFullBody ?? 'false') === 'true';
     const userId = params.userId ? parseInt(params.userId, 10) : null;
     const isCategorySupported = isSupportedVtonCategory(productCategory);
 
@@ -153,8 +184,11 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const firstPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const activePrediction = useRef<ActivePrediction | null>(null);
     const consecutiveErrors = useRef<number>(0);
+    const pollAttemptCountRef = useRef<number>(0);
+    const currentPollIntervalMsRef = useRef<number>(VTON_FAST_POLL_INTERVAL_MS);
 
     // ── Load usage limits on mount ─────────────────────────────────────────
 
@@ -225,7 +259,37 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
             clearTimeout(firstPollRef.current);
             firstPollRef.current = null;
         }
+        if (timeoutRef.current !== null) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
+        pollAttemptCountRef.current = 0;
+        currentPollIntervalMsRef.current = VTON_FAST_POLL_INTERVAL_MS;
         activePrediction.current = null;
+    }, []);
+
+    const optimizeTryOnInputImage = useCallback(async (selectedImage: PendingSelectedImage): Promise<PendingSelectedImage> => {
+        const resizeActions = resolveImageResizeAction(selectedImage.width, selectedImage.height);
+        if (resizeActions.length === 0) {
+            return selectedImage;
+        }
+
+        try {
+            const optimized = await ImageManipulator.manipulateAsync(
+                selectedImage.uri,
+                resizeActions,
+                { compress: VTON_UPLOAD_COMPRESS_QUALITY, format: ImageManipulator.SaveFormat.JPEG },
+            );
+
+            return {
+                uri: optimized.uri,
+                mimeType: 'image/jpeg',
+                width: optimized.width,
+                height: optimized.height,
+            };
+        } catch {
+            return selectedImage;
+        }
     }, []);
 
     /**
@@ -240,12 +304,8 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
         let data: CheckResponse | null = null;
 
         try {
-            const { data: sessionData } = await supabase.auth.getSession();
-            const token = sessionData.session?.access_token ?? '';
-
             const { data: rawData, error } = await supabase.functions.invoke('virtual-tryon', {
                 body: { action: 'check', predictionId: pred.predictionId, uid: pred.uid },
-                headers: { Authorization: `Bearer ${token}` },
             });
 
             if (error !== null) {
@@ -271,7 +331,7 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
                 }
 
                 consecutiveErrors.current += 1;
-                if (consecutiveErrors.current >= 5) {
+                if (consecutiveErrors.current >= VTON_MAX_CONSECUTIVE_POLL_ERRORS) {
                     stopPolling();
                     setErrorMessage(detailedErrorMessage || 'Server error. Please try again.');
                     setStep('error');
@@ -290,6 +350,19 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
 
         if (isCancelled.current) return;
 
+        pollAttemptCountRef.current += 1;
+        if (
+            pollAttemptCountRef.current >= VTON_FAST_POLL_ATTEMPTS
+            && pollIntervalRef.current !== null
+            && currentPollIntervalMsRef.current === VTON_FAST_POLL_INTERVAL_MS
+        ) {
+            clearInterval(pollIntervalRef.current);
+            currentPollIntervalMsRef.current = VTON_STEADY_POLL_INTERVAL_MS;
+            pollIntervalRef.current = setInterval(() => {
+                void pollOnce();
+            }, VTON_STEADY_POLL_INTERVAL_MS);
+        }
+
         if (data.status === 'succeeded') {
             stopPolling();
             const normalizedResultUrl = normalizeResultUrl(data.resultUrl);
@@ -300,10 +373,24 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
             }
             setResultUrl(normalizedResultUrl);
             setStep('result');
-            if (userId !== null) {
-                const updated = await checkVtonLimits(userId);
-                setLimits(updated);
-            }
+            setLimits((previousLimits) => {
+                if (previousLimits === null) {
+                    return previousLimits;
+                }
+
+                const dailyCount = previousLimits.dailyCount + 1;
+                const monthlyCount = previousLimits.monthlyCount + 1;
+                const dailyLimited = dailyCount >= VTON_DAILY_LIMIT;
+                const monthlyLimited = monthlyCount >= VTON_MONTHLY_LIMIT;
+
+                return {
+                    ...previousLimits,
+                    dailyCount,
+                    monthlyCount,
+                    canUse: !(dailyLimited || monthlyLimited),
+                    limitType: dailyLimited ? 'daily' : monthlyLimited ? 'monthly' : null,
+                };
+            });
             return;
         }
 
@@ -316,7 +403,7 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
 
         // 'starting' or 'processing' — update label and keep polling
         setReplicateStatus(data.status as ReplicateStatus);
-    }, [stopPolling, userId]);
+    }, [stopPolling]);
 
     // ── Action handlers ────────────────────────────────────────────────────
 
@@ -327,11 +414,11 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
         router.back();
     }, [stopPolling]);
 
-    const handleImagePicked = useCallback(async (uri: string, mimeType: string): Promise<void> => {
+    const handleImagePicked = useCallback(async (selectedImage: PendingSelectedImage): Promise<void> => {
         if (userId === null) return;
 
         if (!isCategorySupported) {
-            Alert.alert('Virtual Try-On Unavailable', VTON_CATEGORY_DISABLED_MESSAGE);
+            AppAlert.alert('Virtual Try-On Unavailable', VTON_CATEGORY_DISABLED_MESSAGE);
             return;
         }
 
@@ -344,8 +431,10 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
 
         let humanImageUrl: string;
         try {
-            const path = `${userId}/${Date.now()}.jpg`;
-            const { publicUrl } = await vtonUserPhotosBucket.upload(path, uri, mimeType);
+            const optimizedInputImage = await optimizeTryOnInputImage(selectedImage);
+            const extension = resolveUploadExtension(optimizedInputImage.mimeType);
+            const path = `${userId}/${Date.now()}.${extension}`;
+            const { publicUrl } = await vtonUserPhotosBucket.upload(path, optimizedInputImage.uri, optimizedInputImage.mimeType);
             if (isCancelled.current) return;
             humanImageUrl = publicUrl;
         } catch (err: unknown) {
@@ -360,9 +449,6 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
         setStep('processing');
 
         try {
-            const { data: sessionData } = await supabase.auth.getSession();
-            const token = sessionData.session?.access_token ?? '';
-
             const { data: rawData, error } = await supabase.functions.invoke('virtual-tryon', {
                 body: {
                     action: 'start',
@@ -371,8 +457,8 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
                     garmentDescription: productName,
                     productCategory,
                     productId,
+                    isFullBody,
                 },
-                headers: { Authorization: `Bearer ${token}` },
             });
 
             if (isCancelled.current) return;
@@ -407,13 +493,23 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
             // ── Begin polling ─────────────────────────────────────────────
 
             consecutiveErrors.current = 0;
+            pollAttemptCountRef.current = 0;
+            currentPollIntervalMsRef.current = VTON_FAST_POLL_INTERVAL_MS;
             activePrediction.current = { predictionId: res.predictionId, uid: res.uid ?? null };
+            timeoutRef.current = setTimeout(() => {
+                if (isCancelled.current) {
+                    return;
+                }
+                stopPolling();
+                setErrorMessage('Generation is taking too long. Please try again.');
+                setStep('error');
+            }, VTON_TIMEOUT_MS);
 
             // First poll after a short delay (model takes a moment to queue)
-            firstPollRef.current = setTimeout(() => { void pollOnce(); }, FIRST_POLL_DELAY_MS);
+            firstPollRef.current = setTimeout(() => { void pollOnce(); }, VTON_FIRST_POLL_DELAY_MS);
 
-            // Recurring poll
-            pollIntervalRef.current = setInterval(() => { void pollOnce(); }, POLL_INTERVAL_MS);
+            // Recurring poll (starts fast, then transitions to steady interval)
+            pollIntervalRef.current = setInterval(() => { void pollOnce(); }, VTON_FAST_POLL_INTERVAL_MS);
 
         } catch (err: unknown) {
             if (isCancelled.current) return;
@@ -421,13 +517,13 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
             setErrorMessage(err instanceof Error ? err.message : 'An unexpected error occurred');
             setStep('error');
         }
-    }, [userId, isCategorySupported, garmentImageUrl, productName, productCategory, productId, pollOnce]);
+    }, [userId, isCategorySupported, optimizeTryOnInputImage, garmentImageUrl, productName, productCategory, productId, isFullBody, pollOnce, stopPolling]);
 
     const pickImage = useCallback(async (useCamera: boolean): Promise<void> => {
         if (isLimitsLoading) return;
 
         if (!isCategorySupported) {
-            Alert.alert('Virtual Try-On Unavailable', VTON_CATEGORY_DISABLED_MESSAGE);
+            AppAlert.alert('Virtual Try-On Unavailable', VTON_CATEGORY_DISABLED_MESSAGE);
             return;
         }
 
@@ -436,7 +532,7 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
             : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
         if (!permResult.granted) {
-            Alert.alert('Permission Required', `Please grant ${useCamera ? 'camera' : 'photo library'} access in settings.`);
+            AppAlert.alert('Permission Required', `Please grant ${useCamera ? 'camera' : 'photo library'} access in settings.`);
             return;
         }
 
@@ -455,16 +551,23 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
         const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
         if (!allowed.includes(mime.toLowerCase())) {
-            Alert.alert('Invalid Image', 'Please select a JPG, PNG, or WEBP photo.');
+            AppAlert.alert('Invalid Image', 'Please select a JPG, PNG, or WEBP photo.');
             return;
         }
+
+        const selectedImage: PendingSelectedImage = {
+            uri: asset.uri,
+            mimeType: mime,
+            width: asset.width ?? 0,
+            height: asset.height ?? 0,
+        };
 
         if (useCamera) {
-            void handleImagePicked(asset.uri, mime);
+            void handleImagePicked(selectedImage);
             return;
         }
 
-        setPendingImage({ uri: asset.uri, mimeType: mime });
+        setPendingImage(selectedImage);
         setStep('preview');
     }, [handleImagePicked, isCategorySupported, isLimitsLoading]);
 
@@ -510,7 +613,7 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
                     onProceed={() => {
                         const selected = pendingImage;
                         setPendingImage(null);
-                        void handleImagePicked(selected.uri, selected.mimeType);
+                        void handleImagePicked(selected);
                     }}
                 />
             );
@@ -532,14 +635,14 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
                     <Text style={styles.errorIcon}>❌</Text>
                     <Text style={[styles.errorTitle, { color: theme.textPrimary }]}>Try-On Failed</Text>
                     <Text style={[styles.errorMsg, { color: theme.textSecondary }]}>{errorMessage}</Text>
-                    <TouchableOpacity style={[styles.retryBtn, { backgroundColor: theme.primary }]} onPress={handleTryAgain}>
+                    <RipplePressable style={[styles.retryBtn, { backgroundColor: theme.primary }]} onPress={handleTryAgain}>
                         <Text style={[styles.retryBtnText, { color: theme.white }]}>Try Again</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={handleBack}>
+                    </RipplePressable>
+                    <RipplePressable onPress={handleBack}>
                         <Text style={[styles.supportText, { color: theme.textSecondary }]}>
                             Still having issues? Contact support.
                         </Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 </View>
             );
         }
@@ -605,32 +708,32 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
                                 <Text key={i} style={[styles.guideTip, { color: theme.textSecondary }]}>{tip}</Text>
                             ))}
                             <View style={styles.pickerBtnRow}>
-                                <TouchableOpacity
+                                <RipplePressable
                                     style={[styles.pickBtn, { backgroundColor: theme.primary }, isPickerDisabled && styles.btnDisabled]}
                                     onPress={() => void pickImage(true)}
                                     disabled={isPickerDisabled}
                                 >
                                     <Text style={[styles.pickBtnText, { color: theme.white }]}>📷 Camera</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
+                                </RipplePressable>
+                                <RipplePressable
                                     style={[styles.pickBtn, { borderColor: theme.primary, borderWidth: 1.5 }, isPickerDisabled && styles.btnDisabled]}
                                     onPress={() => void pickImage(false)}
                                     disabled={isPickerDisabled}
                                 >
                                     <Text style={[styles.pickBtnText, { color: theme.primary }]}>🖼️ Gallery</Text>
-                                </TouchableOpacity>
+                                </RipplePressable>
                             </View>
                         </View>
                     </>
                 )}
 
                 {userId !== null && (
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[styles.galleryBtn, { borderColor: theme.border }]}
                         onPress={() => setStep('gallery')}
                     >
                         <Text style={[styles.galleryBtnText, { color: theme.primary }]}>🗂️ View My Past Try-ons</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 )}
             </ScrollView>
         );
@@ -640,7 +743,7 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
         <SafeScreen>
             {!isGenerating && (
                 <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
-                    <TouchableOpacity
+                    <RipplePressable
                         style={styles.backBtn}
                         onPress={
                             step === 'gallery'
@@ -654,7 +757,7 @@ export default function VirtualTryOnScreen(): React.JSX.Element {
                         }
                     >
                         <Text style={[styles.backBtnText, { color: theme.primary }]}>‹ Back</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                     <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Virtual Try-On</Text>
                     <View style={styles.backBtn} />
                 </View>

@@ -1,3 +1,4 @@
+import type { TablesInsert } from '../supabase/database.types';
 import { BaseApi } from '../utils/database/api';
 
 // Mock the supersonic client
@@ -16,55 +17,71 @@ jest.mock('../supabase/supabaseClient', () => ({
 
 import { supabase } from '../supabase/supabaseClient';
 
+interface MockedSupabaseChain {
+    from: jest.Mock;
+    select: jest.Mock;
+    insert: jest.Mock;
+    update: jest.Mock;
+    delete: jest.Mock;
+    eq: jest.Mock;
+    range: jest.Mock;
+    single: jest.Mock;
+}
+
+const mockedSupabase = supabase as unknown as MockedSupabaseChain;
+
 describe('Database API Layer (Phase 3)', () => {
     beforeEach(() => {
         jest.clearAllMocks();
     });
 
     describe('BaseApi Class', () => {
-        interface TestData {
-            id: number;
-            uid: string;
-            name: string;
-        }
-        const api: BaseApi<TestData> = new BaseApi<TestData>('users' as any);
+        const api = new BaseApi('users');
 
         it('should correctly format a getByUid query', async () => {
             const mockResult = { data: { id: 1, uid: 'test-uid', name: 'Test' }, error: null };
-            (supabase.single as jest.Mock).mockResolvedValueOnce(mockResult);
+            mockedSupabase.single.mockResolvedValueOnce(mockResult);
 
             const result = await api.getByUid('test-uid');
 
-            expect(supabase.from).toHaveBeenCalledWith('users');
-            expect(supabase.select).toHaveBeenCalledWith('*');
-            expect(supabase.eq).toHaveBeenCalledWith('uid', 'test-uid');
+            expect(mockedSupabase.from).toHaveBeenCalledWith('users');
+            expect(mockedSupabase.select).toHaveBeenCalledWith('*');
+            expect(mockedSupabase.eq).toHaveBeenCalledWith('uid', 'test-uid');
             expect(result).toEqual(mockResult);
         });
 
         it('should correctly format an insert query', async () => {
             const mockResult = { data: { id: 1, name: 'New' }, error: null };
-            (supabase.single as jest.Mock).mockResolvedValueOnce(mockResult);
+            mockedSupabase.single.mockResolvedValueOnce(mockResult);
 
-            const payload = { name: 'New' };
+            const payload: TablesInsert<'users'> = {
+                first_name: 'Test',
+                last_name: 'User',
+                gender: 'male',
+                date_of_birth: '2000-01-01',
+                email: 'new-user@example.com',
+                role: 'buyer',
+                auth_id: '00000000-0000-0000-0000-000000000000',
+            };
             const result = await api.create(payload);
 
-            expect(supabase.from).toHaveBeenCalledWith('users');
-            expect(supabase.insert).toHaveBeenCalledWith(payload);
-            expect(supabase.single).toHaveBeenCalled();
+            expect(mockedSupabase.from).toHaveBeenCalledWith('users');
+            expect(mockedSupabase.insert).toHaveBeenCalledWith(payload);
+            expect(mockedSupabase.single).toHaveBeenCalled();
             expect(result).toEqual(mockResult);
         });
 
         it('should correctly format a soft delete query', async () => {
             const mockResult = { data: { id: 1 }, error: null };
-            (supabase.single as jest.Mock).mockResolvedValueOnce(mockResult);
+            mockedSupabase.single.mockResolvedValueOnce(mockResult);
 
             const result = await api.softDelete('test-uid');
 
-            expect(supabase.from).toHaveBeenCalledWith('users');
-            expect(supabase.update).toHaveBeenCalledWith(expect.objectContaining({
+            expect(mockedSupabase.from).toHaveBeenCalledWith('users');
+            expect(mockedSupabase.update).toHaveBeenCalledWith(expect.objectContaining({
                 deleted_at: expect.any(String),
             }));
-            expect(supabase.eq).toHaveBeenCalledWith('uid', 'test-uid');
+            expect(mockedSupabase.eq).toHaveBeenCalledWith('uid', 'test-uid');
             expect(result).toEqual(mockResult);
         });
     });

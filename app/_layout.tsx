@@ -1,6 +1,8 @@
-import { ThemeProvider as AppThemeProvider } from '@/components/ui/theme-provider';
+import { AppAlertProvider } from '@/components/ui/app-alert-provider';
+import { ThemeProvider as AppThemeProvider, useTheme } from '@/components/ui/theme-provider';
 import { UserRoleProvider } from '@/components/ui/user-role-context';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useSellerOrderNotifications } from '@/hooks/use-seller-order-notifications';
+import { Animation } from '@/utils/animation';
 import { ErrorBoundary } from '@/utils/errorBoundary';
 import { queryClient } from '@/utils/query-client';
 import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
@@ -24,11 +26,60 @@ void SplashScreen.preventAutoHideAsync();
 // Ignore specific development errors that are internal to Expo's dev tools
 LogBox.ignoreLogs(['Unable to activate keep awake']);
 
+const PREFETCH_ROUTES: readonly string[] = [
+    '/home/catalog',
+    '/home/cart',
+    '/home/product-details',
+    '/home/shop-landing',
+    '/home/checkout',
+    '/home/chat',
+    '/home/chat-thread',
+];
+
+interface RouterPrefetchApi {
+    readonly prefetch?: (href: string) => void;
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export const unstable_settings = {
     anchor: '(tabs)',
 };
+
+function RootNavigationContent(): React.JSX.Element {
+    const { isDark } = useTheme();
+    useSellerOrderNotifications();
+
+    return (
+        <NavigationThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
+            <Stack
+                screenOptions={{
+                    headerShown: false,
+                    animation: 'fade_from_bottom',
+                    animationDuration: Animation.DefaultAnimationSpeed,
+                }}
+            >
+                {/* Auth group */}
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+                <Stack.Screen name="auth/signup" options={{ headerShown: false }} />
+                <Stack.Screen name="auth/otp" options={{ headerShown: false }} />
+                <Stack.Screen name="auth/verify" options={{ headerShown: false }} />
+                <Stack.Screen name="auth/verify-email" options={{ headerShown: false }} />
+
+                {/* Home group (tab + stack screens) */}
+                <Stack.Screen name="home" options={{ headerShown: false }} />
+
+                {/* Legacy tabs entry point */}
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+
+                {/* Modal */}
+                <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+            </Stack>
+            <StatusBar style={isDark ? 'light' : 'dark'} />
+        </NavigationThemeProvider>
+    );
+}
 
 /**
  * RootLayout
@@ -47,7 +98,6 @@ export const unstable_settings = {
  * // → navigates to /home/product-details?uid=abc-123
  */
 export default function RootLayout(): React.ReactNode {
-    const colorScheme = useColorScheme();
     const [publishableKey, setPublishableKey] = useState<string>('');
     const [appReady, setAppReady] = useState<boolean>(false);
     const splashHidden = useRef<boolean>(false);
@@ -92,13 +142,13 @@ export default function RootLayout(): React.ReactNode {
         // goes to background and the token can expire before the next refresh.
         const appStateSubscription = AppState.addEventListener('change', (state) => {
             if (state === 'active') {
-                supabase.auth.startAutoRefresh();
+                void supabase.auth.startAutoRefresh();
             } else {
-                supabase.auth.stopAutoRefresh();
+                void supabase.auth.stopAutoRefresh();
             }
         });
 
-        return () => {
+        return (): void => {
             subscription.unsubscribe();
             appStateSubscription.remove();
         };
@@ -109,6 +159,15 @@ export default function RootLayout(): React.ReactNode {
         if (appReady && !splashHidden.current) {
             splashHidden.current = true;
             void SplashScreen.hideAsync();
+        }
+    }, [appReady]);
+
+    useEffect(() => {
+        if (!appReady || __DEV__) return;
+
+        const routerWithPrefetch = router as unknown as RouterPrefetchApi;
+        for (const route of PREFETCH_ROUTES) {
+            routerWithPrefetch.prefetch?.(route);
         }
     }, [appReady]);
 
@@ -135,7 +194,7 @@ export default function RootLayout(): React.ReactNode {
 
         // Handle deep links while the app is already running
         const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
-        return () => subscription.remove();
+        return (): void => subscription.remove();
     }, []);
 
     return (
@@ -147,29 +206,11 @@ export default function RootLayout(): React.ReactNode {
             <SafeAreaProvider>
                 <ErrorBoundary>
                     <AppThemeProvider>
-                        <UserRoleProvider>
-                            <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-                                <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
-                                    {/* Auth group */}
-                                    <Stack.Screen name="index" options={{ headerShown: false }} />
-                                    <Stack.Screen name="auth/login" options={{ headerShown: false, animation: 'none' }} />
-                                    <Stack.Screen name="auth/signup" options={{ headerShown: false }} />
-                                    <Stack.Screen name="auth/otp" options={{ headerShown: false }} />
-                                    <Stack.Screen name="auth/verify" options={{ headerShown: false }} />
-                                    <Stack.Screen name="auth/verify-email" options={{ headerShown: false }} />
-
-                                    {/* Home group (tab + stack screens) */}
-                                    <Stack.Screen name="home" options={{ headerShown: false, animation: 'fade' }} />
-
-                                    {/* Legacy tabs entry point */}
-                                    <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'none' }} />
-
-                                    {/* Modal */}
-                                    <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-                                </Stack>
-                                <StatusBar style="auto" />
-                            </NavigationThemeProvider>
-                        </UserRoleProvider>
+                        <AppAlertProvider>
+                            <UserRoleProvider>
+                                <RootNavigationContent />
+                            </UserRoleProvider>
+                        </AppAlertProvider>
                     </AppThemeProvider>
                 </ErrorBoundary>
             </SafeAreaProvider>

@@ -1,13 +1,10 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
-  Alert,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    FlatList, RefreshControl, StyleSheet, Text, View
 } from 'react-native';
 import type { Edge } from 'react-native-safe-area-context';
 // Alert is used for user feedback — Toast will be added in Phase 20
@@ -60,9 +57,26 @@ export default function CartScreen(): React.JSX.Element {
     const { data: currentUser } = useCurrentUser();
     const userId = currentUser?.id ?? null;
 
-    const { data: cartItems = [], isLoading, isRefetching, refetch } = useCartItems(userId);
+    const {
+        data: cartItems = [],
+        isLoading,
+        isRefetching,
+        refetch,
+        isError,
+        error,
+    } = useCartItems(userId);
     const updateQtyMutation = useUpdateCartQuantity(userId);
     const deleteItemsMutation = useDeleteCartItems(userId);
+
+    useFocusEffect(
+        useCallback((): void => {
+            if (userId === null) {
+                return;
+            }
+
+            void refetch();
+        }, [userId, refetch]),
+    );
 
     const [selectedUids, setSelectedUids] = useState<Set<string>>(new Set());
     const [updatingUids, setUpdatingUids] = useState<Set<string>>(new Set());
@@ -89,6 +103,10 @@ export default function CartScreen(): React.JSX.Element {
     const warnings: string[] = cartItems
         .filter((i) => !i.isAvailable)
         .map((i) => `"${i.productName}" is no longer available.`);
+
+    const queryErrorMessage = isError
+        ? (error instanceof Error ? error.message : 'Unable to load cart items.')
+        : null;
 
     // ─── Selection ───────────────────────────────────────────────────────────
 
@@ -125,7 +143,7 @@ export default function CartScreen(): React.JSX.Element {
                 setUpdatingUids((prev) => { const s = new Set(prev); s.delete(uid); return s; });
             },
             onError: () => {
-                Alert.alert('Error', 'Failed to update quantity.');
+                AppAlert.alert('Error', 'Failed to update quantity.');
             },
         });
     }, [cartItems, updateQtyMutation]);
@@ -142,7 +160,7 @@ export default function CartScreen(): React.JSX.Element {
                 });
             },
             onError: () => {
-                Alert.alert('Error', 'Failed to remove item.');
+                AppAlert.alert('Error', 'Failed to remove item.');
             },
         });
     }, [deleteItemsMutation]);
@@ -193,22 +211,15 @@ export default function CartScreen(): React.JSX.Element {
     const totalAmount = selectedItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
     const availableUids = cartItems.filter((i: CartItemData) => i.isAvailable).map((i) => i.uid);
     const allSelected = availableUids.length > 0 && availableUids.every((uid) => selectedUids.has(uid));
+    const isInitialLoading = isLoading && cartItems.length === 0;
 
     // ─── Render ──────────────────────────────────────────────────────────────
-
-    if (isLoading) {
-        return (
-            <SafeScreen edges={CART_SAFE_AREA_EDGES}>
-                <CartSkeleton />
-            </SafeScreen>
-        );
-    }
 
     return (
         <SafeScreen style={styles.root} edges={CART_SAFE_AREA_EDGES}>
             {/* Batch toolbar */}
             <View style={[styles.toolbar, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
-                <TouchableOpacity style={styles.selectAllBtn} onPress={handleSelectAll}>
+                <RipplePressable style={styles.selectAllBtn} onPress={handleSelectAll}>
                     <View style={[
                         styles.selectAllCheck,
                         { borderColor: theme.border },
@@ -219,12 +230,12 @@ export default function CartScreen(): React.JSX.Element {
                     <Text style={[styles.selectAllText, { color: theme.textPrimary }]}>
                         {allSelected ? 'Deselect All' : 'Select All'}
                     </Text>
-                </TouchableOpacity>
+                </RipplePressable>
 
                 {selectedUids.size > 0 && (
-                    <TouchableOpacity style={[styles.batchDeleteBtn, { backgroundColor: `${theme.error}18` }]} onPress={handleBatchDelete}>
+                    <RipplePressable style={[styles.batchDeleteBtn, { backgroundColor: `${theme.error}18` }]} onPress={handleBatchDelete}>
                         <Text style={[styles.batchDeleteText, { color: theme.error }]}>🗑️ Delete ({selectedUids.size})</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 )}
             </View>
 
@@ -233,45 +244,53 @@ export default function CartScreen(): React.JSX.Element {
                 <CartWarningBanner key={idx} message={w} />
             ))}
 
-            <FlatList
-                data={cartItems}
-                keyExtractor={(item) => item.uid}
-                renderItem={({ item }) => (
-                    <CartItem
-                        item={item}
-                        isSelected={selectedUids.has(item.uid)}
-                        onSelect={handleSelect}
-                        onDelete={confirmDeleteItem}
-                        onQuantityChange={handleQuantityChange}
-                        onProductPress={(productUid) =>
-                            router.push({ pathname: '/home/product-details' as string, params: { uid: productUid } } as Parameters<typeof router.push>[0])
-                        }
-                        isUpdating={updatingUids.has(item.uid)}
-                    />
-                )}
-                ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: theme.border }]} />}
-                ListEmptyComponent={
-                    <EmptyList
-                        icon={<Text style={styles.emptyIcon}>🛍️</Text>}
-                        message="Your wardrobe awaits!"
-                        submessage="Add items from the catalog to start shopping."
-                        actionButton={{
-                            label: 'Browse Products',
-                            onPress: () => router.push('/home/catalog' as Parameters<typeof router.push>[0]),
-                        }}
-                    />
-                }
-                contentContainerStyle={cartItems.length === 0 ? { flex: 1 } : {}}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={isRefetching}
-                        onRefresh={() => void refetch()}
-                        colors={[theme.primary]}
-                    />
-                }
-                showsVerticalScrollIndicator={false}
-                style={styles.list}
-            />
+            {queryErrorMessage !== null && (
+                <CartWarningBanner message={queryErrorMessage} />
+            )}
+
+            {isInitialLoading ? (
+                <CartSkeleton />
+            ) : (
+                <FlatList
+                    data={cartItems}
+                    keyExtractor={(item) => item.uid}
+                    renderItem={({ item }) => (
+                        <CartItem
+                            item={item}
+                            isSelected={selectedUids.has(item.uid)}
+                            onSelect={handleSelect}
+                            onDelete={confirmDeleteItem}
+                            onQuantityChange={handleQuantityChange}
+                            onProductPress={(productUid) =>
+                                router.push({ pathname: '/home/product-details' as string, params: { uid: productUid } } as Parameters<typeof router.push>[0])
+                            }
+                            isUpdating={updatingUids.has(item.uid)}
+                        />
+                    )}
+                    ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: theme.border }]} />}
+                    ListEmptyComponent={
+                        <EmptyList
+                            icon={<Text style={styles.emptyIcon}>🛍️</Text>}
+                            message="Your wardrobe awaits!"
+                            submessage="Add items from the catalog to start shopping."
+                            actionButton={{
+                                label: 'Browse Products',
+                                onPress: () => router.push('/home/catalog' as Parameters<typeof router.push>[0]),
+                            }}
+                        />
+                    }
+                    contentContainerStyle={cartItems.length === 0 ? { flex: 1 } : {}}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={isRefetching}
+                            onRefresh={() => void refetch()}
+                            colors={[theme.primary]}
+                        />
+                    }
+                    showsVerticalScrollIndicator={false}
+                    style={styles.list}
+                />
+            )}
 
             {/* Summary bar */}
             {cartItems.length > 0 && (

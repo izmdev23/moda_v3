@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { useTheme } from './ui/theme-provider';
 
 // ─── ReviewImageUploader ────────────────────────────────────────────────────
@@ -41,20 +42,20 @@ export const ReviewImageUploader: React.FC<ReviewImageUploaderProps> = ({
                 {images.map((uri, index) => (
                     <View key={index} style={uploaderStyles.imageContainer}>
                         <Image source={{ uri }} style={uploaderStyles.image} />
-                        <TouchableOpacity
+                        <RipplePressable
                             style={[uploaderStyles.removeBtn, { backgroundColor: theme.white }]}
                             onPress={() => onRemoveImage(index)}
                         >
                             <Ionicons name="close-circle" size={24} color={theme.error} />
-                        </TouchableOpacity>
+                        </RipplePressable>
                     </View>
                 ))}
 
                 {images.length < maxImages && (
-                    <TouchableOpacity style={[uploaderStyles.addButton, { borderColor: theme.border, backgroundColor: theme.background }]} onPress={handlePickImage} activeOpacity={0.7}>
+                    <RipplePressable style={[uploaderStyles.addButton, { borderColor: theme.border, backgroundColor: theme.background }]} onPress={handlePickImage} activeOpacity={0.7}>
                         <Ionicons name="camera-outline" size={32} color={theme.textSecondary} />
                         <Text style={[uploaderStyles.addText, { color: theme.textSecondary }]}>Add Photo</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 )}
             </ScrollView>
         </View>
@@ -134,13 +135,13 @@ export const ReviewForm: React.FC<ReviewFormProps> = ({
             <Text style={[formStyles.label, { color: theme.textPrimary }]}>Your Rating</Text>
             <View style={formStyles.starsContainer}>
                 {[1, 2, 3, 4, 5].map((star) => (
-                    <TouchableOpacity key={star} onPress={() => setRating(star)} activeOpacity={0.7}>
+                    <RipplePressable key={star} onPress={() => setRating(star)} activeOpacity={0.7}>
                         <Ionicons
                             name={star <= rating ? 'star' : 'star-outline'}
                             size={40}
                             color={star <= rating ? theme.starColor : theme.border}
                         />
-                    </TouchableOpacity>
+                    </RipplePressable>
                 ))}
             </View>
 

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Control } from 'react-hook-form';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { FormInput } from './ui/form-input';
 import { useTheme } from './ui/theme-provider';
 
@@ -17,7 +18,7 @@ export const SellerProfileHeader: React.FC<SellerProfileHeaderProps> = ({ shopNa
     const { theme } = useTheme();
     return (
         <View style={[headerStyles.container, { backgroundColor: theme.cardBackground }]}>
-            <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.7} style={headerStyles.avatarContainer}>
+            <RipplePressable onPress={onAvatarPress} activeOpacity={0.7} style={headerStyles.avatarContainer}>
                 {avatarUrl ? (
                     <Image source={{ uri: avatarUrl }} style={headerStyles.avatar} />
                 ) : (
@@ -28,7 +29,7 @@ export const SellerProfileHeader: React.FC<SellerProfileHeaderProps> = ({ shopNa
                 <View style={[headerStyles.editBadge, { backgroundColor: theme.primary, borderColor: theme.white }]}>
                     <Ionicons name="camera" size={14} color={theme.white} />
                 </View>
-            </TouchableOpacity>
+            </RipplePressable>
             <View style={headerStyles.infoContainer}>
                 <Text style={[headerStyles.name, { color: theme.textPrimary }]}>{shopName}</Text>
                 <Text style={[headerStyles.email, { color: theme.textSecondary }]}>{email}</Text>
@@ -77,7 +78,7 @@ export const SellerMenu: React.FC<SellerMenuProps> = ({ items }) => {
     return (
         <View style={[menuStyles.container, { backgroundColor: theme.cardBackground }]}>
             {items.map((item, index) => (
-                <TouchableOpacity
+                <RipplePressable
                     key={item.label}
                     style={[menuStyles.menuItem, index !== items.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }]}
                     onPress={item.onPress}
@@ -95,7 +96,7 @@ export const SellerMenu: React.FC<SellerMenuProps> = ({ items }) => {
                     {!item.isDestructive && (
                         <Ionicons name="chevron-forward" size={20} color={theme.gray} />
                     )}
-                </TouchableOpacity>
+                </RipplePressable>
             ))}
         </View>
     );
@@ -152,7 +153,7 @@ export const SwitchToSellerForm: React.FC<SwitchToSellerFormProps> = ({
                 error={errors.description?.message}
             />
 
-            <TouchableOpacity
+            <RipplePressable
                 style={[formStyles.submitButton, { backgroundColor: isSubmitting ? theme.gray : theme.primary }, isSubmitting && formStyles.submitButtonDisabled]}
                 onPress={onSubmit}
                 disabled={isSubmitting}
@@ -161,7 +162,7 @@ export const SwitchToSellerForm: React.FC<SwitchToSellerFormProps> = ({
                 <Text style={[formStyles.submitText, { color: theme.white }]}>
                     {isSubmitting ? 'Creating Shop...' : 'Create Shop'}
                 </Text>
-            </TouchableOpacity>
+            </RipplePressable>
         </View>
     );
 };

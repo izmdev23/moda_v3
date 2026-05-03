@@ -1,13 +1,8 @@
-import React from 'react';
-import {
-    ActivityIndicator,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { CardForm, useStripe } from '@stripe/stripe-react-native';
+import React from 'react';
+import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { encodeStoredCardAccountNumber, parseStoredCardAccountNumber } from '../hooks/use-payment-methods';
 import { useTheme } from './ui/theme-provider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -51,7 +46,7 @@ export const PaymentMethodCard: React.FC<PaymentMethodCardProps> = ({
     onSetDefault,
 }): React.JSX.Element => {
     const { theme } = useTheme();
-    const maskedNumber = maskAccountNumber(method.account_number);
+    const maskedNumber = maskAccountNumber(method.type, method.account_number);
 
     return (
         <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
@@ -71,21 +66,21 @@ export const PaymentMethodCard: React.FC<PaymentMethodCardProps> = ({
             </View>
             <View style={styles.cardActions}>
                 {!method.is_default && (
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[styles.actionBtn, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}
                         onPress={() => onSetDefault(method.uid)}
                         id={`set-default-payment-${method.uid}`}
                     >
                         <Text style={[styles.actionText, { color: theme.textPrimary }]}>Set Default</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 )}
-                <TouchableOpacity
+                <RipplePressable
                     style={[styles.actionBtn, { borderColor: theme.error, backgroundColor: `${theme.error}12` }]}
                     onPress={() => onDelete(method.uid)}
                     id={`delete-payment-${method.uid}`}
                 >
                     <Text style={[styles.deleteText, { color: theme.error }]}>Remove</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             </View>
         </View>
     );
@@ -94,9 +89,20 @@ export const PaymentMethodCard: React.FC<PaymentMethodCardProps> = ({
 // ─── AddCardForm ──────────────────────────────────────────────────────────────
 
 interface AddCardFormProps {
-    readonly onSubmit: (paymentMethodId: string) => void;
+    readonly onSubmit: (storedCardAccountNumber: string) => void;
     readonly onCancel: () => void;
     readonly isSubmitting: boolean;
+}
+
+interface CardFormDetailsLike {
+    readonly complete?: boolean;
+    readonly last4?: string | null;
+}
+
+interface CardFormEventLike {
+    readonly nativeEvent?: {
+        readonly card?: CardFormDetailsLike;
+    };
 }
 
 /**
@@ -113,6 +119,21 @@ export const AddCardForm: React.FC<AddCardFormProps> = ({
     const [isCardComplete, setIsCardComplete] = React.useState<boolean>(false);
     const [cardError, setCardError] = React.useState<string | null>(null);
     const [isProcessing, setIsProcessing] = React.useState<boolean>(false);
+    const [cardLast4FromForm, setCardLast4FromForm] = React.useState<string | null>(null);
+
+    const getCardFormDetails = (payload: unknown): CardFormDetailsLike => {
+        const direct = payload as CardFormDetailsLike;
+        if (direct !== null && typeof direct === 'object' && ('complete' in direct || 'last4' in direct)) {
+            return direct;
+        }
+
+        const eventPayload = payload as CardFormEventLike;
+        if (eventPayload?.nativeEvent?.card !== undefined) {
+            return eventPayload.nativeEvent.card;
+        }
+
+        return {};
+    };
 
     const handleSave = async () => {
         if (!isCardComplete) {
@@ -134,7 +155,12 @@ export const AddCardForm: React.FC<AddCardFormProps> = ({
         }
 
         if (paymentMethod) {
-            onSubmit(paymentMethod.id);
+            const sanitizedLast4FromForm = (cardLast4FromForm ?? '').replace(/\D/g, '').slice(-4);
+            const storedCardAccountNumber = encodeStoredCardAccountNumber(
+                paymentMethod.id,
+                paymentMethod.card?.last4 ?? (sanitizedLast4FromForm.length === 4 ? sanitizedLast4FromForm : null)
+            );
+            onSubmit(storedCardAccountNumber);
         }
     };
 
@@ -160,9 +186,16 @@ export const AddCardForm: React.FC<AddCardFormProps> = ({
                         height: 330,
                         marginVertical: 10,
                     }}
-                    onFormComplete={(cardDetails: any) => {
-                        setIsCardComplete(cardDetails.complete);
-                        if (cardDetails.complete) {
+                    onFormComplete={(cardDetails: unknown) => {
+                        const details = getCardFormDetails(cardDetails);
+                        const isComplete = details.complete === true;
+                        const formLast4Raw = typeof details.last4 === 'string' ? details.last4 : '';
+                        const formLast4 = formLast4Raw.replace(/\D/g, '').slice(-4);
+
+                        setIsCardComplete(isComplete);
+                        setCardLast4FromForm(formLast4.length === 4 ? formLast4 : null);
+
+                        if (isComplete) {
                             setCardError(null);
                         }
                     }}
@@ -173,10 +206,10 @@ export const AddCardForm: React.FC<AddCardFormProps> = ({
             </View>
 
             <View style={styles.formActions}>
-                <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: theme.border }]} onPress={onCancel} id="cancel-add-card">
+                <RipplePressable style={[styles.cancelBtn, { backgroundColor: theme.border }]} onPress={onCancel} id="cancel-add-card">
                     <Text style={[styles.cancelBtnText, { color: theme.textSecondary }]}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                </RipplePressable>
+                <RipplePressable
                     style={[styles.submitBtn, { backgroundColor: theme.primary }, (isSubmitting || isProcessing) && styles.submitBtnDisabled]}
                     onPress={() => { void handleSave(); }}
                     disabled={isSubmitting || isProcessing}
@@ -187,7 +220,7 @@ export const AddCardForm: React.FC<AddCardFormProps> = ({
                     ) : (
                         <Text style={[styles.submitBtnText, { color: theme.white }]}>Next</Text>
                     )}
-                </TouchableOpacity>
+                </RipplePressable>
             </View>
         </View>
     );
@@ -245,10 +278,10 @@ export const AddPaymentForm: React.FC<AddPaymentFormProps> = ({
             </View>
 
             <View style={styles.formActions}>
-                <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: theme.border }]} onPress={onCancel} id="cancel-add-payment">
+                <RipplePressable style={[styles.cancelBtn, { backgroundColor: theme.border }]} onPress={onCancel} id="cancel-add-payment">
                     <Text style={[styles.cancelBtnText, { color: theme.textSecondary }]}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                </RipplePressable>
+                <RipplePressable
                     style={[styles.submitBtn, { backgroundColor: theme.primary }, isSubmitting && styles.submitBtnDisabled]}
                     onPress={onSubmit}
                     disabled={isSubmitting}
@@ -259,7 +292,7 @@ export const AddPaymentForm: React.FC<AddPaymentFormProps> = ({
                     ) : (
                         <Text style={[styles.submitBtnText, { color: theme.white }]}>Next</Text>
                     )}
-                </TouchableOpacity>
+                </RipplePressable>
             </View>
         </View>
     );
@@ -267,9 +300,10 @@ export const AddPaymentForm: React.FC<AddPaymentFormProps> = ({
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const maskAccountNumber = (number: string): string => {
-    if (number.startsWith('pm_')) {
-        return `•••• •••• •••• ${number.slice(-4)}`;
+const maskAccountNumber = (type: StoredPaymentType, number: string): string => {
+    if (type === 'card') {
+        const { last4 } = parseStoredCardAccountNumber(number);
+        return `•••• •••• •••• ${last4 ?? '••••'}`;
     }
     if (number.length <= 4) return number;
     const visible = number.slice(-4);

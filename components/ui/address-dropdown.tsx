@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Modal, StyleSheet, Text, View } from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { useTheme } from './theme-provider';
 
 export interface Address {
@@ -39,7 +40,7 @@ export const AddressDropdown: React.FC<AddressDropdownProps> = ({
 
     return (
         <View style={styles.container}>
-            <TouchableOpacity
+            <RipplePressable
                 style={[styles.selectedBox, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
                 onPress={() => setModalVisible(true)}
                 activeOpacity={0.7}
@@ -54,23 +55,23 @@ export const AddressDropdown: React.FC<AddressDropdownProps> = ({
                     <Text style={[styles.emptyText, { color: theme.gray }]}>No address selected. Tap to choose.</Text>
                 )}
                 <Text style={[styles.dropdownIcon, { color: theme.gray }]}>▼</Text>
-            </TouchableOpacity>
+            </RipplePressable>
 
             <Modal visible={modalVisible} transparent={true} animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={[styles.bottomSheet, { backgroundColor: theme.cardBackground }]}>
                         <View style={styles.headerRow}>
                             <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Select Address</Text>
-                            <TouchableOpacity onPress={() => setModalVisible(false)}>
+                            <RipplePressable onPress={() => setModalVisible(false)}>
                                 <Text style={[styles.closeText, { color: theme.primary }]}>Close</Text>
-                            </TouchableOpacity>
+                            </RipplePressable>
                         </View>
 
                         <FlatList
                             data={addresses}
                             keyExtractor={item => item.uid}
                             renderItem={({ item }) => (
-                                <TouchableOpacity
+                                <RipplePressable
                                     style={[
                                         styles.addressItem,
                                         { borderBottomColor: theme.border },
@@ -90,7 +91,7 @@ export const AddressDropdown: React.FC<AddressDropdownProps> = ({
                                         <Text style={[styles.itemText, { color: theme.textSecondary }]}>{item.fullAddress}</Text>
                                         <Text style={[styles.itemPhone, { color: theme.gray }]}>{item.phone}</Text>
                                     </View>
-                                </TouchableOpacity>
+                                </RipplePressable>
                             )}
                             ListEmptyComponent={
                                 <View style={styles.emptyContainer}>
@@ -99,12 +100,12 @@ export const AddressDropdown: React.FC<AddressDropdownProps> = ({
                             }
                         />
 
-                        <TouchableOpacity
+                        <RipplePressable
                             style={[styles.addButton, { backgroundColor: theme.primary }]}
                             onPress={() => { setModalVisible(false); onAddAddress(); }}
                         >
                             <Text style={[styles.addText, { color: theme.white }]}>+ Add New Address</Text>
-                        </TouchableOpacity>
+                        </RipplePressable>
                     </View>
                 </View>
             </Modal>

@@ -1,17 +1,21 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from './ui/theme-provider';
 
-export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered';
+export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
 
 export interface OrderItemData {
     id: string;
+    orderUid?: string;
     name: string;
     thumbnail: string;
     quantity: number;
     price: number;
+    totalPrice?: number;
+    variantName?: string;
     status: OrderStatus;
     deadline?: Date;
     shopName?: string;
@@ -42,14 +46,19 @@ export const OrderStatusBadge: React.FC<OrderStatusBadgeProps> = ({ status }) =>
             iconName = 'check-circle';
             break;
         case 'shipped':
-            bgColor = theme.primary; // Or a dedicated shipping color
-            text = 'Shipped';
+            bgColor = theme.primary;
+            text = 'Delivering';
             iconName = 'local-shipping';
             break;
         case 'delivered':
             bgColor = theme.success;
-            text = 'Delivered';
+            text = 'Received';
             iconName = 'done-all';
+            break;
+        case 'cancelled':
+            bgColor = theme.error;
+            text = 'Cancelled';
+            iconName = 'cancel';
             break;
     }
 
@@ -91,7 +100,9 @@ export const DeliveryTimer: React.FC<DeliveryTimerProps> = ({ deadline, status }
             setTimeLeft(`${days}d ${hours}h ${minutes}m left`);
         }, 1000);
 
-        return () => clearInterval(interval);
+        return (): void => {
+            clearInterval(interval);
+        };
     }, [deadline, status]);
 
     if (!deadline || status === 'delivered') return null;
@@ -115,7 +126,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, isSeller, onPress, 
     const { theme } = useTheme();
 
     return (
-        <TouchableOpacity
+        <RipplePressable
             style={[styles.cardContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
             onPress={onPress}
             activeOpacity={0.8}
@@ -136,6 +147,11 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, isSeller, onPress, 
                     <Text style={[styles.productName, { color: theme.textPrimary }]} numberOfLines={2}>
                         {order.name}
                     </Text>
+                    {order.variantName && (
+                        <Text style={[styles.variantName, { color: theme.textSecondary }]} numberOfLines={1}>
+                            {order.variantName}
+                        </Text>
+                    )}
                     <View style={styles.priceRow}>
                         <Text style={[styles.price, { color: theme.primary }]}>₱{order.price.toFixed(2)}</Text>
                         <Text style={[styles.qty, { color: theme.textSecondary }]}>x{order.quantity}</Text>
@@ -156,15 +172,15 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, isSeller, onPress, 
 
             {order.status === 'delivered' && !isSeller && (
                 <View style={[styles.cardFooter, { borderTopColor: theme.border, justifyContent: 'flex-end' }]}>
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[styles.actionBtn, { backgroundColor: theme.cardBackground, borderColor: theme.primary }]}
                         onPress={() => onActionClick('rate')}
                     >
                         <Text style={{ color: theme.primary, fontSize: 13, fontWeight: 'bold' }}>Rate & Review</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 </View>
             )}
-        </TouchableOpacity>
+        </RipplePressable>
     );
 };
 
@@ -180,24 +196,24 @@ export const OrderStatusActions: React.FC<OrderStatusActionsProps> = ({ isSeller
     if (isSeller) {
         if (status === 'pending') {
             return (
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.primary }]} onPress={() => onAction('confirm')}>
+                <RipplePressable style={[styles.actionBtn, { backgroundColor: theme.primary }]} onPress={() => onAction('confirm')}>
                     <Text style={styles.actionBtnText}>Confirm Order</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             );
         }
         if (status === 'confirmed') {
             return (
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.primary }]} onPress={() => onAction('ship')}>
-                    <Text style={styles.actionBtnText}>Mark as Shipped</Text>
-                </TouchableOpacity>
+                <RipplePressable style={[styles.actionBtn, { backgroundColor: theme.primary }]} onPress={() => onAction('ship')}>
+                    <Text style={styles.actionBtnText}>Sent to Courier</Text>
+                </RipplePressable>
             );
         }
     } else {
         if (status === 'shipped') {
             return (
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.success }]} onPress={() => onAction('receive')}>
+                <RipplePressable style={[styles.actionBtn, { backgroundColor: theme.success }]} onPress={() => onAction('receive')}>
                     <Text style={styles.actionBtnText}>Order Received</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             );
         }
     }
@@ -263,6 +279,11 @@ const styles = StyleSheet.create({
     details: {
         flex: 1,
         justifyContent: 'space-between',
+    },
+    variantName: {
+        fontSize: 12,
+        marginTop: 2,
+        marginBottom: 4,
     },
     productName: {
         fontSize: 14,

@@ -1,0 +1,22 @@
+{
+  "extractOutfit": {
+    "unsupportedCategoryMessage": "Outfit extraction is only available for headwear, upperwear, lowerwear, and footwear products.",
+    "fullBodyPrompt": "Extract the complete outfit from the subject in the image and change the background to a plain color that does not exist in the outfit. Remove the person. Include the full wearable outfit from top to bottom only.",
+    "categoryPrompts": {
+      "headwear": "Extract the head outfit from the subject in the image and change the background to a plain color that does not exist in the outfit. Remove the person. Only include the head outfit.",
+      "upperwear": "Extract the upper outfit from the subject in the image and change the background to a plain color that does not exist in the outfit. Remove the person. Only include the upper outfit.",
+      "lowerwear": "Extract the lower outfit from the subject in the image and change the background to a plain color that does not exist in the outfit. Remove the person. Only include the lower outfit.",
+      "footwear": "Extract the foot outfit from the subject in the image and change the background to a plain color that does not exist in the outfit. Remove the person. Only include the foot outfit."
+    }
+  },
+  "virtualTryOn": {
+    "unsupportedCategoryMessage": "Virtual try-on is only available for headwear, upperwear, lowerwear, and footwear products.",
+    "fullBodyPrompt": "Replace the complete outfit of the person in image 1 with the full outfit shown in image 2. Do not change the hairstyle, face and body features, pose angle, and background.",
+    "categoryPrompts": {
+      "headwear": "Replace the headwear of the person in image 1 with the headwear shown in image 2. Do not change the hairstyle, face and body features, pose angle, and background.",
+      "upperwear": "Replace the upper body clothing of image 1 with the clothing in image 2. Do not change the hairstyle, face and body features, pose angle, and background. Do not modify the rest of the outfit.",
+      "lowerwear": "Replace the lower body clothing of image 1 with the clothing in image 2. Do not change the hairstyle, face and body features, pose angle, and background. Do not modify the rest of the outfit.",
+      "footwear": "Replace the footwear of image 1 with the wearable footwear in image 2. Do not change the hairstyle, face and body features, pose angle, and background. Do not modify the rest of the outfit."
+    }
+  }
+}

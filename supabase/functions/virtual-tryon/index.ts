@@ -1,9 +1,17 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import promptConfigRaw from "../_shared/prompts.json" assert { type: "json" };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const REPLICATE_API_BASE = "https://api.replicate.com/v1";
-const IDMVTON_VERSION = "0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985";
+const REPLICATE_TRYON_MODEL = "prunaai/p-image-edit";
+const REPLICATE_MODEL_VERSION_SECRET = "REPLICATE_P_IMAGE_EDIT_VERSION";
+const REPLICATE_TRYON_ASPECT_RATIO = "match_input_image";
+const REPLICATE_TRYON_TURBO = false;
+const REPLICATE_TRYON_DISABLE_SAFETY_CHECKER = true;
+const REPLICATE_TRYON_STEPS = 20;
+const REPLICATE_TRYON_CROP = false;
+let cachedTryOnModelVersion: string | null = null;
 
 /** Maximum number of virtual try-ons per day per user. */
 const DAILY_LIMIT = 5;
@@ -24,6 +32,7 @@ interface StartBody {
     readonly humanImageUrl: string;
     readonly garmentDescription?: string;
     readonly productId: number;
+    readonly isFullBody?: boolean;
 }
 
 interface CheckBody {
@@ -41,6 +50,22 @@ interface ReplicatePrediction {
     readonly error?: string | null;
 }
 
+interface ReplicateTryOnInput {
+    readonly images: readonly [string, string];
+    readonly prompt: string;
+    readonly aspect_ratio: string;
+    readonly turbo: boolean;
+    readonly disable_safety_checker: boolean;
+    readonly steps: number;
+    readonly crop: boolean;
+}
+
+interface ReplicateModelLookupResponse {
+    readonly latest_version?: {
+        readonly id?: string | null;
+    } | null;
+}
+
 type StorageImageContentType = "image/jpeg" | "image/png" | "image/webp";
 
 interface ResolvedImageFormat {
@@ -48,13 +73,63 @@ interface ResolvedImageFormat {
     readonly extension: "jpg" | "png" | "webp";
 }
 
-type ReplicateGarmentCategory = "upper_body" | "lower_body" | "dresses";
+type SupportedProductCategory = "headwear" | "upperwear" | "lowerwear" | "footwear";
 
-function mapProductCategoryToReplicateCategory(category: string): ReplicateGarmentCategory | null {
-    if (category === "tops") return "upper_body";
-    if (category === "bottoms") return "lower_body";
-    if (category === "full_body") return "dresses";
+interface PromptCategoryMap {
+    readonly headwear: string;
+    readonly upperwear: string;
+    readonly lowerwear: string;
+    readonly footwear: string;
+}
+
+interface PromptConfigSection {
+    readonly unsupportedCategoryMessage: string;
+    readonly fullBodyPrompt: string;
+    readonly categoryPrompts: PromptCategoryMap;
+}
+
+interface PromptConfig {
+    readonly extractOutfit: PromptConfigSection;
+    readonly virtualTryOn: PromptConfigSection;
+}
+
+const promptConfig = promptConfigRaw as PromptConfig;
+const virtualTryOnPromptConfig = promptConfig.virtualTryOn;
+const VTON_UNSUPPORTED_CATEGORY_MESSAGE = virtualTryOnPromptConfig.unsupportedCategoryMessage;
+
+function resolveSupportedProductCategory(category: string): SupportedProductCategory | null {
+    const normalizedCategory = category.trim().toLowerCase();
+
+    if (normalizedCategory === "headwear") return "headwear";
+    if (normalizedCategory === "upperwear") return "upperwear";
+    if (normalizedCategory === "lowerwear") return "lowerwear";
+    if (normalizedCategory === "footwear") return "footwear";
+
     return null;
+}
+
+function resolveTryOnPrompt(category: SupportedProductCategory, isFullBody: boolean): string {
+    if (isFullBody) {
+        return virtualTryOnPromptConfig.fullBodyPrompt;
+    }
+
+    return virtualTryOnPromptConfig.categoryPrompts[category];
+}
+
+function buildReplicateTryOnInput(
+    humanImageUrl: string,
+    garmentImageUrl: string,
+    prompt: string,
+): ReplicateTryOnInput {
+    return {
+        images: [humanImageUrl, garmentImageUrl],
+        prompt,
+        aspect_ratio: REPLICATE_TRYON_ASPECT_RATIO,
+        turbo: REPLICATE_TRYON_TURBO,
+        disable_safety_checker: REPLICATE_TRYON_DISABLE_SAFETY_CHECKER,
+        steps: REPLICATE_TRYON_STEPS,
+        crop: REPLICATE_TRYON_CROP,
+    };
 }
 
 // ─── Helper: json response ────────────────────────────────────────────────────
@@ -176,28 +251,73 @@ function resolveReplicateOutputUrl(output: unknown): string | null {
     return null;
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+
+    const payloadPart = parts[1];
+    if (!payloadPart) return null;
+
+    const normalizedPayload = payloadPart
+        .replace(/-/g, "+")
+        .replace(/_/g, "/")
+        .padEnd(Math.ceil(payloadPart.length / 4) * 4, "=");
+
+    try {
+        const decoded = atob(normalizedPayload);
+        const parsed = JSON.parse(decoded) as Record<string, unknown>;
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+function resolveSubjectFromToken(token: string): string | null {
+    const payload = decodeJwtPayload(token);
+    if (!payload) return null;
+
+    const subject = payload.sub;
+    return typeof subject === "string" && subject.trim().length > 0 ? subject.trim() : null;
+}
+
 // ─── Helper: authenticate and resolve internal user ID ───────────────────────
 
 async function resolveUserId(
     supabase: ReturnType<typeof createClient>,
     req: Request,
 ): Promise<{ userId: number } | Response> {
+    let authSubject: string | null = null;
+
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-        return jsonResponse({ error: "Missing Authorization header" }, 401);
+    if (authHeader) {
+        const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+        const token = (bearerMatch?.[1] ?? authHeader).trim();
+
+        if (token.length > 0) {
+            const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+            if (!authError && user?.id) {
+                authSubject = user.id;
+            } else {
+                authSubject = resolveSubjectFromToken(token);
+            }
+        }
     }
 
-    const token = authHeader.replace("Bearer ", "").trim();
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authSubject === null) {
+        const forwardedAuthUser = req.headers.get("x-supabase-auth-user");
+        if (forwardedAuthUser && forwardedAuthUser.trim().length > 0) {
+            authSubject = forwardedAuthUser.trim();
+        }
+    }
 
-    if (authError || !user) {
+    if (authSubject === null) {
         return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
     const { data: dbUser, error: dbUserError } = await supabase
         .from("users")
         .select("id")
-        .eq("auth_id", user.id)
+        .eq("auth_id", authSubject)
         .single();
 
     if (dbUserError ?? !dbUser) {
@@ -205,6 +325,48 @@ async function resolveUserId(
     }
 
     return { userId: dbUser.id as number };
+}
+
+function normalizeModelVersion(value: string | null | undefined): string | null {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+async function resolveTryOnModelVersion(replicateKey: string): Promise<string> {
+    const envVersion = normalizeModelVersion(Deno.env.get(REPLICATE_MODEL_VERSION_SECRET));
+    if (envVersion !== null) {
+        cachedTryOnModelVersion = envVersion;
+        return envVersion;
+    }
+
+    if (cachedTryOnModelVersion !== null) {
+        return cachedTryOnModelVersion;
+    }
+
+    const modelLookupResponse = await fetch(`${REPLICATE_API_BASE}/models/${REPLICATE_TRYON_MODEL}`, {
+        headers: { Authorization: `Token ${replicateKey}` },
+    });
+
+    if (!modelLookupResponse.ok) {
+        const errorText = await modelLookupResponse.text();
+        throw new Error(
+            `Failed to resolve Replicate model version (${modelLookupResponse.status}). `
+            + `Set ${REPLICATE_MODEL_VERSION_SECRET} secret. Details: ${errorText}`,
+        );
+    }
+
+    const modelLookup = await modelLookupResponse.json() as ReplicateModelLookupResponse;
+    const latestVersionId = normalizeModelVersion(modelLookup.latest_version?.id ?? null);
+
+    if (latestVersionId === null) {
+        throw new Error(
+            `Replicate model version could not be resolved. Set ${REPLICATE_MODEL_VERSION_SECRET} secret.`,
+        );
+    }
+
+    cachedTryOnModelVersion = latestVersionId;
+    return latestVersionId;
 }
 
 // ─── Handler: start ───────────────────────────────────────────────────────────
@@ -220,7 +382,7 @@ async function handleStart(
     userId: number,
     body: StartBody,
 ): Promise<Response> {
-    const { garmentImageUrl, humanImageUrl, garmentDescription, productId } = body;
+    const { garmentImageUrl, humanImageUrl, garmentDescription, productId, isFullBody } = body;
 
     if (!garmentImageUrl || !humanImageUrl || !productId) {
         return jsonResponse({ error: "garmentImageUrl, humanImageUrl, and productId are required" }, 400);
@@ -239,10 +401,16 @@ async function handleStart(
 
     const resolvedProductCategory = typeof productRow.category === "string" ? productRow.category : "";
 
-    const replicateCategory = mapProductCategoryToReplicateCategory(resolvedProductCategory);
-    if (replicateCategory === null) {
-        return jsonResponse({ error: "Virtual try-on is only available for tops, bottoms, and full_body products." }, 400);
+    const supportedProductCategory = resolveSupportedProductCategory(resolvedProductCategory);
+    if (supportedProductCategory === null) {
+        return jsonResponse({ error: VTON_UNSUPPORTED_CATEGORY_MESSAGE }, 400);
     }
+
+    const resolvedGarmentDescription = (garmentDescription ?? "").trim();
+    const promptSuffix = resolvedGarmentDescription.length > 0
+        ? ` The target garment in image 2 is: ${resolvedGarmentDescription}.`
+        : "";
+    const prompt = `${resolveTryOnPrompt(supportedProductCategory, isFullBody === true)}${promptSuffix}`;
 
     // ── Check daily + monthly limits in parallel ────────────────────────────
 
@@ -290,6 +458,8 @@ async function handleStart(
 
     // ── Submit prediction to Replicate (async, no Prefer:wait) ─────────────
 
+    const modelVersion = await resolveTryOnModelVersion(replicateKey);
+
     const predictionRes = await fetch(`${REPLICATE_API_BASE}/predictions`, {
         method: "POST",
         headers: {
@@ -297,17 +467,8 @@ async function handleStart(
             "Content-Type": "application/json",
         },
         body: JSON.stringify({
-            version: IDMVTON_VERSION,
-            input: {
-                garm_img: garmentImageUrl,
-                human_img: humanImageUrl,
-                garment_des: garmentDescription ?? "clothing item",
-                // Use current IDM-VTON schema keys so options are actually applied.
-                crop: true,
-                steps: 20,
-                category: replicateCategory,
-                seed: 42,
-            },
+            version: modelVersion,
+            input: buildReplicateTryOnInput(humanImageUrl, garmentImageUrl, prompt),
         }),
     });
 

@@ -1,7 +1,9 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import React from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AccessibleTouchable } from './ui/accessible-touchable';
 import { useTheme } from './ui/theme-provider';
 
@@ -11,7 +13,7 @@ export interface TransactionData {
     itemCount: number;
     total: number;
     paymentMethod: string;
-    status: 'completed' | 'cancelled';
+    status: 'completed' | 'cancelled' | 'pending';
     items: { id: string; name: string; thumbnail: string; price: number; quantity: number }[];
 }
 
@@ -27,13 +29,30 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({
     transaction, isSelected, onSelect, onPress, selectionMode
 }) => {
     const { theme } = useTheme();
+    const statusColor = transaction.status === 'completed'
+        ? theme.success
+        : transaction.status === 'pending'
+            ? theme.warning
+            : theme.error;
+    const MAX_PREVIEW_PRODUCTS = 2;
+
+    const productPreviewNames = transaction.items
+        .slice(0, MAX_PREVIEW_PRODUCTS)
+        .map((item) => item.name)
+        .join(', ');
+
+    const remainingProductsCount = transaction.items.length - MAX_PREVIEW_PRODUCTS;
+    const productPreviewText = remainingProductsCount > 0
+        ? `${productPreviewNames} +${remainingProductsCount} more`
+        : productPreviewNames;
+    const statusLabel = transaction.status === 'pending' ? '' : transaction.status.toUpperCase();
 
     const formatDate = (date: Date) => {
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     };
 
     return (
-        <TouchableOpacity
+        <RipplePressable
             style={[
                 styles.card,
                 {
@@ -47,9 +66,11 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({
         >
             <View style={styles.cardHeader}>
                 <Text style={[styles.date, { color: theme.textSecondary }]}>{formatDate(transaction.createDate)}</Text>
-                <Text style={[styles.status, { color: transaction.status === 'completed' ? theme.success : theme.error }]}>
-                    {transaction.status.toUpperCase()}
-                </Text>
+                {statusLabel.length > 0 && (
+                    <Text style={[styles.status, { color: statusColor }]}>
+                        {statusLabel}
+                    </Text>
+                )}
             </View>
             <View style={styles.cardBody}>
                 <View style={styles.iconContainer}>
@@ -57,6 +78,11 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({
                 </View>
                 <View style={styles.details}>
                     <Text style={[styles.items, { color: theme.textPrimary }]}>{transaction.itemCount} items</Text>
+                    {productPreviewText.length > 0 && (
+                        <Text style={[styles.productsPreview, { color: theme.textSecondary }]} numberOfLines={1}>
+                            {productPreviewText}
+                        </Text>
+                    )}
                     <Text style={[styles.payment, { color: theme.textSecondary }]}>{transaction.paymentMethod}</Text>
                 </View>
                 <Text style={[styles.total, { color: theme.primary }]}>₱{transaction.total.toFixed(2)}</Text>
@@ -71,7 +97,7 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({
                     />
                 </View>
             )}
-        </TouchableOpacity>
+        </RipplePressable>
     );
 };
 
@@ -86,6 +112,7 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
     visible, transaction, onClose, onDownloadReceipt
 }) => {
     const { theme } = useTheme();
+    const insets = useSafeAreaInsets();
 
     if (!transaction) return null;
 
@@ -95,9 +122,9 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
                 <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
                     <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
                         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Transaction Details</Text>
-                        <TouchableOpacity onPress={onClose}>
+                        <RipplePressable onPress={onClose}>
                             <MaterialIcons name="close" size={24} color={theme.textPrimary} />
-                        </TouchableOpacity>
+                        </RipplePressable>
                     </View>
 
                     <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -125,7 +152,16 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
                         ))}
                     </ScrollView>
 
-                    <View style={[styles.modalFooter, { borderTopColor: theme.border, backgroundColor: theme.cardBackground }]}>
+                    <View
+                        style={[
+                            styles.modalFooter,
+                            {
+                                borderTopColor: theme.border,
+                                backgroundColor: theme.cardBackground,
+                                paddingBottom: Math.max(16, insets.bottom + 8),
+                            },
+                        ]}
+                    >
                         <AccessibleTouchable
                             style={[styles.downloadBtn, { backgroundColor: theme.primary }]}
                             onPress={onDownloadReceipt}
@@ -162,7 +198,7 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({ activeRange, o
             {ranges.map(r => {
                 const isActive = activeRange === r.val;
                 return (
-                    <TouchableOpacity
+                    <RipplePressable
                         key={r.val}
                         style={[
                             styles.filterChip,
@@ -176,7 +212,7 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({ activeRange, o
                         <Text style={{ color: isActive ? theme.white : theme.textSecondary, fontSize: 13 }}>
                             {r.label}
                         </Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 );
             })}
         </ScrollView>
@@ -197,17 +233,17 @@ export const MultiSelectToolbar: React.FC<MultiSelectToolbarProps> = ({ selected
 
     return (
         <View style={[styles.toolbar, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
-            <TouchableOpacity onPress={onClear}>
+            <RipplePressable onPress={onClear}>
                 <MaterialIcons name="close" size={24} color={theme.textPrimary} />
-            </TouchableOpacity>
+            </RipplePressable>
             <Text style={[styles.toolbarCount, { color: theme.textPrimary }]}>{selectedCount} Selected</Text>
             <View style={styles.toolbarActions}>
-                <TouchableOpacity onPress={onSelectAll} style={{ marginRight: 16 }}>
+                <RipplePressable onPress={onSelectAll} style={{ marginRight: 16 }}>
                     <MaterialIcons name="select-all" size={24} color={theme.primary} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={onDelete}>
+                </RipplePressable>
+                <RipplePressable onPress={onDelete}>
                     <MaterialIcons name="delete-outline" size={24} color={theme.error} />
-                </TouchableOpacity>
+                </RipplePressable>
             </View>
         </View>
     );
@@ -254,7 +290,11 @@ const styles = StyleSheet.create({
     items: {
         fontSize: 15,
         fontWeight: '600',
-        marginBottom: 4,
+        marginBottom: 2,
+    },
+    productsPreview: {
+        fontSize: 12,
+        marginBottom: 3,
     },
     payment: {
         fontSize: 13,

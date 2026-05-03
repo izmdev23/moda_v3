@@ -1,8 +1,10 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useRef } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { actions, RichEditor, RichToolbar } from 'react-native-pell-rich-editor';
 import { useTheme } from '../components/ui/theme-provider';
 
@@ -33,7 +35,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ label, images, max
         if (!result.canceled && result.assets.length > 0) {
             const asset = result.assets[0];
             if (!asset.uri.match(/\.(jpg|jpeg|png|webp)$/i)) {
-                alert('Validation Error: Only JPG, PNG, and WEBP are allowed.');
+                AppAlert.alert('Validation Error', 'Only JPG, PNG, and WEBP are allowed.');
                 return;
             }
             onAdd({ uri: asset.uri, type: asset.mimeType || 'image/jpeg' });
@@ -47,19 +49,19 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ label, images, max
                 {images.map((img, index) => (
                     <View key={index} style={styles.imageContainer}>
                         <Image source={{ uri: img.uri }} style={styles.image} contentFit="cover" />
-                        <TouchableOpacity style={styles.removeBtn} onPress={() => onRemove(index)}>
+                        <RipplePressable style={styles.removeBtn} onPress={() => onRemove(index)}>
                             <MaterialIcons name="close" size={16} color="white" />
-                        </TouchableOpacity>
+                        </RipplePressable>
                     </View>
                 ))}
                 {images.length < maxCount && (
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[styles.addBtn, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}
                         onPress={handlePick}
                     >
                         <MaterialIcons name="add-photo-alternate" size={32} color={theme.textSecondary} />
                         <Text style={[styles.addBtnText, { color: theme.textSecondary }]}>Add</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 )}
             </ScrollView>
         </View>
@@ -92,7 +94,7 @@ export const RichTextInput: React.FC<RichTextInputProps> = ({ label, value, onCh
             <View style={richStyles.labelRow}>
                 <Text style={[styles.label, { color: theme.textPrimary, marginBottom: 0 }]}>{label}</Text>
                 {onAutoGenerate !== undefined && (
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[richStyles.autoGenBtn, { borderColor: theme.primary, opacity: isGenerating === true ? 0.6 : 1 }]}
                         onPress={() => void onAutoGenerate()}
                         disabled={isGenerating === true}
@@ -102,7 +104,7 @@ export const RichTextInput: React.FC<RichTextInputProps> = ({ label, value, onCh
                         ) : (
                             <Text style={[richStyles.autoGenBtnText, { color: theme.primary }]}>✨ Auto-generate</Text>
                         )}
-                    </TouchableOpacity>
+                    </RipplePressable>
                 )}
             </View>
             <View style={[styles.editorContainer, { borderColor: theme.border }]}>
@@ -166,9 +168,9 @@ export const TagsInput: React.FC<TagsInputProps> = ({ label, tags, onTagsChange 
                 {tags.map((tag, i) => (
                     <View key={i} style={[styles.tagChip, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
                         <Text style={[styles.tagText, { color: theme.primary }]}>{tag}</Text>
-                        <TouchableOpacity onPress={() => removeTag(i)}>
+                        <RipplePressable onPress={() => removeTag(i)}>
                             <MaterialIcons name="close" size={16} color={theme.primary} />
-                        </TouchableOpacity>
+                        </RipplePressable>
                     </View>
                 ))}
             </View>
@@ -193,17 +195,34 @@ export interface VariantData {
     stock: string;
     sale_price: string;
     sale_end_date: Date | undefined;
+    is_full_body: boolean;
+    try_on_image: ImageDetail | null;
+    try_on_image_url: string | null;
+    try_on_image_storage_path: string | null;
+    extracted_outfit_url: string | null;
+    extracted_outfit_storage_path: string | null;
+    extraction_error: string | null;
+    is_extracting: boolean;
 }
 
 interface VariantFieldGroupProps {
     variants: VariantData[];
     onChange: (variants: VariantData[]) => void;
+    isAccessoryCategory: boolean;
+    onSelectTryOnImage: (variantId: string, image: ImageDetail) => Promise<void>;
 }
 
-export const VariantFieldGroup: React.FC<VariantFieldGroupProps> = ({ variants, onChange }) => {
+export const VariantFieldGroup: React.FC<VariantFieldGroupProps> = ({
+    variants,
+    onChange,
+    isAccessoryCategory,
+    onSelectTryOnImage,
+}) => {
     const { theme } = useTheme();
+    const [actionVariantId, setActionVariantId] = React.useState<string | null>(null);
+    const [fullscreenImageUrl, setFullscreenImageUrl] = React.useState<string | null>(null);
 
-    const handleUpdate = (id: string, field: keyof VariantData, value: any) => {
+    const handleUpdate = <K extends keyof VariantData>(id: string, field: K, value: VariantData[K]): void => {
         onChange(variants.map(v => v.id === id ? { ...v, [field]: value } : v));
     };
 
@@ -212,8 +231,94 @@ export const VariantFieldGroup: React.FC<VariantFieldGroupProps> = ({ variants, 
     };
 
     const handleAdd = () => {
-        onChange([...variants, { id: Math.random().toString(), name: '', price: '', stock: '', sale_price: '', sale_end_date: undefined }]);
+        onChange([
+            ...variants,
+            {
+                id: Math.random().toString(),
+                name: '',
+                price: '',
+                stock: '',
+                sale_price: '',
+                sale_end_date: undefined,
+                is_full_body: false,
+                try_on_image: null,
+                try_on_image_url: null,
+                try_on_image_storage_path: null,
+                extracted_outfit_url: null,
+                extracted_outfit_storage_path: null,
+                extraction_error: null,
+                is_extracting: false,
+            }
+        ]);
     };
+
+    const pickSingleImage = async (): Promise<ImageDetail | null> => {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsMultipleSelection: false,
+            quality: 1,
+        });
+
+        if (result.canceled || result.assets.length === 0) {
+            return null;
+        }
+
+        const asset = result.assets[0];
+        if (!asset.uri.match(/\.(jpg|jpeg|png|webp)$/i)) {
+            AppAlert.alert('Validation Error', 'Only JPG, PNG, and WEBP are allowed.');
+            return null;
+        }
+
+        return {
+            uri: asset.uri,
+            type: asset.mimeType ?? 'image/jpeg',
+        };
+    };
+
+    const handlePickTryOnImage = async (variantId: string): Promise<void> => {
+        const selectedImage = await pickSingleImage();
+        if (selectedImage === null) {
+            return;
+        }
+
+        try {
+            await onSelectTryOnImage(variantId, selectedImage);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Failed to process selected image.';
+            AppAlert.alert('Extraction Failed', message);
+        }
+    };
+
+    const handlePressTryOnButton = async (variant: VariantData): Promise<void> => {
+        if (variant.is_extracting || isAccessoryCategory) {
+            return;
+        }
+
+        if (variant.extracted_outfit_url !== null) {
+            setActionVariantId(variant.id);
+            return;
+        }
+
+        await handlePickTryOnImage(variant.id);
+    };
+
+    const handleOpenDownload = async (): Promise<void> => {
+        if (fullscreenImageUrl === null) {
+            return;
+        }
+
+        const canOpen = await Linking.canOpenURL(fullscreenImageUrl);
+        if (!canOpen) {
+            AppAlert.alert('Download Unavailable', 'Could not open this image URL.');
+            return;
+        }
+
+        await Linking.openURL(fullscreenImageUrl);
+    };
+
+    const activeVariant = actionVariantId === null
+        ? null
+        : variants.find((variant) => variant.id === actionVariantId) ?? null;
 
     return (
         <View style={styles.container}>
@@ -223,9 +328,9 @@ export const VariantFieldGroup: React.FC<VariantFieldGroupProps> = ({ variants, 
                     <View style={styles.variantHeader}>
                         <Text style={[styles.variantTitle, { color: theme.textPrimary }]}>Variant {i + 1}</Text>
                         {variants.length > 1 && (
-                            <TouchableOpacity onPress={() => handleRemove(v.id)}>
+                            <RipplePressable onPress={() => handleRemove(v.id)}>
                                 <Text style={{ color: theme.error }}>Remove</Text>
-                            </TouchableOpacity>
+                            </RipplePressable>
                         )}
                     </View>
                     <TextInput
@@ -235,6 +340,54 @@ export const VariantFieldGroup: React.FC<VariantFieldGroupProps> = ({ variants, 
                         value={v.name}
                         onChangeText={(txt) => handleUpdate(v.id, 'name', txt)}
                     />
+                    <RipplePressable
+                        style={[styles.checkboxRow, { borderColor: theme.border, opacity: isAccessoryCategory ? 0.5 : 1 }]}
+                        onPress={() => {
+                            if (!isAccessoryCategory) {
+                                handleUpdate(v.id, 'is_full_body', !v.is_full_body);
+                            }
+                        }}
+                        disabled={isAccessoryCategory}
+                    >
+                        <MaterialIcons
+                            name={v.is_full_body ? 'check-box' : 'check-box-outline-blank'}
+                            size={20}
+                            color={v.is_full_body ? theme.primary : theme.textSecondary}
+                        />
+                        <Text style={[styles.checkboxText, { color: theme.textPrimary }]}>Apply this variant as full body</Text>
+                    </RipplePressable>
+
+                    {isAccessoryCategory ? (
+                        <Text style={[styles.helperText, { color: theme.textSecondary }]}>Virtual try-on and full body options are disabled for accessories.</Text>
+                    ) : (
+                        <>
+                            <Text style={[styles.helperText, { color: theme.textSecondary }]}>Virtual Try-On Image (required)</Text>
+                            <RipplePressable
+                                style={[styles.tryOnButton, { borderColor: theme.border, backgroundColor: theme.background }, v.is_extracting && styles.tryOnButtonDisabled]}
+                                onPress={() => { void handlePressTryOnButton(v); }}
+                                disabled={v.is_extracting}
+                            >
+                                {v.is_extracting ? (
+                                    <View style={styles.tryOnLoadingState}>
+                                        <ActivityIndicator size="small" color={theme.primary} />
+                                        <Text style={[styles.tryOnLoadingText, { color: theme.primary }]}>Extracting outfit...</Text>
+                                    </View>
+                                ) : v.extracted_outfit_url !== null ? (
+                                    <View style={styles.tryOnPreviewState}>
+                                        <Image source={{ uri: v.extracted_outfit_url }} style={styles.tryOnPreviewImage} contentFit="cover" />
+                                        <Text style={[styles.tryOnButtonText, { color: theme.textPrimary }]}>Tap to replace or view fullscreen</Text>
+                                    </View>
+                                ) : (
+                                    <Text style={[styles.tryOnButtonText, { color: theme.textSecondary }]}>Select image and extract outfit</Text>
+                                )}
+                            </RipplePressable>
+
+                            {v.extraction_error ? (
+                                <Text style={[styles.errorText, { color: theme.error }]}>{v.extraction_error}</Text>
+                            ) : null}
+                        </>
+                    )}
+
                     <View style={styles.row}>
                         <TextInput
                             style={[styles.input, { borderColor: theme.border, color: theme.textPrimary, flex: 1, marginRight: 8 }]}
@@ -255,12 +408,87 @@ export const VariantFieldGroup: React.FC<VariantFieldGroupProps> = ({ variants, 
                     </View>
                 </View>
             ))}
-            <TouchableOpacity
+            <RipplePressable
                 style={[styles.addVariantBtn, { borderColor: theme.primary, borderStyle: 'dashed' }]}
                 onPress={handleAdd}
             >
                 <Text style={{ color: theme.primary }}>+ Add Variant</Text>
-            </TouchableOpacity>
+            </RipplePressable>
+
+            <Modal
+                transparent
+                visible={activeVariant !== null}
+                animationType="fade"
+                onRequestClose={() => setActionVariantId(null)}
+            >
+                <View style={styles.modalBackdrop}>
+                    <View style={[styles.actionModalCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                        <Text style={[styles.actionModalTitle, { color: theme.textPrimary }]}>Variant Image Options</Text>
+
+                        <RipplePressable
+                            style={[styles.actionButton, { borderColor: theme.border }]}
+                            onPress={() => {
+                                const variantId = activeVariant?.id ?? null;
+                                setActionVariantId(null);
+                                if (variantId !== null) {
+                                    void handlePickTryOnImage(variantId);
+                                }
+                            }}
+                        >
+                            <Text style={[styles.actionButtonText, { color: theme.textPrimary }]}>Replace Image</Text>
+                        </RipplePressable>
+
+                        <RipplePressable
+                            style={[styles.actionButton, { borderColor: theme.border }]}
+                            onPress={() => {
+                                const extractedOutfitUrl = activeVariant?.extracted_outfit_url ?? null;
+                                if (extractedOutfitUrl !== null) {
+                                    setFullscreenImageUrl(extractedOutfitUrl);
+                                }
+                                setActionVariantId(null);
+                            }}
+                        >
+                            <Text style={[styles.actionButtonText, { color: theme.textPrimary }]}>View Fullscreen</Text>
+                        </RipplePressable>
+
+                        <RipplePressable
+                            style={[styles.actionButton, { borderColor: theme.border }]}
+                            onPress={() => setActionVariantId(null)}
+                        >
+                            <Text style={[styles.actionButtonText, { color: theme.textSecondary }]}>Cancel</Text>
+                        </RipplePressable>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                visible={fullscreenImageUrl !== null}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setFullscreenImageUrl(null)}
+            >
+                <View style={styles.fullscreenBackdrop}>
+                    {fullscreenImageUrl !== null ? (
+                        <Image source={{ uri: fullscreenImageUrl }} style={styles.fullscreenImage} contentFit="contain" />
+                    ) : null}
+
+                    <View style={styles.fullscreenActionRow}>
+                        <RipplePressable
+                            style={[styles.fullscreenActionButton, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}
+                            onPress={() => { void handleOpenDownload(); }}
+                        >
+                            <Text style={[styles.fullscreenActionButtonText, { color: theme.textPrimary }]}>Download</Text>
+                        </RipplePressable>
+
+                        <RipplePressable
+                            style={[styles.fullscreenActionButton, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}
+                            onPress={() => setFullscreenImageUrl(null)}
+                        >
+                            <Text style={[styles.fullscreenActionButtonText, { color: theme.textPrimary }]}>Close</Text>
+                        </RipplePressable>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -366,7 +594,118 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderWidth: 1,
         borderRadius: 8,
-    }
+    },
+    checkboxRow: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+    },
+    checkboxText: {
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    helperText: {
+        fontSize: 12,
+        marginBottom: 8,
+    },
+    tryOnButton: {
+        borderWidth: 1,
+        borderRadius: 8,
+        minHeight: 80,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 8,
+        overflow: 'hidden',
+    },
+    tryOnButtonDisabled: {
+        opacity: 0.7,
+    },
+    tryOnButtonText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    tryOnLoadingState: {
+        alignItems: 'center',
+        gap: 8,
+    },
+    tryOnLoadingText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    tryOnPreviewState: {
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 8,
+        gap: 8,
+    },
+    tryOnPreviewImage: {
+        width: '100%',
+        height: 100,
+    },
+    errorText: {
+        fontSize: 12,
+        marginBottom: 8,
+    },
+    modalBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center',
+        padding: 24,
+    },
+    actionModalCard: {
+        borderRadius: 12,
+        borderWidth: 1,
+        padding: 16,
+        gap: 10,
+    },
+    actionModalTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    actionButton: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 10,
+        alignItems: 'center',
+    },
+    actionButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    fullscreenBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.92)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+    },
+    fullscreenImage: {
+        width: '100%',
+        height: '75%',
+    },
+    fullscreenActionRow: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 16,
+    },
+    fullscreenActionButton: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+    },
+    fullscreenActionButtonText: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
 });
 
 const richStyles = StyleSheet.create({

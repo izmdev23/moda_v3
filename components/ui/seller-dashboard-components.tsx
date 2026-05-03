@@ -1,8 +1,10 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Tables } from '../../supabase/database.types';
+import { SkeletonLoader } from './skeleton-loader';
 import { useTheme } from './theme-provider';
 
 // ==========================================
@@ -11,29 +13,79 @@ import { useTheme } from './theme-provider';
 interface DashboardStatsWidgetProps {
     readonly totalSales: number;
     readonly totalOrders: number;
+    readonly totalRefunds: number;
     readonly totalProducts: number;
+    readonly isLoading?: boolean;
+    readonly onViewPress?: () => void;
 }
 
-export function DashboardStatsWidget({ totalSales, totalOrders, totalProducts }: DashboardStatsWidgetProps): React.JSX.Element {
+export function DashboardStatsWidget({ totalSales, totalOrders, totalRefunds, totalProducts, isLoading = false, onViewPress }: DashboardStatsWidgetProps): React.JSX.Element {
     const { theme } = useTheme();
 
     return (
         <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
             <View style={styles.cardHeader}>
                 <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>Shop Analytics</Text>
+                {isLoading ? (
+                    <SkeletonLoader width={44} height={14} />
+                ) : (
+                    <RipplePressable onPress={onViewPress} disabled={onViewPress === undefined}>
+                        <Text style={[styles.viewAllText, { color: onViewPress === undefined ? theme.textSecondary : theme.primary }]}>View</Text>
+                    </RipplePressable>
+                )}
             </View>
             <View style={styles.statsContainer}>
                 <View style={[styles.statBox, { backgroundColor: theme.background }]}>
-                    <Text style={[styles.statValue, { color: theme.primary }]}>₱{totalSales.toLocaleString()}</Text>
-                    <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Sales</Text>
+                    {isLoading ? (
+                        <>
+                            <SkeletonLoader height={18} width="72%" style={styles.statSkeletonTop} />
+                            <SkeletonLoader height={12} width="58%" />
+                        </>
+                    ) : (
+                        <>
+                            <Text style={[styles.statValue, { color: theme.primary }]}>₱{totalSales.toLocaleString()}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Sales</Text>
+                        </>
+                    )}
                 </View>
                 <View style={[styles.statBox, { backgroundColor: theme.background }]}>
-                    <Text style={[styles.statValue, { color: theme.primary }]}>{totalOrders}</Text>
-                    <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Orders</Text>
+                    {isLoading ? (
+                        <>
+                            <SkeletonLoader height={18} width="52%" style={styles.statSkeletonTop} />
+                            <SkeletonLoader height={12} width="50%" />
+                        </>
+                    ) : (
+                        <>
+                            <Text style={[styles.statValue, { color: theme.primary }]}>{totalOrders}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Orders</Text>
+                        </>
+                    )}
                 </View>
                 <View style={[styles.statBox, { backgroundColor: theme.background }]}>
-                    <Text style={[styles.statValue, { color: theme.primary }]}>{totalProducts}</Text>
-                    <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Products</Text>
+                    {isLoading ? (
+                        <>
+                            <SkeletonLoader height={18} width="52%" style={styles.statSkeletonTop} />
+                            <SkeletonLoader height={12} width="58%" />
+                        </>
+                    ) : (
+                        <>
+                            <Text style={[styles.statValue, { color: theme.error }]}>{totalRefunds}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Refunds</Text>
+                        </>
+                    )}
+                </View>
+                <View style={[styles.statBox, { backgroundColor: theme.background }]}>
+                    {isLoading ? (
+                        <>
+                            <SkeletonLoader height={18} width="52%" style={styles.statSkeletonTop} />
+                            <SkeletonLoader height={12} width="56%" />
+                        </>
+                    ) : (
+                        <>
+                            <Text style={[styles.statValue, { color: theme.primary }]}>{totalProducts}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Products</Text>
+                        </>
+                    )}
                 </View>
             </View>
         </View>
@@ -47,44 +99,64 @@ interface RecentOrdersWidgetProps {
     readonly pendingCount: number;
     readonly toShipCount: number;
     readonly onManagePress: () => void;
+    readonly isLoading?: boolean;
 }
 
-export function RecentOrdersWidget({ pendingCount, toShipCount, onManagePress }: RecentOrdersWidgetProps): React.JSX.Element {
+export function RecentOrdersWidget({ pendingCount, toShipCount, onManagePress, isLoading = false }: RecentOrdersWidgetProps): React.JSX.Element {
     const { theme } = useTheme();
 
     return (
         <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
             <View style={styles.cardHeader}>
                 <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>Order Overview</Text>
-                <TouchableOpacity onPress={onManagePress}>
-                    <Text style={[styles.viewAllText, { color: theme.primary }]}>Manage</Text>
-                </TouchableOpacity>
+                {isLoading ? (
+                    <SkeletonLoader width={56} height={14} />
+                ) : (
+                    <RipplePressable onPress={onManagePress}>
+                        <Text style={[styles.viewAllText, { color: theme.primary }]}>Manage</Text>
+                    </RipplePressable>
+                )}
             </View>
 
             <View style={styles.orderStatusContainer}>
-                <TouchableOpacity style={styles.orderStatusItem} onPress={onManagePress}>
-                    <View style={[styles.iconContainer, { backgroundColor: theme.warning + '20' }]}>
-                        <Ionicons name="time-outline" size={24} color={theme.warning} />
-                        {pendingCount > 0 && (
-                            <View style={[styles.badge, { backgroundColor: theme.error }]}>
-                                <Text style={styles.badgeText}>{pendingCount}</Text>
+                {isLoading ? (
+                    <>
+                        <View style={styles.orderStatusItem}>
+                            <SkeletonLoader width={56} height={56} borderRadius={28} style={styles.orderIconSkeleton} />
+                            <SkeletonLoader width={52} height={12} />
+                        </View>
+                        <View style={styles.orderStatusItem}>
+                            <SkeletonLoader width={56} height={56} borderRadius={28} style={styles.orderIconSkeleton} />
+                            <SkeletonLoader width={52} height={12} />
+                        </View>
+                    </>
+                ) : (
+                    <>
+                        <RipplePressable style={styles.orderStatusItem} onPress={onManagePress}>
+                            <View style={[styles.iconContainer, { backgroundColor: theme.warning + '20' }]}>
+                                <Ionicons name="time-outline" size={24} color={theme.warning} />
+                                {pendingCount > 0 && (
+                                    <View style={[styles.badge, { backgroundColor: theme.error }]}>
+                                        <Text style={styles.badgeText}>{pendingCount}</Text>
+                                    </View>
+                                )}
                             </View>
-                        )}
-                    </View>
-                    <Text style={[styles.orderStatusText, { color: theme.textPrimary }]}>Pending</Text>
-                </TouchableOpacity>
+                            <Text style={[styles.orderStatusText, { color: theme.textPrimary }]}>Pending</Text>
+                        </RipplePressable>
 
-                <TouchableOpacity style={styles.orderStatusItem} onPress={onManagePress}>
-                    <View style={[styles.iconContainer, { backgroundColor: theme.info + '20' }]}>
-                        <Ionicons name="cube-outline" size={24} color={theme.info} />
-                        {toShipCount > 0 && (
-                            <View style={[styles.badge, { backgroundColor: theme.error }]}>
-                                <Text style={styles.badgeText}>{toShipCount}</Text>
+                        <RipplePressable style={styles.orderStatusItem} onPress={onManagePress}>
+                            <View style={[styles.iconContainer, { backgroundColor: theme.info + '20' }]}>
+                                <Ionicons name="cube-outline" size={24} color={theme.info} />
+                                {toShipCount > 0 && (
+                                    <View style={[styles.badge, { backgroundColor: theme.error }]}>
+                                        <Text style={styles.badgeText}>{toShipCount}</Text>
+                                    </View>
+                                )}
                             </View>
-                        )}
-                    </View>
-                    <Text style={[styles.orderStatusText, { color: theme.textPrimary }]}>To Ship</Text>
-                </TouchableOpacity>
+                            <Text style={[styles.orderStatusText, { color: theme.textPrimary }]}>To Ship</Text>
+                        </RipplePressable>
+                    </>
+                )}
             </View>
         </View>
     );
@@ -95,11 +167,12 @@ export function RecentOrdersWidget({ pendingCount, toShipCount, onManagePress }:
 // ==========================================
 interface MyProductsWidgetProps {
     readonly products: Tables<'products'>[];
-    readonly shopUid: string;
+    readonly shopUid: string | null;
     readonly onUploadPress: () => void;
+    readonly isLoading?: boolean;
 }
 
-export function MyProductsWidget({ products, shopUid, onUploadPress }: MyProductsWidgetProps): React.JSX.Element {
+export function MyProductsWidget({ products, shopUid, onUploadPress, isLoading = false }: MyProductsWidgetProps): React.JSX.Element {
     const { theme } = useTheme();
     const router = useRouter();
 
@@ -107,15 +180,30 @@ export function MyProductsWidget({ products, shopUid, onUploadPress }: MyProduct
         <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
             <View style={styles.cardHeader}>
                 <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>My Products</Text>
-                <TouchableOpacity onPress={() => router.push(`/home/shop-landing?uid=${shopUid}` as any)}>
-                    <Text style={[styles.viewAllText, { color: theme.primary }]}>View Web Store</Text>
-                </TouchableOpacity>
+                {isLoading ? (
+                    <SkeletonLoader width={94} height={14} />
+                ) : (
+                    <RipplePressable
+                        onPress={() => {
+                            if (shopUid === null) return;
+                            router.push(`/home/shop-landing?uid=${shopUid}` as Parameters<typeof router.push>[0]);
+                        }}
+                        disabled={shopUid === null}
+                    >
+                        <Text style={[styles.viewAllText, { color: shopUid === null ? theme.textSecondary : theme.primary }]}>View My Store</Text>
+                    </RipplePressable>
+                )}
             </View>
 
-            {products.length === 0 ? (
+            {isLoading ? (
+                <View style={styles.productsLoadingWrap}>
+                    <SkeletonLoader height={16} width="84%" style={styles.productsLoadingLine} />
+                    <SkeletonLoader height={16} width="66%" />
+                </View>
+            ) : products.length === 0 ? (
                 <View style={styles.emptyContainer}>
                     <Ionicons name="shirt-outline" size={48} color={theme.textSecondary} style={{ opacity: 0.5 }} />
-                    <Text style={[styles.emptyText, { color: theme.textSecondary }]}>You haven't uploaded any products yet.</Text>
+                    <Text style={[styles.emptyText, { color: theme.textSecondary }]}>You haven&apos;t uploaded any products yet.</Text>
                 </View>
             ) : (
                 <View style={styles.productsSummary}>
@@ -125,14 +213,14 @@ export function MyProductsWidget({ products, shopUid, onUploadPress }: MyProduct
                 </View>
             )}
 
-            <TouchableOpacity
+            <RipplePressable
                 style={[styles.uploadButton, { backgroundColor: theme.primary }]}
                 onPress={onUploadPress}
                 activeOpacity={0.8}
             >
                 <Ionicons name="add-circle-outline" size={20} color={theme.white} style={{ marginRight: 8 }} />
                 <Text style={[styles.uploadButtonText, { color: theme.white }]}>Upload New Product</Text>
-            </TouchableOpacity>
+            </RipplePressable>
         </View>
     );
 }
@@ -185,6 +273,9 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '500',
     },
+    statSkeletonTop: {
+        marginBottom: 6,
+    },
 
     // Orders Styles
     orderStatusContainer: {
@@ -206,6 +297,9 @@ const styles = StyleSheet.create({
     orderStatusText: {
         fontSize: 13,
         fontWeight: '500',
+    },
+    orderIconSkeleton: {
+        marginBottom: 8,
     },
     badge: {
         position: 'absolute',
@@ -238,6 +332,13 @@ const styles = StyleSheet.create({
     },
     productsSummary: {
         paddingVertical: 12,
+        marginBottom: 8,
+    },
+    productsLoadingWrap: {
+        paddingVertical: 12,
+        marginBottom: 8,
+    },
+    productsLoadingLine: {
         marginBottom: 8,
     },
     summaryText: {

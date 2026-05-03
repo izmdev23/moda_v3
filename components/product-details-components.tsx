@@ -1,14 +1,6 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import React, { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Dimensions,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { formatPrice } from '../utils/utils';
 import { useTheme } from './ui/theme-provider';
 
@@ -36,6 +28,8 @@ export interface VariantItem {
     readonly saleEndDate?: string | null;
     readonly stock: number;
     readonly imageUrl?: string | null;
+    readonly extractedOutfitUrl?: string | null;
+    readonly isFullBody?: boolean;
 }
 
 // ─── ProductImageCarousel ─────────────────────────────────────────────────────
@@ -60,6 +54,8 @@ export const ProductImageCarousel: React.FC<ProductImageCarouselProps> = ({
 }) => {
     const { theme } = useTheme();
     const [activeIndex, setActiveIndex] = useState<number>(0);
+    const [isFullscreenVisible, setIsFullscreenVisible] = useState<boolean>(false);
+    const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | null>(null);
     const images = imageUrls.length > 0 ? imageUrls : [thumbnailUrl];
 
     const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { x: number } } }): void => {
@@ -67,11 +63,27 @@ export const ProductImageCarousel: React.FC<ProductImageCarouselProps> = ({
         setActiveIndex(index);
     }, []);
 
+    const handleOpenFullscreen = useCallback((url: string): void => {
+        setFullscreenImageUrl(url);
+        setIsFullscreenVisible(true);
+    }, []);
+
+    const handleCloseFullscreen = useCallback((): void => {
+        setIsFullscreenVisible(false);
+        setFullscreenImageUrl(null);
+    }, []);
+
     return (
         <View style={[carouselStyles.container, { backgroundColor: theme.background }]}>
             <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll}>
                 {images.map((url, idx) => (
-                    <Image key={`img-${idx}`} source={{ uri: url }} style={carouselStyles.image} resizeMode="cover" />
+                    <RipplePressable
+                        key={`img-${idx}`}
+                        onPress={() => handleOpenFullscreen(url)}
+                        activeOpacity={0.98}
+                    >
+                        <Image source={{ uri: url }} style={carouselStyles.image} resizeMode="cover" />
+                    </RipplePressable>
                 ))}
             </ScrollView>
             {images.length > 1 && (
@@ -82,10 +94,35 @@ export const ProductImageCarousel: React.FC<ProductImageCarouselProps> = ({
                 </View>
             )}
             {showVton && typeof onVtonPress === 'function' && (
-                <TouchableOpacity style={[carouselStyles.vtonBtn, { backgroundColor: theme.primary }]} onPress={onVtonPress}>
+                <RipplePressable style={[carouselStyles.vtonBtn, { backgroundColor: theme.primary }]} onPress={onVtonPress}>
                     <Text style={[carouselStyles.vtonText, { color: theme.white }]}>👗 Try On</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             )}
+
+            <Modal
+                visible={isFullscreenVisible}
+                transparent
+                animationType="fade"
+                statusBarTranslucent
+                onRequestClose={handleCloseFullscreen}
+            >
+                <View style={carouselStyles.modalBg}>
+                    {fullscreenImageUrl !== null && (
+                        <Image
+                            source={{ uri: fullscreenImageUrl }}
+                            style={carouselStyles.modalImage}
+                            resizeMode="contain"
+                        />
+                    )}
+                    <RipplePressable
+                        style={carouselStyles.modalClose}
+                        onPress={handleCloseFullscreen}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    >
+                        <Text style={carouselStyles.modalCloseText}>✕</Text>
+                    </RipplePressable>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -101,6 +138,32 @@ const carouselStyles = StyleSheet.create({
         elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4,
     },
     vtonText: { fontSize: 13, fontWeight: '700' },
+    modalBg: {
+        flex: 1,
+        backgroundColor: '#000',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalImage: {
+        width: '100%',
+        height: '100%',
+    },
+    modalClose: {
+        position: 'absolute',
+        top: 48,
+        right: 20,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        borderRadius: 20,
+        width: 40,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalCloseText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: '700',
+    },
 });
 
 // ─── ShopHeader ───────────────────────────────────────────────────────────────
@@ -110,13 +173,14 @@ interface ShopHeaderProps {
     readonly city: string;
     readonly province: string;
     readonly onVisitShop: () => void;
+    readonly isVisitDisabled?: boolean;
 }
 
 /**
  * Shop info header shown at the top of a product details page.
  * @param props {ShopHeaderProps}
  */
-export const ShopHeader: React.FC<ShopHeaderProps> = ({ shopName, city, province, onVisitShop }) => {
+export const ShopHeader: React.FC<ShopHeaderProps> = ({ shopName, city, province, onVisitShop, isVisitDisabled = false }) => {
     const { theme } = useTheme();
     return (
         <View style={[shopHeaderStyles.container, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
@@ -124,9 +188,20 @@ export const ShopHeader: React.FC<ShopHeaderProps> = ({ shopName, city, province
                 <Text style={[shopHeaderStyles.name, { color: theme.textPrimary }]}>🏪 {shopName}</Text>
                 <Text style={[shopHeaderStyles.location, { color: theme.textSecondary }]}>📍 {city}, {province}</Text>
             </View>
-            <TouchableOpacity style={[shopHeaderStyles.visitBtn, { borderColor: theme.primary }]} onPress={onVisitShop}>
-                <Text style={[shopHeaderStyles.visitText, { color: theme.primary }]}>Visit Shop</Text>
-            </TouchableOpacity>
+            <RipplePressable
+                style={[
+                    shopHeaderStyles.visitBtn,
+                    {
+                        borderColor: isVisitDisabled ? theme.border : theme.primary,
+                        backgroundColor: isVisitDisabled ? theme.background : theme.cardBackground,
+                    },
+                    isVisitDisabled && shopHeaderStyles.visitBtnDisabled,
+                ]}
+                onPress={onVisitShop}
+                disabled={isVisitDisabled}
+            >
+                <Text style={[shopHeaderStyles.visitText, { color: isVisitDisabled ? theme.textSecondary : theme.primary }]}>Visit Shop</Text>
+            </RipplePressable>
         </View>
     );
 };
@@ -137,6 +212,7 @@ const shopHeaderStyles = StyleSheet.create({
     name: { fontSize: 15, fontWeight: '700' },
     location: { fontSize: 12, marginTop: 2 },
     visitBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
+    visitBtnDisabled: { opacity: 0.6 },
     visitText: { fontWeight: '600', fontSize: 13 },
 });
 
@@ -168,7 +244,9 @@ export const SaleCountdownTimer: React.FC<SaleCountdownTimerProps> = ({ saleEndD
 
     React.useEffect(() => {
         const interval = setInterval(() => setTimeLeft(getTimeLeft()), 1000);
-        return () => clearInterval(interval);
+        return (): void => {
+            clearInterval(interval);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [saleEndDate]);
 
@@ -222,8 +300,9 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({ variants, sele
                     const isSelected = selectedUid === variant.uid;
                     const effectivePrice = getEffectivePrice(variant);
                     const onSale = effectivePrice < variant.price;
+                    const previewImageUrl = variant.extractedOutfitUrl ?? variant.imageUrl;
                     return (
-                        <TouchableOpacity
+                        <RipplePressable
                             key={variant.uid}
                             style={[
                                 variantStyles.card,
@@ -235,8 +314,8 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({ variants, sele
                             activeOpacity={isOutOfStock ? 1 : 0.7}
                             disabled={isOutOfStock}
                         >
-                            {variant.imageUrl ? (
-                                <Image source={{ uri: variant.imageUrl }} style={variantStyles.image} resizeMode="cover" />
+                            {previewImageUrl ? (
+                                <Image source={{ uri: previewImageUrl }} style={variantStyles.image} resizeMode="cover" />
                             ) : (
                                 <View style={[variantStyles.imagePlaceholder, { backgroundColor: theme.background }]}>
                                     <Text style={[variantStyles.imagePlaceholderText, { color: theme.gray }]}>
@@ -255,13 +334,16 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({ variants, sele
                             )}
                             {isOutOfStock && (
                                 <View style={variantStyles.outOfStockBadge}>
-                                    <Text style={[variantStyles.outOfStockText, { color: theme.textSecondary }]}>Out of Stock</Text>
+                                    <Text style={[variantStyles.outOfStockText, { color: theme.textSecondary }]}>Sold Out</Text>
                                 </View>
                             )}
                             {!isOutOfStock && variant.stock <= 5 && (
-                                <Text style={[variantStyles.lowStockText, { color: theme.warning }]}>Only {variant.stock} left!</Text>
+                                <Text style={[variantStyles.lowStockText, { color: theme.warning }]}>Low Stock • {variant.stock} left</Text>
                             )}
-                        </TouchableOpacity>
+                            {!isOutOfStock && variant.stock > 5 && (
+                                <Text style={[variantStyles.inStockText, { color: theme.success }]}>In Stock • {variant.stock} left</Text>
+                            )}
+                        </RipplePressable>
                     );
                 })}
             </ScrollView>
@@ -284,6 +366,7 @@ const variantStyles = StyleSheet.create({
     outOfStockBadge: { marginTop: 4, backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
     outOfStockText: { fontSize: 10, fontWeight: '600' },
     lowStockText: { fontSize: 10, fontWeight: '700', marginTop: 4 },
+    inStockText: { fontSize: 10, fontWeight: '700', marginTop: 4 },
 });
 
 // ─── AddToCartSection ─────────────────────────────────────────────────────────
@@ -293,6 +376,7 @@ interface AddToCartSectionProps {
     readonly isLoading: boolean;
     readonly maxStock: number;
     readonly isDisabled: boolean;
+    readonly disabledLabel?: string;
 }
 
 /**
@@ -300,7 +384,7 @@ interface AddToCartSectionProps {
  * @param props {AddToCartSectionProps}
  */
 export const AddToCartSection: React.FC<AddToCartSectionProps> = ({
-    onAddToCart, isLoading, maxStock, isDisabled,
+    onAddToCart, isLoading, maxStock, isDisabled, disabledLabel,
 }) => {
     const { theme } = useTheme();
     const [quantity, setQuantity] = useState<number>(1);
@@ -311,15 +395,31 @@ export const AddToCartSection: React.FC<AddToCartSectionProps> = ({
     return (
         <View style={cartSectionStyles.container}>
             <View style={cartSectionStyles.qtyRow}>
-                <TouchableOpacity style={[cartSectionStyles.qtyBtn, { borderColor: theme.border, backgroundColor: theme.cardBackground }, quantity <= 1 && cartSectionStyles.qtyBtnDisabled]} onPress={decrement} disabled={quantity <= 1}>
+                <RipplePressable
+                    style={[
+                        cartSectionStyles.qtyBtn,
+                        { borderColor: theme.border, backgroundColor: theme.cardBackground },
+                        (quantity <= 1 || isDisabled) && cartSectionStyles.qtyBtnDisabled,
+                    ]}
+                    onPress={decrement}
+                    disabled={quantity <= 1 || isDisabled}
+                >
                     <Text style={[cartSectionStyles.qtyBtnText, { color: theme.textPrimary }]}>−</Text>
-                </TouchableOpacity>
+                </RipplePressable>
                 <Text style={[cartSectionStyles.qtyText, { color: theme.textPrimary }]}>{quantity}</Text>
-                <TouchableOpacity style={[cartSectionStyles.qtyBtn, { borderColor: theme.border, backgroundColor: theme.cardBackground }, quantity >= MAX_QTY && cartSectionStyles.qtyBtnDisabled]} onPress={increment} disabled={quantity >= MAX_QTY}>
+                <RipplePressable
+                    style={[
+                        cartSectionStyles.qtyBtn,
+                        { borderColor: theme.border, backgroundColor: theme.cardBackground },
+                        (quantity >= MAX_QTY || isDisabled) && cartSectionStyles.qtyBtnDisabled,
+                    ]}
+                    onPress={increment}
+                    disabled={quantity >= MAX_QTY || isDisabled}
+                >
                     <Text style={[cartSectionStyles.qtyBtnText, { color: theme.textPrimary }]}>+</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             </View>
-            <TouchableOpacity
+            <RipplePressable
                 style={[cartSectionStyles.addBtn, { backgroundColor: isDisabled || isLoading ? theme.gray : theme.primary }, (isDisabled || isLoading) && cartSectionStyles.addBtnDisabled]}
                 onPress={() => onAddToCart(quantity)}
                 disabled={isDisabled || isLoading}
@@ -328,10 +428,10 @@ export const AddToCartSection: React.FC<AddToCartSectionProps> = ({
                     <ActivityIndicator size="small" color={theme.white} />
                 ) : (
                     <Text style={[cartSectionStyles.addBtnText, { color: theme.white }]}>
-                        {isDisabled ? '⚠️ Select a Variant' : '🛒 Add to Cart'}
+                        {isDisabled ? (disabledLabel ?? 'Select a Variant') : 'Add to Cart'}
                     </Text>
                 )}
-            </TouchableOpacity>
+            </RipplePressable>
         </View>
     );
 };
@@ -356,6 +456,7 @@ interface InlineRatingStarsProps {
     readonly userRating: number | null;
     readonly onRate: (rating: number) => void;
     readonly isSubmitting: boolean;
+    readonly isReadOnly?: boolean;
 }
 
 /**
@@ -364,7 +465,7 @@ interface InlineRatingStarsProps {
  * @param props {InlineRatingStarsProps}
  */
 export const InlineRatingStars: React.FC<InlineRatingStarsProps> = ({
-    averageRating, ratingCount, userRating, onRate, isSubmitting,
+    averageRating, ratingCount, userRating, onRate, isSubmitting, isReadOnly = false,
 }) => {
     const { theme } = useTheme();
     const [hoveredStar, setHoveredStar] = useState<number | null>(null);
@@ -381,13 +482,21 @@ export const InlineRatingStars: React.FC<InlineRatingStarsProps> = ({
                 <Text style={[starsStyles.tapLabel, { color: theme.textSecondary }]}>Your rating: </Text>
                 <View style={starsStyles.starsRow}>
                     {[1, 2, 3, 4, 5].map((star) => (
-                        <TouchableOpacity key={star} onPress={() => !isSubmitting && onRate(star)} disabled={isSubmitting} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+                        <RipplePressable
+                            key={star}
+                            onPress={() => !isSubmitting && !isReadOnly && onRate(star)}
+                            disabled={isSubmitting || isReadOnly}
+                            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                        >
                             <Text style={[starsStyles.star, { color: star <= displayRating ? theme.starColor : theme.border }]}>★</Text>
-                        </TouchableOpacity>
+                        </RipplePressable>
                     ))}
                 </View>
                 {isSubmitting && <ActivityIndicator size="small" color={theme.primary} style={{ marginLeft: 8 }} />}
             </View>
+            {isReadOnly && (
+                <Text style={[starsStyles.readOnlyText, { color: theme.textSecondary }]}>Seller read-only mode</Text>
+            )}
             {userRating !== null && (
                 <Text style={[starsStyles.thankYou, { color: theme.success }]}>✓ You rated this {userRating} star{userRating !== 1 ? 's' : ''}</Text>
             )}
@@ -405,6 +514,7 @@ const starsStyles = StyleSheet.create({
     tapLabel: { fontSize: 14 },
     starsRow: { flexDirection: 'row', gap: 4 },
     star: { fontSize: 28 },
+    readOnlyText: { fontSize: 12, marginTop: 6 },
     thankYou: { fontSize: 12, marginTop: 6, fontWeight: '600' },
 });
 
@@ -480,21 +590,32 @@ interface ReviewsListProps {
     readonly onLoadMore: () => void;
     readonly hasMore: boolean;
     readonly onWriteReview: () => void;
+    readonly isReadOnly?: boolean;
 }
 
 /**
  * Paginated reviews list below the rating section.
  * @param props {ReviewsListProps}
  */
-export const ReviewsList: React.FC<ReviewsListProps> = ({ reviews, isLoading, onLoadMore, hasMore, onWriteReview }) => {
+export const ReviewsList: React.FC<ReviewsListProps> = ({ reviews, isLoading, onLoadMore, hasMore, onWriteReview, isReadOnly = false }) => {
     const { theme } = useTheme();
     return (
         <View style={[reviewsListStyles.container, { backgroundColor: theme.cardBackground }]}>
             <View style={[reviewsListStyles.header, { borderBottomColor: theme.border }]}>
                 <Text style={[reviewsListStyles.title, { color: theme.textPrimary }]}>Reviews</Text>
-                <TouchableOpacity style={[reviewsListStyles.writeBtn, { backgroundColor: `${theme.primary}1A` }]} onPress={onWriteReview}>
-                    <Text style={[reviewsListStyles.writeBtnText, { color: theme.primary }]}>✏️ Write a Review</Text>
-                </TouchableOpacity>
+                <RipplePressable
+                    style={[
+                        reviewsListStyles.writeBtn,
+                        {
+                            backgroundColor: isReadOnly ? theme.background : `${theme.primary}1A`,
+                        },
+                        isReadOnly && reviewsListStyles.writeBtnDisabled,
+                    ]}
+                    onPress={onWriteReview}
+                    disabled={isReadOnly}
+                >
+                    <Text style={[reviewsListStyles.writeBtnText, { color: isReadOnly ? theme.textSecondary : theme.primary }]}>Write a Review</Text>
+                </RipplePressable>
             </View>
             {reviews.map((r) => (<ReviewCard key={r.uid} review={r} />))}
             {isLoading && (
@@ -503,9 +624,9 @@ export const ReviewsList: React.FC<ReviewsListProps> = ({ reviews, isLoading, on
                 </View>
             )}
             {!isLoading && hasMore && (
-                <TouchableOpacity style={reviewsListStyles.loadMoreBtn} onPress={onLoadMore}>
+                <RipplePressable style={reviewsListStyles.loadMoreBtn} onPress={onLoadMore}>
                     <Text style={[reviewsListStyles.loadMoreText, { color: theme.primary }]}>Load More Reviews</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             )}
             {!isLoading && reviews.length === 0 && (
                 <View style={reviewsListStyles.empty}>
@@ -522,6 +643,7 @@ const reviewsListStyles = StyleSheet.create({
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
     title: { fontSize: 17, fontWeight: '700' },
     writeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+    writeBtnDisabled: { opacity: 0.6 },
     writeBtnText: { fontSize: 13, fontWeight: '700' },
     loading: { paddingVertical: 16, alignItems: 'center' },
     loadMoreBtn: { alignItems: 'center', padding: 16 },
@@ -536,30 +658,43 @@ const reviewsListStyles = StyleSheet.create({
 interface ChatWithSellerButtonProps {
     readonly onPress: () => void;
     readonly isLoading: boolean;
+    readonly isDisabled?: boolean;
 }
 
 /**
  * Chat with seller CTA button for buyers on the product details page.
  * @param props {ChatWithSellerButtonProps}
  */
-export const ChatWithSellerButton: React.FC<ChatWithSellerButtonProps> = ({ onPress, isLoading }) => {
+export const ChatWithSellerButton: React.FC<ChatWithSellerButtonProps> = ({ onPress, isLoading, isDisabled = false }) => {
     const { theme } = useTheme();
     return (
-        <TouchableOpacity style={[chatBtnStyles.container, { borderColor: theme.primary }]} onPress={onPress} disabled={isLoading}>
+        <RipplePressable
+            style={[
+                chatBtnStyles.container,
+                {
+                    borderColor: isDisabled ? theme.border : theme.primary,
+                    backgroundColor: isDisabled ? theme.background : theme.cardBackground,
+                },
+                isDisabled && chatBtnStyles.disabled,
+            ]}
+            onPress={onPress}
+            disabled={isLoading || isDisabled}
+        >
             {isLoading ? (
                 <ActivityIndicator size="small" color={theme.primary} />
             ) : (
                 <>
                     <Text style={chatBtnStyles.icon}>💬</Text>
-                    <Text style={[chatBtnStyles.text, { color: theme.primary }]}>Chat with Seller</Text>
+                    <Text style={[chatBtnStyles.text, { color: isDisabled ? theme.textSecondary : theme.primary }]}>Chat with Seller</Text>
                 </>
             )}
-        </TouchableOpacity>
+        </RipplePressable>
     );
 };
 
 const chatBtnStyles = StyleSheet.create({
     container: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1.5, marginHorizontal: 16, marginBottom: 16 },
+    disabled: { opacity: 0.6 },
     icon: { fontSize: 18 },
     text: { fontSize: 15, fontWeight: '700' },
 });

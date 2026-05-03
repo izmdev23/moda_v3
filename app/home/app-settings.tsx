@@ -1,8 +1,10 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
     CacheManager,
     SettingsHeader,
@@ -17,10 +19,9 @@ import { supabase } from '../../supabase/supabaseClient';
 
 export default function AppSettingsScreen(): React.JSX.Element {
     const router = useRouter();
-    const { theme } = useTheme();
+    const { theme, isDark, setThemePref } = useTheme();
     const [loading, setLoading] = useState(false);
 
-    const [darkMode, setDarkMode] = useState(false);
     const [pushNotifications, setPushNotifications] = useState(true);
     const [cacheSize, setCacheSize] = useState('0 MB');
 
@@ -36,12 +37,6 @@ export default function AppSettingsScreen(): React.JSX.Element {
                 // Determine mock cache size
                 setCacheSize('12.4 MB');
 
-                // Read dark mode preference
-                const dmPref = await AsyncStorage.getItem('darkMode');
-                if (dmPref !== null) {
-                    setDarkMode(dmPref === 'true');
-                }
-
                 // Read push notifications preference
                 const pushPref = await AsyncStorage.getItem('pushNotifications');
                 if (pushPref !== null) {
@@ -56,8 +51,7 @@ export default function AppSettingsScreen(): React.JSX.Element {
     }, []);
 
     const toggleDarkMode = async (value: boolean) => {
-        setDarkMode(value);
-        await AsyncStorage.setItem('darkMode', String(value));
+        await setThemePref(value ? 'dark' : 'light');
     };
 
     const togglePushNotifications = async (value: boolean) => {
@@ -71,7 +65,7 @@ export default function AppSettingsScreen(): React.JSX.Element {
         setTimeout(() => {
             setCacheSize('0 MB');
             setLoading(false);
-            Alert.alert('Cache Cleared', 'Temporary data has been removed.');
+            AppAlert.alert('Cache Cleared', 'Temporary data has been removed.');
         }, 1000);
     };
 
@@ -92,7 +86,7 @@ export default function AppSettingsScreen(): React.JSX.Element {
             router.replace('/auth/login');
         } catch (error) {
             console.error("Logout error", error);
-            Alert.alert("Logout Failed", "There was an issue signing out. Please try again.");
+            AppAlert.alert("Logout Failed", "There was an issue signing out. Please try again.");
             setLogoutClearingState(false);
         }
     };
@@ -100,9 +94,9 @@ export default function AppSettingsScreen(): React.JSX.Element {
     return (
         <SafeScreen>
             <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <RipplePressable onPress={() => router.back()} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
-                </TouchableOpacity>
+                </RipplePressable>
                 <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>App Settings</Text>
             </View>
 
@@ -112,7 +106,7 @@ export default function AppSettingsScreen(): React.JSX.Element {
                     icon="moon-outline"
                     label="Dark Mode"
                     description="Switch to dark theme"
-                    value={darkMode}
+                    value={isDark}
                     onValueChange={toggleDarkMode}
                 />
                 <SettingsToggle
@@ -126,7 +120,7 @@ export default function AppSettingsScreen(): React.JSX.Element {
                     icon="globe-outline"
                     label="Language"
                     value="English"
-                    onPress={() => Alert.alert('Coming Soon', 'Additional languages will be added in future updates.')}
+                    onPress={() => AppAlert.alert('Coming Soon', 'Additional languages will be added in future updates.')}
                 />
 
                 <SettingsHeader title="Account & Data" />
@@ -145,22 +139,22 @@ export default function AppSettingsScreen(): React.JSX.Element {
                     icon="information-circle-outline"
                     label="About Moda"
                     value="v1.0.0"
-                    onPress={() => Alert.alert('About Moda', 'Version 1.0.0\nDeveloped by Antigravity')}
+                    onPress={() => AppAlert.alert('About Moda', 'Version 1.0.0\nDeveloped by Antigravity')}
                 />
                 <SettingsNavigationItem
                     icon="help-buoy-outline"
                     label="Help Center"
-                    onPress={() => Alert.alert('Support', 'Contact us at support@moda.com')}
+                    onPress={() => AppAlert.alert('Support', 'Contact us at support@moda.com')}
                 />
                 <SettingsNavigationItem
                     icon="document-text-outline"
                     label="Terms of Service"
-                    onPress={() => Alert.alert('Terms of Service', 'Terms go here.')}
+                    onPress={() => AppAlert.alert('Terms of Service', 'Terms go here.')}
                 />
                 <SettingsNavigationItem
                     icon="shield-checkmark-outline"
                     label="Privacy Policy"
-                    onPress={() => Alert.alert('Privacy Policy', 'Privacy policy goes here.')}
+                    onPress={() => AppAlert.alert('Privacy Policy', 'Privacy policy goes here.')}
                 />
 
                 <SettingsHeader title="Session" />

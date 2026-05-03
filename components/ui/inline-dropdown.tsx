@@ -1,5 +1,6 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from './theme-provider';
 
 const OPEN_ANIMATION_DURATION_MS = 260;
@@ -104,7 +105,7 @@ export function InlineDropdown<TValue extends string>({
         <View style={[styles.container, shouldRenderOptions ? styles.containerElevated : null]}>
             <Text style={[styles.label, { color: theme.textPrimary }]}>{label}</Text>
 
-            <TouchableOpacity
+            <RipplePressable
                 style={[
                     styles.trigger,
                     {
@@ -132,7 +133,7 @@ export function InlineDropdown<TValue extends string>({
                     {selectedLabel.length > 0 ? selectedLabel : placeholder}
                 </Text>
                 <Text style={[styles.triggerChevron, { color: theme.gray }]}>{isOpen ? '▴' : '▾'}</Text>
-            </TouchableOpacity>
+            </RipplePressable>
 
             {shouldRenderOptions ? (
                 <Animated.View
@@ -150,7 +151,7 @@ export function InlineDropdown<TValue extends string>({
                         const hasBottomBorder = index < options.length - 1;
 
                         return (
-                            <Pressable
+                            <RipplePressable
                                 key={option.value}
                                 style={[
                                     styles.option,
@@ -169,7 +170,7 @@ export function InlineDropdown<TValue extends string>({
                                     {option.label}
                                 </Text>
                                 {isSelected ? <Text style={[styles.selectedMark, { color: theme.primary }]}>✓</Text> : null}
-                            </Pressable>
+                            </RipplePressable>
                         );
                     })}
                     </View>

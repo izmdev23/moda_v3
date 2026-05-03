@@ -1,31 +1,23 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
-  Alert,
-  Dimensions,
-  Easing,
-  KeyboardAvoidingView,
-  Linking,
-  Platform,
-  Animated as RNAnimated,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    KeyboardAvoidingView, Linking, Platform, StyleSheet, Text, View
 } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { SafeScreen } from '../../components/ui/safe-screen';
 import { Animation } from '../../utils/animation';
 
 import {
-  AccountInfoStep,
-  AccountTypeStep,
-  ConfirmationStep,
-  SellerInfoStep,
-  SignupFormData,
-  UserInfoStep,
-  WizardProgressBar,
+    AccountInfoStep,
+    AccountTypeStep,
+    ConfirmationStep,
+    SellerInfoStep,
+    SignupFormData,
+    UserInfoStep,
+    WizardProgressBar,
 } from '../../components/signup-components';
 import { LoadingModal } from '../../components/ui/loading-modal';
 import { useTheme } from '../../components/ui/theme-provider';
@@ -35,15 +27,26 @@ import { UserRole } from '../../utils/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CONTENT_WIDTH = SCREEN_WIDTH - 48; // SCREEN_WIDTH - padding (24 * 2)
-
 const TOTAL_BUYER_STEPS = 4; // Step 1→2→3→5 (skip seller step 4)
 const TOTAL_SELLER_STEPS = 5; // Step 1→2→3→4→5
 
 const TERMS_URL = 'https://moda.example.com/terms'; // Placeholder
 const AUTH_EMAIL_SEND_FAILURE_FRAGMENT = 'Error sending confirmation email';
 const SMTP_AUTH_FAILURE_FRAGMENT = '535 5.7.8';
+
+interface EmailAvailabilityResult {
+    readonly available: boolean;
+    readonly is_confirmed: boolean;
+}
+
+function isEmailAvailabilityResult(value: unknown): value is EmailAvailabilityResult {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return false;
+    }
+
+    const parsed = value as { readonly available?: unknown; readonly is_confirmed?: unknown };
+    return typeof parsed.available === 'boolean' && typeof parsed.is_confirmed === 'boolean';
+}
 
 /**
  * Maps wizard step index (0-based) to a user-facing step number.
@@ -53,7 +56,7 @@ const getStepNumber = (stepIndex: number): number => stepIndex + 1; // displayed
 // ─── SignupScreen ─────────────────────────────────────────────────────────────
 
 /**
- * Multi-step signup wizard with animated slide transitions.
+ * Multi-step signup wizard with fade transitions.
  * Step flow:
  *   - Buyers:  1 (AccountType) → 2 (UserInfo) → 3 (AccountInfo) → 4 (Confirmation)
  *   - Sellers: 1 (AccountType) → 2 (UserInfo) → 3 (AccountInfo) → 4 (ShopInfo) → 5 (Confirmation)
@@ -105,22 +108,7 @@ export default function SignupScreen(): React.JSX.Element {
     const [loadingMessage, setLoadingMessage] = useState<string>('');
     const [agreedToTerms, setAgreedToTerms] = useState<boolean>(false);
 
-    // Slide animation — translateX value
-    const slideAnim = useRef(new RNAnimated.Value(0)).current;
-
     // ── Navigation ────────────────────────────────────────────────────────────
-
-    /**
-     * Drives the horizontal slide transition when stepIndex changes.
-     */
-    React.useEffect(() => {
-        RNAnimated.timing(slideAnim, {
-            toValue: -stepIndex * CONTENT_WIDTH,
-            duration: Animation.DefaultAnimationSpeed || 350,
-            easing: Easing.bezier(0.4, 0, 0.2, 1),
-            useNativeDriver: true,
-        }).start();
-    }, [stepIndex]);
 
     const handleNext = async (): Promise<void> => {
         const fields = getStepFields(stepIndex);
@@ -193,7 +181,11 @@ export default function SignupScreen(): React.JSX.Element {
                 return true; // On network error, allow continue optimistically
             }
 
-            if (data && data.available === false) {
+            if (!isEmailAvailabilityResult(data)) {
+                return true;
+            }
+
+            if (data.available === false) {
                 // Check if the existing user is unconfirmed
                 const isConfirmed = data.is_confirmed;
 
@@ -213,7 +205,7 @@ export default function SignupScreen(): React.JSX.Element {
                             resendErrorMessage.includes(AUTH_EMAIL_SEND_FAILURE_FRAGMENT) ||
                             resendErrorMessage.includes(SMTP_AUTH_FAILURE_FRAGMENT)
                         ) {
-                            Alert.alert(
+                            AppAlert.alert(
                                 'Email Service Temporarily Unavailable',
                                 'We could not send a verification email right now. Please try again later while we restore email delivery.'
                             );
@@ -221,7 +213,7 @@ export default function SignupScreen(): React.JSX.Element {
                         }
                     }
 
-                    Alert.alert(
+                    AppAlert.alert(
                         'Email Unconfirmed',
                         'An account with this email exists but is not yet confirmed. We have sent a new verification link to your inbox.',
                         [
@@ -238,7 +230,7 @@ export default function SignupScreen(): React.JSX.Element {
                 }
 
                 // If already confirmed
-                Alert.alert(
+                AppAlert.alert(
                     'Email Already Registered',
                     'An account with this email already exists. Please use a different email or log in.'
                 );
@@ -262,7 +254,7 @@ export default function SignupScreen(): React.JSX.Element {
      */
     const onSubmit = async (data: SignupFormData): Promise<void> => {
         if (!agreedToTerms) {
-            Alert.alert('Terms Required', 'Please agree to the Terms & Conditions to continue.');
+            AppAlert.alert('Terms Required', 'Please agree to the Terms & Conditions to continue.');
             return;
         }
 
@@ -304,17 +296,17 @@ export default function SignupScreen(): React.JSX.Element {
                 errorMessage.includes(AUTH_EMAIL_SEND_FAILURE_FRAGMENT) ||
                 errorMessage.includes(SMTP_AUTH_FAILURE_FRAGMENT)
             ) {
-                Alert.alert(
+                AppAlert.alert(
                     'Signup Temporarily Unavailable',
                     'Your account could not be created because verification email delivery failed. Please try again in a few minutes.'
                 );
             } else if (errorMessage.includes('rate limit')) {
-                Alert.alert(
+                AppAlert.alert(
                     'Rate Limit Exceeded',
                     'You have attempted to sign up too many times in a short period. Please wait a few minutes before trying again or check your email for an existing confirmation link.'
                 );
             } else {
-                Alert.alert('Signup Failed', errorMessage);
+                AppAlert.alert('Signup Failed', errorMessage);
             }
             return;
         }
@@ -325,6 +317,10 @@ export default function SignupScreen(): React.JSX.Element {
         // Navigate to email verification status screen, passing the email
         // NOTE: Cast through unknown because expo-router typed routes may not include
         // newly added screen files until a full type regeneration is run.
+        if (router.canDismiss()) {
+            router.dismissAll();
+        }
+
         router.replace({
             pathname: '/auth/verify-email',
             params: { email: data.email },
@@ -334,7 +330,7 @@ export default function SignupScreen(): React.JSX.Element {
     // ── Step Renderer ─────────────────────────────────────────────────────────
 
     /**
-     * Renders all steps in a single row for horizontal sliding.
+        * Builds the ordered step list for the current account type.
      */
     const getSteps = (): React.JSX.Element[] => {
         const buyerSteps = [
@@ -359,6 +355,7 @@ export default function SignupScreen(): React.JSX.Element {
         return sellerSteps;
     };
 
+    const steps = getSteps();
     const isLastStep = stepIndex === (isSeller ? TOTAL_SELLER_STEPS - 1 : TOTAL_BUYER_STEPS - 1);
     const isFirstStep = stepIndex === 0;
 
@@ -373,15 +370,15 @@ export default function SignupScreen(): React.JSX.Element {
             >
                 <Animated.View
                     entering={Animation.Presets.FadeInDown}
-                    exiting={Animation.Presets.FadeOutUp}
+                    exiting={Animation.Presets.FadeOutDown}
                     style={styles.container}
                 >
                     {/* Header */}
 
                     <View style={styles.header}>
-                        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+                        <RipplePressable onPress={handleBack} style={styles.backButton}>
                             <Text style={[styles.backButtonText, { color: theme.primary }]}>‹ Back</Text>
-                        </TouchableOpacity>
+                        </RipplePressable>
                         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Create Account</Text>
                         <View style={styles.backButton} />
                     </View>
@@ -393,28 +390,21 @@ export default function SignupScreen(): React.JSX.Element {
 
                     {/* Animated step content */}
                     <View style={styles.stepContainer}>
-                        <RNAnimated.View
-                            style={[
-                                styles.stepRow,
-                                {
-                                    width: totalSteps * CONTENT_WIDTH,
-                                    transform: [{ translateX: slideAnim }]
-                                }
-                            ]}
+                        <Animated.View
+                            key={`signup-step-${stepIndex}-${isSeller ? 'seller' : 'buyer'}`}
+                            entering={Animation.Presets.FadeInDown}
+                            exiting={Animation.Presets.FadeOutDown}
+                            style={styles.stepContent}
                         >
-                            {getSteps().map((step, idx) => (
-                                <View key={idx} style={{ width: CONTENT_WIDTH }}>
-                                    {step}
-                                </View>
-                            ))}
-                        </RNAnimated.View>
+                            {steps[stepIndex] ?? null}
+                        </Animated.View>
                     </View>
 
                     {/* Navigation buttons (skip on step 0 — auto-advances) */}
                     {stepIndex > 0 && (
                         <View style={styles.navButtons}>
                             {isLastStep ? (
-                                <TouchableOpacity
+                                <RipplePressable
                                     style={[
                                         styles.primaryButton,
                                         { backgroundColor: theme.primary },
@@ -425,15 +415,15 @@ export default function SignupScreen(): React.JSX.Element {
                                     activeOpacity={0.8}
                                 >
                                     <Text style={[styles.primaryButtonText, { color: theme.white }]}>Create Account</Text>
-                                </TouchableOpacity>
+                                </RipplePressable>
                             ) : (
-                                <TouchableOpacity
+                                <RipplePressable
                                     style={[styles.primaryButton, { backgroundColor: theme.primary }]}
                                     onPress={handleNext}
                                     activeOpacity={0.8}
                                 >
                                     <Text style={[styles.primaryButtonText, { color: theme.white }]}>Next →</Text>
-                                </TouchableOpacity>
+                                </RipplePressable>
                             )}
                         </View>
                     )}
@@ -442,9 +432,9 @@ export default function SignupScreen(): React.JSX.Element {
                     {isFirstStep && (
                         <View style={styles.loginLink}>
                             <Text style={[styles.loginLinkText, { color: theme.textSecondary }]}>Already have an account? </Text>
-                            <TouchableOpacity onPress={() => router.replace('/auth/login' as unknown as Parameters<typeof router.replace>[0])}>
+                            <RipplePressable onPress={() => router.replace('/auth/login' as unknown as Parameters<typeof router.replace>[0])}>
                                 <Text style={[styles.loginLinkAction, { color: theme.primary }]}>Sign In</Text>
-                            </TouchableOpacity>
+                            </RipplePressable>
                         </View>
                     )}
 
@@ -488,9 +478,8 @@ const styles = StyleSheet.create({
         flex: 1,
         overflow: 'hidden',
     },
-    stepRow: {
+    stepContent: {
         flex: 1,
-        flexDirection: 'row',
     },
     navButtons: {
         paddingTop: 16,

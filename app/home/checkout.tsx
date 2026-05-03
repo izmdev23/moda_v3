@@ -1,14 +1,10 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
 import { useStripe } from '@stripe/stripe-react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    BackHandler,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+    BackHandler, ScrollView, StyleSheet, Text, View
 } from 'react-native';
 import {
     CheckoutItem,
@@ -21,11 +17,12 @@ import {
 import type { Address as AddressDropdownItem } from '../../components/ui/address-dropdown';
 import { AddressDropdown } from '../../components/ui/address-dropdown';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
-import { LoadingModal } from '../../components/ui/loading-modal';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { SkeletonLoader } from '../../components/ui/skeleton-loader';
 import { useTheme } from '../../components/ui/theme-provider';
 import { useAddresses, type AddressRow } from '../../hooks/use-addresses';
 import { useCurrentUser } from '../../hooks/use-current-user';
+import { getStripePaymentMethodIdFromStoredAccount } from '../../hooks/use-payment-methods';
 import { supabase } from '../../supabase/supabaseClient';
 import { formatPrice } from '../../utils/utils';
 
@@ -198,15 +195,15 @@ export default function CheckoutScreen(): React.JSX.Element {
 
     const handlePlaceOrder = useCallback((): void => {
         if (selectedAddressUid === null) {
-            Alert.alert('No Address', 'Please select a delivery address.');
+            AppAlert.alert('No Address', 'Please select a delivery address.');
             return;
         }
         if (selectedPaymentUid === null || selectedPaymentType === null) {
-            Alert.alert('No Payment Method', 'Please select a payment method.');
+            AppAlert.alert('No Payment Method', 'Please select a payment method.');
             return;
         }
         if (items.length === 0) {
-            Alert.alert('Empty Cart', 'No valid items to checkout.');
+            AppAlert.alert('Empty Cart', 'No valid items to checkout.');
             return;
         }
 
@@ -235,6 +232,10 @@ export default function CheckoutScreen(): React.JSX.Element {
             if (addressId === undefined) throw new Error('Address not found');
 
             const normalizedPaymentChannel = String(selectedPaymentType).toLowerCase().trim();
+            const stripePaymentMethodId =
+                normalizedPaymentChannel === 'card' && selectedPaymentAccountNumber !== null
+                    ? getStripePaymentMethodIdFromStoredAccount(selectedPaymentAccountNumber)
+                    : null;
 
             // Build idempotency key - prevents duplicate charges on retry
             const idempotencyKey = `order-${userId}-${Date.now()}`;
@@ -243,7 +244,7 @@ export default function CheckoutScreen(): React.JSX.Element {
                 userId: userId,
                 addressId,
                 paymentChannel: normalizedPaymentChannel,
-                stripePaymentMethodId: normalizedPaymentChannel === 'card' && selectedPaymentAccountNumber?.startsWith('pm_') ? selectedPaymentAccountNumber : undefined,
+                stripePaymentMethodId: stripePaymentMethodId ?? undefined,
                 totalAmount,
                 idempotencyKey,
                 customerEmail: currentUser?.email ?? '',
@@ -314,7 +315,7 @@ export default function CheckoutScreen(): React.JSX.Element {
             // Handle Stripe confirm based on type
             let stripeResponse;
             if (normalizedPaymentChannel === 'card') {
-                const pmId = selectedPaymentAccountNumber?.startsWith('pm_') ? selectedPaymentAccountNumber : undefined;
+                const pmId = stripePaymentMethodId ?? undefined;
                 
                 if (pmId) {
                     stripeResponse = await confirmPayment(response.clientSecret, {
@@ -327,11 +328,9 @@ export default function CheckoutScreen(): React.JSX.Element {
                     });
                 }
             } else {
-                // GCash or Maya - ensuring correct casing for Stripe SDK
-                const methodType: 'PayMaya' | 'Gcash' = normalizedPaymentChannel === 'paymaya' ? 'PayMaya' : 'Gcash';
-                stripeResponse = await confirmPayment(response.clientSecret, {
-                    paymentMethodType: methodType,
-                });
+                // For non-card channels, the PaymentIntent already includes the allowed
+                // payment method type from the server-side `payment-create` function.
+                stripeResponse = await confirmPayment(response.clientSecret);
             }
 
             if (!stripeResponse) {
@@ -376,7 +375,7 @@ export default function CheckoutScreen(): React.JSX.Element {
             const errorLower = errorMessage.toLowerCase();
 
             if (errorStatus === 401 || errorLower.includes('session expired')) {
-                Alert.alert(
+                AppAlert.alert(
                     'Session Expired',
                     'Please sign in again to continue checkout.',
                     [
@@ -399,7 +398,7 @@ export default function CheckoutScreen(): React.JSX.Element {
                 errorLower.includes('previously used') ||
                 errorLower.includes('without customer attachment')
             ) {
-                Alert.alert(
+                AppAlert.alert(
                     'Card Cannot Be Reused',
                     'This saved card was previously charged without account linking and can no longer be reused. Please go to Payment Methods, remove it, and add it again.',
                     [
@@ -415,7 +414,7 @@ export default function CheckoutScreen(): React.JSX.Element {
                 return;
             }
 
-            Alert.alert(
+            AppAlert.alert(
                 'Payment Failed',
                 `Unable to initiate payment: ${errorMessage}`,
             );
@@ -436,14 +435,6 @@ export default function CheckoutScreen(): React.JSX.Element {
 
     // ─── Render ───────────────────────────────────────────────────────────
 
-    if (isLoading) {
-        return (
-            <SafeScreen>
-                <LoadingModal isVisible message="Loading checkout…" />
-            </SafeScreen>
-        );
-    }
-
     const canProceed =
         selectedAddressUid !== null &&
         selectedPaymentUid !== null &&
@@ -454,9 +445,9 @@ export default function CheckoutScreen(): React.JSX.Element {
         <SafeScreen style={styles.root}>
             {/* Header */}
             <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.cardBackground }]}>
-                <TouchableOpacity onPress={() => router.back()} id="back-btn" style={styles.backBtn}>
+                <RipplePressable onPress={() => router.back()} id="back-btn" style={styles.backBtn}>
                     <Text style={[styles.backText, { color: theme.primary }]}>‹ Back</Text>
-                </TouchableOpacity>
+                </RipplePressable>
                 <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Checkout</Text>
                 <View style={{ width: 60 }} />
             </View>
@@ -466,90 +457,129 @@ export default function CheckoutScreen(): React.JSX.Element {
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
             >
-                {/* Validation warnings */}
-                {validationWarnings.map((w, i) => (
-                    <View key={i} style={[styles.warningBanner, { backgroundColor: `${theme.warning}1A` }]}>
-                        <Text style={[styles.warningText, { color: theme.warning }]}>⚠️ {w}</Text>
+                {isLoading ? (
+                    <View style={styles.checkoutSkeletonWrap}>
+                        <View style={styles.section}>
+                            <SkeletonLoader width={120} height={12} style={styles.skeletonGap} />
+                            <SkeletonLoader width="100%" height={72} borderRadius={12} />
+                        </View>
+
+                        <View style={styles.section}>
+                            <SkeletonLoader width={110} height={12} style={styles.skeletonGap} />
+                            <View style={[styles.itemsCard, { backgroundColor: theme.cardBackground }]}> 
+                                {Array.from({ length: 3 }).map((_, index) => (
+                                    <View key={`checkout-item-skeleton-${index}`} style={styles.checkoutItemSkeletonRow}>
+                                        <SkeletonLoader width={64} height={64} borderRadius={8} />
+                                        <View style={styles.checkoutItemSkeletonBody}>
+                                            <SkeletonLoader width="72%" height={13} style={styles.skeletonGapSmall} />
+                                            <SkeletonLoader width="48%" height={12} style={styles.skeletonGapSmall} />
+                                            <SkeletonLoader width="34%" height={12} />
+                                        </View>
+                                    </View>
+                                ))}
+                            </View>
+                        </View>
+
+                        <View style={styles.section}>
+                            <SkeletonLoader width={132} height={12} style={styles.skeletonGap} />
+                            <SkeletonLoader width="100%" height={84} borderRadius={12} />
+                        </View>
+
+                        <View style={[styles.section, styles.summaryCard, { backgroundColor: theme.cardBackground }]}> 
+                            <SkeletonLoader width={96} height={12} style={styles.skeletonGap} />
+                            <SkeletonLoader width="100%" height={14} style={styles.skeletonGapSmall} />
+                            <SkeletonLoader width="100%" height={14} style={styles.skeletonGapSmall} />
+                            <SkeletonLoader width="70%" height={18} />
+                        </View>
                     </View>
-                ))}
-
-                {/* Delivery address section */}
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Delivery Address</Text>
-                    <AddressDropdown
-                        addresses={addresses}
-                        selectedUid={selectedAddressUid}
-                        onSelect={setSelectedAddressUid}
-                        onAddAddress={() =>
-                            router.push('/home/addresses' as Parameters<typeof router.push>[0])
-                        }
-                    />
-                    {addresses.length === 0 && (
-                        <TouchableOpacity
-                            style={[styles.addAddressBtn, { borderColor: theme.primary }]}
-                            onPress={() =>
-                                router.push('/home/addresses' as Parameters<typeof router.push>[0])
-                            }
-                            id="add-address-from-checkout"
-                        >
-                            <Text style={[styles.addAddressText, { color: theme.primary }]}>+ Add Delivery Address</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-
-                {/* Order items */}
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Order Items ({items.length})</Text>
-                    <View style={[styles.itemsCard, { backgroundColor: theme.cardBackground }]}>
-                        {items.map((item) => (
-                            <CheckoutItem key={item.uid} item={item} />
+                ) : (
+                    <>
+                        {/* Validation warnings */}
+                        {validationWarnings.map((w, i) => (
+                            <View key={i} style={[styles.warningBanner, { backgroundColor: `${theme.warning}1A` }]}>
+                                <Text style={[styles.warningText, { color: theme.warning }]}>⚠️ {w}</Text>
+                            </View>
                         ))}
-                        {items.length === 0 && (
-                            <Text style={[styles.noItems, { color: theme.textSecondary }]}>No valid items to checkout.</Text>
-                        )}
-                    </View>
-                </View>
 
-                {/* Payment method */}
-                <View style={styles.section}>
-                    {userId !== null && (
-                        <PaymentMethodSelector
-                            userId={userId}
-                            selectedMethodUid={selectedPaymentUid}
-                            onSelect={(uid, type, accountNumber) => {
-                                setSelectedPaymentUid(uid);
-                                setSelectedPaymentType(type as PaymentMethodType);
-                                setSelectedPaymentAccountNumber(accountNumber);
-                            }}
-                            onAddNew={() =>
-                                router.push('/home/payments?returnTo=checkout' as Parameters<typeof router.push>[0])
-                            }
-                            onEmpty={() => setNoMethodsDialogVisible(true)}
-                        />
-                    )}
-                </View>
+                        {/* Delivery address section */}
+                        <View style={styles.section}>
+                            <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Delivery Address</Text>
+                            <AddressDropdown
+                                addresses={addresses}
+                                selectedUid={selectedAddressUid}
+                                onSelect={setSelectedAddressUid}
+                                onAddAddress={() =>
+                                    router.push('/home/addresses' as Parameters<typeof router.push>[0])
+                                }
+                            />
+                            {addresses.length === 0 && (
+                                <RipplePressable
+                                    style={[styles.addAddressBtn, { borderColor: theme.primary }]}
+                                    onPress={() =>
+                                        router.push('/home/addresses' as Parameters<typeof router.push>[0])
+                                    }
+                                    id="add-address-from-checkout"
+                                >
+                                    <Text style={[styles.addAddressText, { color: theme.primary }]}>+ Add Delivery Address</Text>
+                                </RipplePressable>
+                            )}
+                        </View>
 
-                {/* Price breakdown */}
-                <View style={[styles.section, styles.summaryCard, { backgroundColor: theme.cardBackground }]}>
-                    <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Order Summary</Text>
-                    <View style={styles.summaryRow}>
-                        <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Subtotal ({items.length} item{items.length !== 1 ? 's' : ''})</Text>
-                        <Text style={[styles.summaryValue, { color: theme.textPrimary }]}>{formatPrice(totalAmount)}</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Shipping</Text>
-                        <Text style={[styles.shippingFree, { color: theme.success }]}>Free</Text>
-                    </View>
-                    <View style={[styles.summaryRow, styles.summaryTotal, { borderTopColor: theme.border }]}>
-                        <Text style={[styles.totalLabel, { color: theme.textPrimary }]}>Total</Text>
-                        <Text style={[styles.totalValue, { color: theme.primary }]}>{formatPrice(totalAmount)}</Text>
-                    </View>
-                </View>
+                        {/* Order items */}
+                        <View style={styles.section}>
+                            <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Order Items ({items.length})</Text>
+                            <View style={[styles.itemsCard, { backgroundColor: theme.cardBackground }]}> 
+                                {items.map((item) => (
+                                    <CheckoutItem key={item.uid} item={item} />
+                                ))}
+                                {items.length === 0 && (
+                                    <Text style={[styles.noItems, { color: theme.textSecondary }]}>No valid items to checkout.</Text>
+                                )}
+                            </View>
+                        </View>
 
-                {/* Stripe disclaimer */}
-                <Text style={[styles.disclaimer, { color: theme.gray }]}>
-                    🔒 Payments (e-wallets and cards) are processed securely via Stripe. Your card numbers are never stored on our servers.
-                </Text>
+                        {/* Payment method */}
+                        <View style={styles.section}>
+                            {userId !== null && (
+                                <PaymentMethodSelector
+                                    userId={userId}
+                                    selectedMethodUid={selectedPaymentUid}
+                                    onSelect={(uid, type, accountNumber) => {
+                                        setSelectedPaymentUid(uid);
+                                        setSelectedPaymentType(type as PaymentMethodType);
+                                        setSelectedPaymentAccountNumber(accountNumber);
+                                    }}
+                                    onAddNew={() =>
+                                        router.push('/home/payments?returnTo=checkout' as Parameters<typeof router.push>[0])
+                                    }
+                                    onEmpty={() => setNoMethodsDialogVisible(true)}
+                                />
+                            )}
+                        </View>
+
+                        {/* Price breakdown */}
+                        <View style={[styles.section, styles.summaryCard, { backgroundColor: theme.cardBackground }]}> 
+                            <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Order Summary</Text>
+                            <View style={styles.summaryRow}>
+                                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Subtotal ({items.length} item{items.length !== 1 ? 's' : ''})</Text>
+                                <Text style={[styles.summaryValue, { color: theme.textPrimary }]}>{formatPrice(totalAmount)}</Text>
+                            </View>
+                            <View style={styles.summaryRow}>
+                                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Shipping</Text>
+                                <Text style={[styles.shippingFree, { color: theme.success }]}>Free</Text>
+                            </View>
+                            <View style={[styles.summaryRow, styles.summaryTotal, { borderTopColor: theme.border }]}> 
+                                <Text style={[styles.totalLabel, { color: theme.textPrimary }]}>Total</Text>
+                                <Text style={[styles.totalValue, { color: theme.primary }]}>{formatPrice(totalAmount)}</Text>
+                            </View>
+                        </View>
+
+                        {/* Stripe disclaimer */}
+                        <Text style={[styles.disclaimer, { color: theme.gray }]}> 
+                            🔒 Payments (e-wallets and cards) are processed securely via Stripe. Your card numbers are never stored on our servers.
+                        </Text>
+                    </>
+                )}
             </ScrollView>
 
             {/* Fixed footer */}
@@ -711,5 +741,24 @@ const styles = StyleSheet.create({
         fontSize: 12,
         textAlign: 'center',
         lineHeight: 18,
+    },
+    checkoutSkeletonWrap: {
+        paddingTop: 4,
+    },
+    skeletonGap: {
+        marginBottom: 10,
+    },
+    skeletonGapSmall: {
+        marginBottom: 8,
+    },
+    checkoutItemSkeletonRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+    },
+    checkoutItemSkeletonBody: {
+        flex: 1,
+        marginLeft: 12,
     },
 });

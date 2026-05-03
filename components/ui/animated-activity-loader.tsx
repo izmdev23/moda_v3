@@ -26,13 +26,16 @@ export const AnimatedActivityLoader: React.FC<AnimatedActivityLoaderProps> = ({
     accessibilityLabel = 'Loading animation',
 }): React.JSX.Element => {
     return (
-        <View style={[styles.container, style]}>
+        <View
+            style={[styles.container, style]}
+            accessible
+            accessibilityLabel={accessibilityLabel}
+        >
             <DotLottie
                 source={src}
                 style={{ width: size, height: size }}
                 loop={loop}
                 autoplay={autoplay}
-                accessibilityLabel={accessibilityLabel}
             />
         </View>
     );

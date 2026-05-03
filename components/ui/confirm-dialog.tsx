@@ -1,5 +1,6 @@
 import React from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, StyleSheet, Text, View } from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { useTheme } from './theme-provider';
 
 export interface ConfirmDialogProps {
@@ -44,18 +45,18 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                     <Text style={[styles.title, { color: theme.textPrimary }]}>{title}</Text>
                     <Text style={[styles.message, { color: theme.textSecondary }]}>{message}</Text>
                     <View style={styles.buttonRow}>
-                        <TouchableOpacity
+                        <RipplePressable
                             style={[styles.cancelButton, { backgroundColor: theme.border }]}
                             onPress={onCancel}
                         >
                             <Text style={[styles.cancelText, { color: theme.textSecondary }]}>{cancelLabel}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
+                        </RipplePressable>
+                        <RipplePressable
                             style={[styles.confirmButton, { backgroundColor: confirmBg }]}
                             onPress={onConfirm}
                         >
                             <Text style={[styles.confirmText, { color: theme.white }]}>{confirmLabel}</Text>
-                        </TouchableOpacity>
+                        </RipplePressable>
                     </View>
                 </View>
             </View>

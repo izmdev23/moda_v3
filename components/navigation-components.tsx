@@ -1,10 +1,8 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { router, usePathname } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+    StyleSheet, Text, View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../supabase/supabaseClient';
@@ -28,10 +26,20 @@ type IconName =
     | 'storefront.fill'
     | 'square.and.arrow.up.fill';
 
+type TabRoute =
+    | '/home/catalog'
+    | '/home/cart'
+    | '/home/my-orders-buyer'
+    | '/home/buyer-profile'
+    | '/home/seller-dashboard'
+    | '/home/upload'
+    | '/home/my-orders-seller'
+    | '/home/seller-profile';
+
 interface TabConfig {
     readonly label: string;
     readonly iconName: IconName;
-    readonly route: string;
+    readonly route: TabRoute;
     readonly matchSegments: readonly string[];
 }
 
@@ -42,6 +50,10 @@ interface CartBadgeProps {
 interface HeaderBackButtonProps {
     /** Optional override label displayed next to the back arrow */
     readonly label?: string;
+}
+
+interface RouterPrefetchApi {
+    readonly prefetch?: (href: string) => void;
 }
 
 // ─── Tab Configurations ───────────────────────────────────────────────────────
@@ -143,7 +155,7 @@ export const HeaderBackButton: React.FC<HeaderBackButtonProps> = ({ label }) => 
     };
 
     return (
-        <TouchableOpacity
+        <RipplePressable
             onPress={handlePress}
             style={styles.backButton}
             accessibilityRole="button"
@@ -154,7 +166,7 @@ export const HeaderBackButton: React.FC<HeaderBackButtonProps> = ({ label }) => 
             {label !== undefined && (
                 <Text style={[styles.backLabel, { color: theme.primary }]}>{label}</Text>
             )}
-        </TouchableOpacity>
+        </RipplePressable>
     );
 };
 
@@ -205,10 +217,19 @@ export const TabBar: React.FC = () => {
             )
             .subscribe();
 
-        return () => { void supabase.removeChannel(channel); };
+        return (): void => { void supabase.removeChannel(channel); };
     }, [role, numericUserId]);
 
     const tabs = role === 'seller' ? SELLER_TABS : BUYER_TABS;
+    const tabRoutes = useMemo<readonly string[]>(() => tabs.map((tab) => tab.route), [tabs]);
+
+    useEffect(() => {
+        const routerWithPrefetch = router as unknown as RouterPrefetchApi;
+
+        for (const route of tabRoutes) {
+            routerWithPrefetch.prefetch?.(route);
+        }
+    }, [tabRoutes]);
 
     const isTabActive = (tab: TabConfig): boolean =>
         tab.matchSegments.some((seg) => pathname.includes(seg));
@@ -217,7 +238,12 @@ export const TabBar: React.FC = () => {
         // Tapping the already-active tab is a no-op — prevents duplicate screen stacking
         if (isTabActive(tab)) return;
 
-        router.push(tab.route as `/${string}`);
+        if (router.canDismiss()) {
+            router.dismissTo(tab.route as Parameters<typeof router.dismissTo>[0]);
+            return;
+        }
+
+        router.replace(tab.route as Parameters<typeof router.replace>[0]);
     };
 
     return (
@@ -237,7 +263,7 @@ export const TabBar: React.FC = () => {
                 const iconColor = active ? theme.primary : theme.gray;
 
                 return (
-                    <TouchableOpacity
+                    <RipplePressable
                         key={tab.label}
                         style={styles.tab}
                         onPress={() => handleTabPress(tab)}
@@ -259,7 +285,7 @@ export const TabBar: React.FC = () => {
                         <Text style={[styles.tabLabel, { color: iconColor }]}>
                             {tab.label}
                         </Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 );
             })}
         </View>

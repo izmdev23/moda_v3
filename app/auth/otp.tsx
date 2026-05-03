@@ -1,15 +1,10 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { supabase } from '@/supabase/supabaseClient';
+import { AppAlert } from '@/utils/app-alert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Linking,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+    KeyboardAvoidingView, Linking, Platform, StyleSheet, Text, View
 } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { SafeScreen } from '../../components/ui/safe-screen';
@@ -25,6 +20,11 @@ import { authApi } from '../../utils/database/auth';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 const MAGIC_LINK_URL = 'https://moda.example.com/magic'; // Placeholder
+
+function normalizeUserRole(role: unknown): string {
+    if (typeof role !== 'string') return '';
+    return role.trim().toLowerCase();
+}
 
 /**
  * OTP verification screen shown after signup or when the user requests
@@ -129,10 +129,11 @@ export default function OTPScreen(): React.JSX.Element {
             .eq('auth_id', data.session.user.id)
             .single();
 
-        if (userData?.role === 'seller') {
-            router.replace('/home/seller-dashboard' as Parameters<typeof router.replace>[0]);
+        const normalizedRole = normalizeUserRole(userData?.role);
+        if (normalizedRole === 'seller') {
+            router.push('/home/seller-dashboard' as Parameters<typeof router.push>[0]);
         } else {
-            router.replace('/(tabs)' as Parameters<typeof router.replace>[0]);
+            router.push('/home/catalog' as Parameters<typeof router.push>[0]);
         }
     };
 
@@ -143,7 +144,7 @@ export default function OTPScreen(): React.JSX.Element {
 
         const { error } = await authApi.sendOTP(email ?? '');
         if (error) {
-            Alert.alert('Resend Failed', 'Could not send a new code. Please try again shortly.');
+            AppAlert.alert('Resend Failed', 'Could not send a new code. Please try again shortly.');
             return;
         }
 
@@ -153,7 +154,7 @@ export default function OTPScreen(): React.JSX.Element {
         setErrorMessage('');
         startResendCooldown();
         startExpiryCountdown();
-        Alert.alert('Code Sent', 'A new verification code has been sent to your email.');
+        AppAlert.alert('Code Sent', 'A new verification code has been sent to your email.');
     };
 
     const handleMagicLink = (): void => {
@@ -168,7 +169,7 @@ export default function OTPScreen(): React.JSX.Element {
             >
                 <Animated.ScrollView
                     entering={Animation.Presets.FadeInDown}
-                    exiting={Animation.Presets.FadeOutUp}
+                    exiting={Animation.Presets.FadeOutDown}
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
@@ -204,7 +205,7 @@ export default function OTPScreen(): React.JSX.Element {
                         {isVerifying ? (
                             <LoadingIndicator message="Verifying..." overlay={false} />
                         ) : (
-                            <TouchableOpacity
+                            <RipplePressable
                                 style={[
                                     styles.verifyButton,
                                     { backgroundColor: theme.primary },
@@ -216,7 +217,7 @@ export default function OTPScreen(): React.JSX.Element {
                                 activeOpacity={0.8}
                             >
                                 <Text style={[styles.verifyButtonText, { color: theme.white }]}>Verify Code</Text>
-                            </TouchableOpacity>
+                            </RipplePressable>
                         )}
 
                         <OTPResendButton
@@ -228,9 +229,9 @@ export default function OTPScreen(): React.JSX.Element {
 
                         <View style={styles.magicLinkContainer}>
                             <Text style={[styles.magicLinkText, { color: theme.textSecondary }]}>Having trouble? </Text>
-                            <TouchableOpacity onPress={handleMagicLink} activeOpacity={0.7}>
+                            <RipplePressable onPress={handleMagicLink} activeOpacity={0.7}>
                                 <Text style={[styles.magicLinkAction, { color: theme.primary }]}>Send Magic Link Instead</Text>
-                            </TouchableOpacity>
+                            </RipplePressable>
                         </View>
 
                         <Text style={[styles.spamTip, { color: theme.gray }]}>

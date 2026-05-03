@@ -1,13 +1,8 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { router } from 'expo-router';
 import React from 'react';
 import {
-    Modal,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+    Modal, Pressable, ScrollView, StyleSheet, Text, View
 } from 'react-native';
 import { supabase } from '../../supabase/supabaseClient';
 import { IconSymbol } from './icon-symbol';
@@ -17,6 +12,18 @@ interface ProfileMenuProps {
     readonly isVisible: boolean;
     readonly onClose: () => void;
     readonly userRole?: 'buyer' | 'seller';
+}
+
+interface ProfileMenuItem {
+    readonly label: string;
+    readonly icon:
+        | 'person.fill'
+        | 'bag.fill'
+        | 'doc.text.fill'
+        | 'gearshape.fill'
+        | 'creditcard.fill'
+        | 'map.fill';
+    readonly onPress: () => void;
 }
 
 /**
@@ -45,36 +52,43 @@ export function ProfileMenu({ isVisible, onClose, userRole }: ProfileMenuProps):
         onClose();
     };
 
-    const menuItems = [
+    const handleViewProfilePress = (): void => navigateTo('/home/buyer-profile');
+    const handleOrdersPress = (): void => navigateTo('/home/my-orders-buyer');
+    const handleTransactionsPress = (): void => navigateTo('/home/order-history');
+    const handleSettingsPress = (): void => navigateTo('/home/app-settings');
+    const handlePaymentsPress = (): void => navigateTo('/home/payments');
+    const handleAddressesPress = (): void => navigateTo('/home/addresses');
+
+    const menuItems: readonly ProfileMenuItem[] = [
         {
             label: 'View Profile',
             icon: 'person.fill' as const,
-            onPress: () => navigateTo('/home/buyer-profile'),
+            onPress: handleViewProfilePress,
         },
         {
             label: 'My Orders',
             icon: 'bag.fill' as const,
-            onPress: () => navigateTo('/home/my-orders-buyer'),
+            onPress: handleOrdersPress,
         },
         {
             label: 'Transactions',
             icon: 'doc.text.fill' as const,
-            onPress: () => navigateTo('/home/order-history'),
+            onPress: handleTransactionsPress,
         },
         {
             label: 'Settings',
             icon: 'gearshape.fill' as const,
-            onPress: () => navigateTo('/home/app-settings'),
+            onPress: handleSettingsPress,
         },
         {
             label: 'Payments & Cards',
             icon: 'creditcard.fill' as const,
-            onPress: () => navigateTo('/home/payments'),
+            onPress: handlePaymentsPress,
         },
         {
             label: 'My Addresses',
             icon: 'map.fill' as const,
-            onPress: () => navigateTo('/home/addresses'),
+            onPress: handleAddressesPress,
         },
     ];
 
@@ -89,14 +103,14 @@ export function ProfileMenu({ isVisible, onClose, userRole }: ProfileMenuProps):
                 <View style={[styles.menuContainer, { backgroundColor: currentTheme.cardBackground }]}>
                     <View style={styles.header}>
                         <Text style={[styles.title, { color: currentTheme.textPrimary }]}>Account</Text>
-                        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                        <RipplePressable onPress={onClose} style={styles.closeBtn}>
                             <IconSymbol name="chevron.right" size={24} color={currentTheme.textPrimary} style={{ transform: [{ rotate: '90deg' }] }} />
-                        </TouchableOpacity>
+                        </RipplePressable>
                     </View>
 
                     <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
                         {menuItems.map((item, index) => (
-                            <TouchableOpacity
+                            <RipplePressable
                                 key={index}
                                 style={[styles.menuItem, { borderBottomColor: currentTheme.border }]}
                                 onPress={item.onPress}
@@ -106,18 +120,20 @@ export function ProfileMenu({ isVisible, onClose, userRole }: ProfileMenuProps):
                                 </View>
                                 <Text style={[styles.menuText, { color: currentTheme.textPrimary }]}>{item.label}</Text>
                                 <IconSymbol name="chevron.right" size={16} color={currentTheme.gray} />
-                            </TouchableOpacity>
+                            </RipplePressable>
                         ))}
 
-                        <TouchableOpacity
+                        <RipplePressable
                             style={[styles.menuItem, styles.logoutItem]}
-                            onPress={handleLogout}
+                            onPress={() => {
+                                void handleLogout();
+                            }}
                         >
                             <View style={[styles.iconContainer, { backgroundColor: `${currentTheme.error}10` }]}>
                                 <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color={currentTheme.error} />
                             </View>
                             <Text style={[styles.menuText, { color: currentTheme.error }]}>Logout</Text>
-                        </TouchableOpacity>
+                        </RipplePressable>
                     </ScrollView>
                 </View>
             </Pressable>

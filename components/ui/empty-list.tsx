@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { useTheme } from './theme-provider';
 
 export interface EmptyListProps {
@@ -31,12 +32,12 @@ export const EmptyList: React.FC<EmptyListProps> = ({
             <Text style={[styles.message, { color: theme.textPrimary }]}>{message}</Text>
             {submessage && <Text style={[styles.submessage, { color: theme.textSecondary }]}>{submessage}</Text>}
             {actionButton && (
-                <TouchableOpacity
+                <RipplePressable
                     style={[styles.button, { backgroundColor: theme.primary }]}
                     onPress={actionButton.onPress}
                 >
                     <Text style={[styles.buttonText, { color: theme.white }]}>{actionButton.label}</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             )}
         </View>
     );

@@ -5,6 +5,9 @@ import { supabase } from '../../supabase/supabaseClient';
 /** Max allowed file size for VTON user photos (5 MB). */
 const MAX_VTON_PHOTO_SIZE_BYTES = 5 * 1024 * 1024;
 
+/** Max time to read a local URI before aborting (30s). */
+const LOCAL_URI_READ_TIMEOUT_MS = 30000;
+
 /** Supported mime types for VTON user photos. */
 const ALLOWED_VTON_MIME_TYPES: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -22,6 +25,10 @@ const readLocalUriAsBlob = async (fileUri: string): Promise<Blob> => {
             reject(new Error('Unable to read the selected image. Please choose a different photo and try again.'));
         };
 
+        xhr.ontimeout = () => {
+            reject(new Error('Reading the selected image timed out. Please choose a different photo and try again.'));
+        };
+
         xhr.onload = () => {
             const response = xhr.response;
             if (response instanceof Blob) {
@@ -32,6 +39,7 @@ const readLocalUriAsBlob = async (fileUri: string): Promise<Blob> => {
         };
 
         xhr.responseType = 'blob';
+        xhr.timeout = LOCAL_URI_READ_TIMEOUT_MS;
         xhr.open('GET', fileUri, true);
         xhr.send();
     });

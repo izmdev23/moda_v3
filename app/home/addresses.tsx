@@ -1,17 +1,39 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Modal, StyleSheet, Text, View } from 'react-native';
 import { AddressCard, AddressData, AddressForm, ShopAddressData } from '../../components/address-components';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { EmptyList } from '../../components/ui/empty-list';
-import { LoadingModal } from '../../components/ui/loading-modal';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { SkeletonLoader } from '../../components/ui/skeleton-loader';
 import { useTheme } from '../../components/ui/theme-provider';
 import { supabase } from '../../supabase/supabaseClient';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_ADDRESSES = 10;
+
+const ADDRESS_SKELETON_ROW_COUNT = 4;
+
+function AddressesListSkeleton(): React.JSX.Element {
+    return (
+        <View style={styles.skeletonWrap}>
+            {Array.from({ length: ADDRESS_SKELETON_ROW_COUNT }).map((_, index) => (
+                <View key={`address-skeleton-${index}`} style={styles.skeletonCard}>
+                    <SkeletonLoader width="38%" height={14} style={styles.skeletonGap} />
+                    <SkeletonLoader width="80%" height={12} style={styles.skeletonGap} />
+                    <SkeletonLoader width="64%" height={12} />
+                    <View style={styles.skeletonActions}>
+                        <SkeletonLoader width={84} height={30} borderRadius={8} />
+                        <SkeletonLoader width={66} height={30} borderRadius={8} />
+                    </View>
+                </View>
+            ))}
+        </View>
+    );
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -85,7 +107,7 @@ export default function AddressesScreen(): React.JSX.Element {
                 }
             }
         } catch {
-            Alert.alert('Error', 'Failed to load your addresses.');
+            AppAlert.alert('Error', 'Failed to load your addresses.');
         } finally {
             setIsLoading(false);
         }
@@ -117,7 +139,7 @@ export default function AddressesScreen(): React.JSX.Element {
 
     const handleAddPress = useCallback((): void => {
         if (addresses.length >= MAX_ADDRESSES) {
-            Alert.alert(
+            AppAlert.alert(
                 'Limit Reached',
                 `You can only save up to ${MAX_ADDRESSES} addresses. Please delete one to add a new address.`,
             );
@@ -163,7 +185,7 @@ export default function AddressesScreen(): React.JSX.Element {
             .eq('uid', uid);
 
         if (error !== null) {
-            Alert.alert('Error', 'Failed to delete address. Please try again.');
+            AppAlert.alert('Error', 'Failed to delete address. Please try again.');
             return;
         }
         setAddresses((prev) => {
@@ -222,33 +244,25 @@ export default function AddressesScreen(): React.JSX.Element {
 
     // ─── Render ───────────────────────────────────────────────────────────
 
-    if (isLoading) {
-        return (
-            <SafeScreen>
-                <LoadingModal isVisible message="Loading addresses…" />
-            </SafeScreen>
-        );
-    }
-
     return (
         <SafeScreen style={styles.root}>
             {/* Header */}
             <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.cardBackground }]}>
-                <TouchableOpacity
+                <RipplePressable
                     style={styles.backBtn}
                     onPress={() => router.back()}
                     id="back-button"
                 >
                     <Text style={[styles.backText, { color: theme.primary }]}>‹ Back</Text>
-                </TouchableOpacity>
+                </RipplePressable>
                 <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>My Addresses</Text>
-                <TouchableOpacity
+                <RipplePressable
                     style={[styles.addBtn, { backgroundColor: theme.primary }]}
                     onPress={handleAddPress}
                     id="add-address-button"
                 >
                     <Text style={[styles.addBtnText, { color: theme.white }]}>+ Add</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             </View>
 
             {/* Count pill */}
@@ -258,28 +272,32 @@ export default function AddressesScreen(): React.JSX.Element {
                 </Text>
             </View>
 
-            <FlatList
-                data={addresses}
-                keyExtractor={(item) => item.uid}
-                renderItem={({ item }) => (
-                    <AddressCard
-                        address={item}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                        onSetDefault={handleSetDefault}
-                    />
-                )}
-                ListEmptyComponent={
-                    <EmptyList
-                        icon={<Text style={styles.emptyIcon}>📍</Text>}
-                        message="No delivery address yet!"
-                        submessage="Add your first address to enable checkout."
-                        actionButton={{ label: 'Add Address', onPress: handleAddPress }}
-                    />
-                }
-                contentContainerStyle={addresses.length === 0 ? { flex: 1 } : { paddingBottom: 32 }}
-                showsVerticalScrollIndicator={false}
-            />
+            {isLoading ? (
+                <AddressesListSkeleton />
+            ) : (
+                <FlatList
+                    data={addresses}
+                    keyExtractor={(item) => item.uid}
+                    renderItem={({ item }) => (
+                        <AddressCard
+                            address={item}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                            onSetDefault={handleSetDefault}
+                        />
+                    )}
+                    ListEmptyComponent={
+                        <EmptyList
+                            icon={<Text style={styles.emptyIcon}>📍</Text>}
+                            message="No delivery address yet!"
+                            submessage="Add your first address to enable checkout."
+                            actionButton={{ label: 'Add Address', onPress: handleAddPress }}
+                        />
+                    }
+                    contentContainerStyle={addresses.length === 0 ? { flex: 1 } : { paddingBottom: 32 }}
+                    showsVerticalScrollIndicator={false}
+                />
+            )}
 
             {/* Add/Edit form modal */}
             <Modal
@@ -359,6 +377,24 @@ const styles = StyleSheet.create({
     countText: {
         fontSize: 13,
         fontWeight: '500',
+    },
+    skeletonWrap: {
+        paddingHorizontal: 16,
+        paddingTop: 4,
+        paddingBottom: 16,
+    },
+    skeletonCard: {
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 12,
+    },
+    skeletonGap: {
+        marginBottom: 8,
+    },
+    skeletonActions: {
+        flexDirection: 'row',
+        gap: 8,
+        marginTop: 12,
     },
     emptyIcon: { fontSize: 40 },
 });

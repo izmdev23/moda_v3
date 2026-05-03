@@ -2,40 +2,59 @@ import 'dotenv/config';
 import { ConfigContext, ExpoConfig } from 'expo/config';
 import { withAndroidManifest, withAndroidStyles } from 'expo/config-plugins';
 
-const withMaterialTheme = (config: ExpoConfig) => {
+interface AndroidStyleItem {
+    readonly $?: {
+        readonly name?: string;
+    };
+    _?: string;
+}
+
+interface AndroidStyleEntry {
+    readonly $: {
+        readonly name: string;
+        parent?: string;
+    };
+    item?: AndroidStyleItem | AndroidStyleItem[];
+}
+
+const APP_BRAND_ICON = './assets/images/adaptive-icon.png';
+
+const withMaterialTheme = (config: ExpoConfig): ExpoConfig => {
     const withStyles = withAndroidStyles(config, async (config) => {
         const styles = config.modResults;
-        const appTheme = styles.resources.style?.find(
-            (style: any) => style.$.name === 'AppTheme'
+        const styleEntries = (styles.resources.style ?? []) as AndroidStyleEntry[];
+
+        const appTheme = styleEntries.find(
+            (style) => style.$.name === 'AppTheme'
         );
         if (appTheme) {
             appTheme.$.parent = 'Theme.MaterialComponents.DayNight.NoActionBar';
         }
 
-        const splashTheme = styles.resources.style?.find(
-            (style: any) => style.$.name === 'Theme.App.SplashScreen'
+        const splashTheme = styleEntries.find(
+            (style) => style.$.name === 'Theme.App.SplashScreen'
         );
         if (splashTheme) {
-            const splashItems = Array.isArray(splashTheme.item)
+            const splashItems: AndroidStyleItem[] = Array.isArray(splashTheme.item)
                 ? splashTheme.item
                 : splashTheme.item
                     ? [splashTheme.item]
                     : [];
 
             const filteredItems = splashItems.filter(
-                (item: any) => item?.$?.name !== 'android:windowSplashScreenBehavior'
+                (item) => item.$?.name !== 'android:windowSplashScreenBehavior'
             );
 
             const animatedIconItem = filteredItems.find(
-                (item: any) => item?.$?.name === 'windowSplashScreenAnimatedIcon'
+                (item) => item.$?.name === 'windowSplashScreenAnimatedIcon'
             );
 
             if (animatedIconItem) {
-                animatedIconItem._ = '@android:color/transparent';
+                animatedIconItem._ = '@drawable/splashscreen_logo';
             } else {
                 filteredItems.push({
                     $: { name: 'windowSplashScreenAnimatedIcon' },
-                    _: '@android:color/transparent',
+                    _: '@drawable/splashscreen_logo',
                 });
             }
 
@@ -48,8 +67,8 @@ const withMaterialTheme = (config: ExpoConfig) => {
     return withAndroidManifest(withStyles, (config) => {
         const application = config.modResults.manifest.application?.[0];
         if (application?.$) {
-            application.$['android:icon'] = '@drawable/app_icon_dark';
-            application.$['android:roundIcon'] = '@drawable/app_icon_dark';
+            application.$['android:icon'] = '@mipmap/ic_launcher';
+            application.$['android:roundIcon'] = '@mipmap/ic_launcher_round';
         }
         return config;
     });
@@ -62,7 +81,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     slug: 'moda',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: './assets/images/app-icon-dark.png',
+    icon: APP_BRAND_ICON,
     scheme: 'moda',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
@@ -73,7 +92,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         package: 'com.velvet.moda',
         adaptiveIcon: {
             backgroundColor: '#000000',
-            foregroundImage: './assets/images/app-icon-dark.png'
+            foregroundImage: APP_BRAND_ICON
         },
         edgeToEdgeEnabled: true,
         predictiveBackGestureEnabled: false
@@ -87,17 +106,18 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         [
             'expo-splash-screen',
             {
-                image: './assets/images/app-icon-dark.png',
+                image: APP_BRAND_ICON,
                 imageWidth: 200,
                 resizeMode: 'contain',
                 backgroundColor: '#ffffff',
                 dark: {
-                    image: './assets/images/app-icon-dark.png',
+                    image: APP_BRAND_ICON,
                     backgroundColor: '#000000'
                 }
             }
         ],
         'expo-secure-store',
+        'expo-notifications',
         [
             'expo-build-properties',
             {

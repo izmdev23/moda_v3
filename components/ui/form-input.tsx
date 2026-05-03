@@ -1,12 +1,13 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import React, { useState } from 'react';
 import { Control, Controller, RegisterOptions } from 'react-hook-form';
-import { StyleSheet, Text, TextInput, TextInputProps, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
 import { useTheme } from './theme-provider';
 
 export interface FormInputProps extends Omit<TextInputProps, 'name'> {
     readonly name: string;
-    readonly control: Control<any>;
-    readonly rules?: RegisterOptions;
+    readonly control: Control<Record<string, unknown>>;
+    readonly rules?: RegisterOptions<Record<string, unknown>>;
     readonly label: string;
     readonly error?: string;
     readonly placeholder?: string;
@@ -63,7 +64,7 @@ export const FormInput: React.FC<FormInputProps> = ({
                     )}
                 />
                 {isPasswordField && (
-                    <TouchableOpacity
+                    <RipplePressable
                         style={styles.eyeIcon}
                         onPress={() => setIsPasswordVisible(prev => !prev)}
                         activeOpacity={0.7}
@@ -71,7 +72,7 @@ export const FormInput: React.FC<FormInputProps> = ({
                         <Text style={[styles.eyeText, { color: theme.primary }]}>
                             {isPasswordVisible ? 'Hide' : 'Show'}
                         </Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 )}
             </View>
             {error && <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>}

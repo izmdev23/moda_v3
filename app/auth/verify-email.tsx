@@ -1,10 +1,8 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+    StyleSheet, Text, View
 } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { SafeScreen } from '../../components/ui/safe-screen';
@@ -32,6 +30,7 @@ export default function VerifyEmailScreen(): React.JSX.Element {
         <SafeScreen>
             <Animated.View
                 entering={Animation.Presets.FadeInDown}
+                exiting={Animation.Presets.FadeOutDown}
                 style={styles.content}
             >
                 <View style={[styles.iconContainer, { backgroundColor: `${theme.primary}14`, shadowColor: theme.primary }]}>
@@ -55,13 +54,13 @@ export default function VerifyEmailScreen(): React.JSX.Element {
 
                 <View style={styles.spacer} />
 
-                <TouchableOpacity
+                <RipplePressable
                     style={[styles.primaryButton, { backgroundColor: theme.primary, shadowColor: theme.primary }]}
                     onPress={handleBackToLogin}
                     activeOpacity={0.8}
                 >
                     <Text style={[styles.primaryButtonText, { color: theme.white }]}>Back to Login</Text>
-                </TouchableOpacity>
+                </RipplePressable>
 
                 <Text style={[styles.helpText, { color: theme.gray }]}>
                     Didn't receive the email? Check your spam folder or try logging in to resend the link.

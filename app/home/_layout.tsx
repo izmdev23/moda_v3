@@ -1,8 +1,10 @@
 import { TabBar } from '@/components/navigation-components';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useUserRole } from '@/components/ui/user-role-context';
-import { Stack, useSegments } from 'expo-router';
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Animation } from '@/utils/animation';
+import { router, Stack, useSegments } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { BackHandler, Platform, StyleSheet, View } from 'react-native';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -32,20 +34,60 @@ const TABBED_SCREENS: ReadonlySet<string> = new Set([
 export default function HomeLayout(): React.JSX.Element {
     const segments = useSegments();
     const { role } = useUserRole();
+    const [isExitDialogVisible, setIsExitDialogVisible] = useState<boolean>(false);
 
     // The last segment identifies the current screen file name
     const currentScreen = segments[segments.length - 1] as string | undefined;
     const showTabBar = role !== null && currentScreen !== undefined && TABBED_SCREENS.has(currentScreen);
+
+    useEffect(() => {
+        if (Platform.OS !== 'android') return;
+
+        const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+            // Intercept only when on a tabbed root screen and there is no dismissible stack left.
+            if (showTabBar && !router.canDismiss()) {
+                setIsExitDialogVisible(true);
+                return true;
+            }
+
+            return false;
+        });
+
+        return (): void => {
+            subscription.remove();
+        };
+    }, [showTabBar]);
+
+    const handleCancelExit = (): void => {
+        setIsExitDialogVisible(false);
+    };
+
+    const handleConfirmExit = (): void => {
+        setIsExitDialogVisible(false);
+        BackHandler.exitApp();
+    };
 
     return (
         <View style={styles.container}>
             <Stack
                 screenOptions={{
                     headerShown: false,
-                    animation: 'slide_from_right',
+                    animation: 'fade_from_bottom',
+                    animationDuration: Animation.DefaultAnimationSpeed,
+                    freezeOnBlur: true,
                 }}
             />
             {showTabBar && <TabBar />}
+            <ConfirmDialog
+                visible={isExitDialogVisible}
+                title="Exit App"
+                message="Do you want to close Moda?"
+                confirmLabel="Exit"
+                cancelLabel="Cancel"
+                variant="warning"
+                onCancel={handleCancelExit}
+                onConfirm={handleConfirmExit}
+            />
         </View>
     );
 }

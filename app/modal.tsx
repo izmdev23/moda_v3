@@ -11,7 +11,7 @@ export default function ModalScreen() {
     <SafeScreen style={styles.container}>
       <Animated.View
         entering={Animation.Presets.FadeInDown}
-        exiting={Animation.Presets.FadeOutUp}
+        exiting={Animation.Presets.FadeOutDown}
         style={styles.content}
       >
         <ThemedText type="title">This is a modal</ThemedText>

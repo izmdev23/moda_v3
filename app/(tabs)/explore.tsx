@@ -15,7 +15,7 @@ export default function TabTwoScreen() {
   return (
     <Animated.View
       entering={Animation.Presets.FadeInDown}
-      exiting={Animation.Presets.FadeOutUp}
+      exiting={Animation.Presets.FadeOutDown}
       style={{ flex: 1 }}
     >
       <ParallaxScrollView

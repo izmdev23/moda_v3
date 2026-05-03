@@ -1,19 +1,11 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import React, { useCallback, useRef, useState } from 'react';
-import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SEARCH_DEBOUNCE_MS } from '../utils/constants';
-import { lightPalette } from '../utils/theme';
+import type { ProductCategory } from '../utils/types';
 import { ProductCard } from './ui/product-card';
+import { SkeletonLoader } from './ui/skeleton-loader';
+import { useTheme } from './ui/theme-provider';
 
 /** Debounce hook helper (inline to avoid extra file) */
 function useDebouncedCallback<T extends (...args: Parameters<T>) => void>(
@@ -41,7 +33,7 @@ export type SortOption =
     | 'by_shop';
 
 export interface CatalogFilterState {
-    readonly category: string | null;
+    readonly category: ProductCategory | null;
     readonly minPrice: number | null;
     readonly maxPrice: number | null;
     readonly minRating: number | null;
@@ -53,6 +45,7 @@ export interface CatalogProductItem {
     readonly thumbnailUrl: string;
     readonly minPrice: number;
     readonly maxPrice: number;
+    readonly totalStock: number;
     readonly salePrice?: number | null;
     readonly originalPriceForSale?: number | null;
     readonly rating: number;
@@ -87,6 +80,7 @@ export const CatalogSearchBar: React.FC<CatalogSearchBarProps> = ({
     isShopSearch,
     placeholder = 'Search products…',
 }) => {
+    const { theme } = useTheme();
     const [text, setText] = useState<string>('');
 
     const debouncedSearch = useDebouncedCallback(onSearch, SEARCH_DEBOUNCE_MS);
@@ -104,40 +98,44 @@ export const CatalogSearchBar: React.FC<CatalogSearchBarProps> = ({
             <View style={searchStyles.inputRow}>
                 <Text style={searchStyles.icon}>🔍</Text>
                 <TextInput
-                    style={searchStyles.input}
+                    style={[searchStyles.input, { color: theme.textPrimary }]}
                     value={text}
                     onChangeText={handleChangeText}
                     placeholder={isShopSearch ? 'Search shops…' : placeholder}
-                    placeholderTextColor={lightPalette.gray}
+                    placeholderTextColor={theme.gray}
                     returnKeyType="search"
                     onSubmitEditing={() => onSearch(text)}
                     autoCorrect={false}
                     autoCapitalize="none"
                 />
                 {text.length > 0 && (
-                    <TouchableOpacity
+                    <RipplePressable
                         onPress={() => {
                             setText('');
                             onSearch('');
                         }}
                     >
-                        <Text style={searchStyles.clearIcon}>✕</Text>
-                    </TouchableOpacity>
+                        <Text style={[searchStyles.clearIcon, { color: theme.gray }]}>✕</Text>
+                    </RipplePressable>
                 )}
             </View>
-            <TouchableOpacity
-                style={[searchStyles.shopToggle, isShopSearch && searchStyles.shopToggleActive]}
+            <RipplePressable
+                style={[
+                    searchStyles.shopToggle,
+                    { borderColor: theme.border, backgroundColor: theme.cardBackground },
+                    isShopSearch && { backgroundColor: theme.primary, borderColor: theme.primary },
+                ]}
                 onPress={() => onToggleShopSearch(!isShopSearch)}
             >
                 <Text
                     style={[
                         searchStyles.shopToggleText,
-                        isShopSearch && searchStyles.shopToggleTextActive,
+                        { color: isShopSearch ? theme.white : theme.textSecondary },
                     ]}
                 >
                     🏪 Shop
                 </Text>
-            </TouchableOpacity>
+            </RipplePressable>
         </View>
     );
 };
@@ -154,10 +152,8 @@ const searchStyles = StyleSheet.create({
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: lightPalette.cardBackground,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: lightPalette.border,
         paddingHorizontal: 12,
         paddingVertical: 10,
         gap: 8,
@@ -166,32 +162,20 @@ const searchStyles = StyleSheet.create({
     input: {
         flex: 1,
         fontSize: 14,
-        color: lightPalette.textPrimary,
         padding: 0,
     },
     clearIcon: {
         fontSize: 14,
-        color: lightPalette.gray,
     },
     shopToggle: {
         paddingHorizontal: 12,
         paddingVertical: 10,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: lightPalette.border,
-        backgroundColor: lightPalette.cardBackground,
-    },
-    shopToggleActive: {
-        backgroundColor: lightPalette.primary,
-        borderColor: lightPalette.primary,
     },
     shopToggleText: {
         fontSize: 13,
-        color: lightPalette.textSecondary,
         fontWeight: '600',
-    },
-    shopToggleTextActive: {
-        color: lightPalette.white,
     },
 });
 
@@ -204,7 +188,7 @@ interface CatalogFilterPanelProps {
     readonly onClose: () => void;
 }
 
-const CATEGORY_OPTIONS = ['headwear', 'tops', 'bottoms', 'footwear', 'full_body', 'accessory'];
+const CATEGORY_OPTIONS: readonly ProductCategory[] = ['headwear', 'upperwear', 'lowerwear', 'footwear', 'accessory'];
 const RATING_OPTIONS = [1, 2, 3, 4, 5];
 
 function formatCategoryLabel(category: string): string {
@@ -224,6 +208,7 @@ export const CatalogFilterPanel: React.FC<CatalogFilterPanelProps> = ({
     onApply,
     onClose,
 }) => {
+    const { theme } = useTheme();
     const [localFilters, setLocalFilters] = useState<CatalogFilterState>(filters);
     const [minPriceText, setMinPriceText] = useState<string>(
         filters.minPrice !== null ? String(filters.minPrice) : ''
@@ -254,24 +239,27 @@ export const CatalogFilterPanel: React.FC<CatalogFilterPanelProps> = ({
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
             <View style={filterStyles.overlay}>
-                <View style={filterStyles.panel}>
+                <View style={[filterStyles.panel, { backgroundColor: theme.cardBackground }]}>
                     <View style={filterStyles.header}>
-                        <Text style={filterStyles.title}>Filters</Text>
-                        <TouchableOpacity onPress={onClose}>
-                            <Text style={filterStyles.closeBtn}>✕</Text>
-                        </TouchableOpacity>
+                        <Text style={[filterStyles.title, { color: theme.textPrimary }]}>Filters</Text>
+                        <RipplePressable onPress={onClose}>
+                            <Text style={[filterStyles.closeBtn, { color: theme.gray }]}>✕</Text>
+                        </RipplePressable>
                     </View>
 
                     <ScrollView showsVerticalScrollIndicator={false}>
                         {/* Category */}
-                        <Text style={filterStyles.sectionLabel}>Category</Text>
+                        <Text style={[filterStyles.sectionLabel, { color: theme.textSecondary }]}>Category</Text>
                         <View style={filterStyles.chipRow}>
                             {CATEGORY_OPTIONS.map((cat) => (
-                                <TouchableOpacity
+                                <RipplePressable
                                     key={cat}
                                     style={[
                                         filterStyles.chip,
-                                        localFilters.category === cat && filterStyles.chipActive,
+                                        {
+                                            borderColor: localFilters.category === cat ? theme.primary : theme.border,
+                                            backgroundColor: localFilters.category === cat ? theme.primary : theme.background,
+                                        },
                                     ]}
                                     onPress={() =>
                                         setLocalFilters((prev) => ({
@@ -283,32 +271,31 @@ export const CatalogFilterPanel: React.FC<CatalogFilterPanelProps> = ({
                                     <Text
                                         style={[
                                             filterStyles.chipText,
-                                            localFilters.category === cat &&
-                                            filterStyles.chipTextActive,
+                                            { color: localFilters.category === cat ? theme.white : theme.textSecondary },
                                         ]}
                                     >
                                         {formatCategoryLabel(cat)}
                                     </Text>
-                                </TouchableOpacity>
+                                </RipplePressable>
                             ))}
                         </View>
 
                         {/* Price Range */}
-                        <Text style={filterStyles.sectionLabel}>Price Range (₱)</Text>
+                        <Text style={[filterStyles.sectionLabel, { color: theme.textSecondary }]}>Price Range (₱)</Text>
                         <View style={filterStyles.priceRow}>
                             <TextInput
-                                style={filterStyles.priceInput}
+                                style={[filterStyles.priceInput, { borderColor: theme.border, color: theme.textPrimary }]}
                                 placeholder="Min"
-                                placeholderTextColor={lightPalette.gray}
+                                placeholderTextColor={theme.gray}
                                 keyboardType="numeric"
                                 value={minPriceText}
                                 onChangeText={setMinPriceText}
                             />
-                            <Text style={filterStyles.priceSep}>–</Text>
+                            <Text style={[filterStyles.priceSep, { color: theme.textSecondary }]}>–</Text>
                             <TextInput
-                                style={filterStyles.priceInput}
+                                style={[filterStyles.priceInput, { borderColor: theme.border, color: theme.textPrimary }]}
                                 placeholder="Max"
-                                placeholderTextColor={lightPalette.gray}
+                                placeholderTextColor={theme.gray}
                                 keyboardType="numeric"
                                 value={maxPriceText}
                                 onChangeText={setMaxPriceText}
@@ -316,14 +303,17 @@ export const CatalogFilterPanel: React.FC<CatalogFilterPanelProps> = ({
                         </View>
 
                         {/* Minimum Rating */}
-                        <Text style={filterStyles.sectionLabel}>Minimum Rating</Text>
+                        <Text style={[filterStyles.sectionLabel, { color: theme.textSecondary }]}>Minimum Rating</Text>
                         <View style={filterStyles.chipRow}>
                             {RATING_OPTIONS.map((r) => (
-                                <TouchableOpacity
+                                <RipplePressable
                                     key={r}
                                     style={[
                                         filterStyles.chip,
-                                        localFilters.minRating === r && filterStyles.chipActive,
+                                        {
+                                            borderColor: localFilters.minRating === r ? theme.primary : theme.border,
+                                            backgroundColor: localFilters.minRating === r ? theme.primary : theme.background,
+                                        },
                                     ]}
                                     onPress={() =>
                                         setLocalFilters((prev) => ({
@@ -335,24 +325,23 @@ export const CatalogFilterPanel: React.FC<CatalogFilterPanelProps> = ({
                                     <Text
                                         style={[
                                             filterStyles.chipText,
-                                            localFilters.minRating === r &&
-                                            filterStyles.chipTextActive,
+                                            { color: localFilters.minRating === r ? theme.white : theme.textSecondary },
                                         ]}
                                     >
                                         {'★'.repeat(r)}
                                     </Text>
-                                </TouchableOpacity>
+                                </RipplePressable>
                             ))}
                         </View>
                     </ScrollView>
 
                     <View style={filterStyles.footer}>
-                        <TouchableOpacity style={filterStyles.resetBtn} onPress={handleReset}>
-                            <Text style={filterStyles.resetText}>Reset</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={filterStyles.applyBtn} onPress={handleApply}>
-                            <Text style={filterStyles.applyText}>Apply Filters</Text>
-                        </TouchableOpacity>
+                        <RipplePressable style={[filterStyles.resetBtn, { borderColor: theme.border }]} onPress={handleReset}>
+                            <Text style={[filterStyles.resetText, { color: theme.textSecondary }]}>Reset</Text>
+                        </RipplePressable>
+                        <RipplePressable style={[filterStyles.applyBtn, { backgroundColor: theme.primary }]} onPress={handleApply}>
+                            <Text style={[filterStyles.applyText, { color: theme.white }]}>Apply Filters</Text>
+                        </RipplePressable>
                     </View>
                 </View>
             </View>
@@ -367,7 +356,6 @@ const filterStyles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     panel: {
-        backgroundColor: lightPalette.cardBackground,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         padding: 24,
@@ -382,13 +370,11 @@ const filterStyles = StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: '700',
-        color: lightPalette.textPrimary,
     },
-    closeBtn: { fontSize: 20, color: lightPalette.gray },
+    closeBtn: { fontSize: 20 },
     sectionLabel: {
         fontSize: 14,
         fontWeight: '700',
-        color: lightPalette.textSecondary,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
         marginTop: 16,
@@ -400,42 +386,34 @@ const filterStyles = StyleSheet.create({
         paddingVertical: 8,
         borderRadius: 20,
         borderWidth: 1,
-        borderColor: lightPalette.border,
-        backgroundColor: lightPalette.background,
     },
-    chipActive: { backgroundColor: lightPalette.primary, borderColor: lightPalette.primary },
-    chipText: { fontSize: 13, color: lightPalette.textSecondary, fontWeight: '600' },
-    chipTextActive: { color: lightPalette.white },
+    chipText: { fontSize: 13, fontWeight: '600' },
     priceRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     priceInput: {
         flex: 1,
         borderWidth: 1,
-        borderColor: lightPalette.border,
         borderRadius: 8,
         paddingHorizontal: 12,
         paddingVertical: 10,
         fontSize: 14,
-        color: lightPalette.textPrimary,
     },
-    priceSep: { fontSize: 16, color: lightPalette.textSecondary },
+    priceSep: { fontSize: 16 },
     footer: { flexDirection: 'row', gap: 12, marginTop: 24 },
     resetBtn: {
         flex: 1,
         paddingVertical: 14,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: lightPalette.border,
         alignItems: 'center',
     },
-    resetText: { color: lightPalette.textSecondary, fontWeight: '600', fontSize: 15 },
+    resetText: { fontWeight: '600', fontSize: 15 },
     applyBtn: {
         flex: 2,
         paddingVertical: 14,
         borderRadius: 12,
-        backgroundColor: lightPalette.primary,
         alignItems: 'center',
     },
-    applyText: { color: lightPalette.white, fontWeight: '700', fontSize: 15 },
+    applyText: { fontWeight: '700', fontSize: 15 },
 });
 
 // ─── CatalogSortPicker ─────────────────────────────────────────────────────────
@@ -447,7 +425,7 @@ interface CatalogSortPickerProps {
     readonly onClose: () => void;
 }
 
-const SORT_OPTIONS: Array<{ value: SortOption; label: string; icon: string }> = [
+const SORT_OPTIONS: { value: SortOption; label: string; icon: string }[] = [
     { value: 'newest', label: 'Newest First', icon: '🆕' },
     { value: 'price_asc', label: 'Price: Low to High', icon: '💰' },
     { value: 'price_desc', label: 'Price: High to Low', icon: '💎' },
@@ -466,22 +444,24 @@ export const CatalogSortPicker: React.FC<CatalogSortPickerProps> = ({
     onSelect,
     onClose,
 }) => {
+    const { theme } = useTheme();
+
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
             <View style={sortStyles.overlay}>
-                <View style={sortStyles.panel}>
+                <View style={[sortStyles.panel, { backgroundColor: theme.cardBackground }]}>
                     <View style={sortStyles.header}>
-                        <Text style={sortStyles.title}>Sort By</Text>
-                        <TouchableOpacity onPress={onClose}>
-                            <Text style={sortStyles.closeBtn}>✕</Text>
-                        </TouchableOpacity>
+                        <Text style={[sortStyles.title, { color: theme.textPrimary }]}>Sort By</Text>
+                        <RipplePressable onPress={onClose}>
+                            <Text style={[sortStyles.closeBtn, { color: theme.gray }]}>✕</Text>
+                        </RipplePressable>
                     </View>
                     {SORT_OPTIONS.map((opt) => (
-                        <TouchableOpacity
+                        <RipplePressable
                             key={opt.value}
                             style={[
                                 sortStyles.option,
-                                selected === opt.value && sortStyles.optionActive,
+                                selected === opt.value && { backgroundColor: `${theme.primary}14` },
                             ]}
                             onPress={() => {
                                 onSelect(opt.value);
@@ -492,15 +472,16 @@ export const CatalogSortPicker: React.FC<CatalogSortPickerProps> = ({
                             <Text
                                 style={[
                                     sortStyles.optionLabel,
+                                    { color: selected === opt.value ? theme.primary : theme.textPrimary },
                                     selected === opt.value && sortStyles.optionLabelActive,
                                 ]}
                             >
                                 {opt.label}
                             </Text>
                             {selected === opt.value && (
-                                <Text style={sortStyles.checkmark}>✓</Text>
+                                <Text style={[sortStyles.checkmark, { color: theme.primary }]}>✓</Text>
                             )}
-                        </TouchableOpacity>
+                        </RipplePressable>
                     ))}
                 </View>
             </View>
@@ -515,7 +496,6 @@ const sortStyles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     panel: {
-        backgroundColor: lightPalette.cardBackground,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         padding: 24,
@@ -527,8 +507,8 @@ const sortStyles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 16,
     },
-    title: { fontSize: 20, fontWeight: '700', color: lightPalette.textPrimary },
-    closeBtn: { fontSize: 20, color: lightPalette.gray },
+    title: { fontSize: 20, fontWeight: '700' },
+    closeBtn: { fontSize: 20 },
     option: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -538,16 +518,14 @@ const sortStyles = StyleSheet.create({
         gap: 12,
         marginBottom: 4,
     },
-    optionActive: { backgroundColor: 'rgba(244,67,54,0.08)' },
     optionIcon: { fontSize: 18 },
     optionLabel: {
         flex: 1,
         fontSize: 15,
-        color: lightPalette.textPrimary,
         fontWeight: '500',
     },
-    optionLabelActive: { color: lightPalette.primary, fontWeight: '700' },
-    checkmark: { fontSize: 16, color: lightPalette.primary, fontWeight: '700' },
+    optionLabelActive: { fontWeight: '700' },
+    checkmark: { fontSize: 16, fontWeight: '700' },
 });
 
 // ─── CatalogGrid ──────────────────────────────────────────────────────────────
@@ -575,6 +553,7 @@ export const CatalogGrid: React.FC<CatalogGridProps> = ({
                 thumbnailUrl={item.thumbnailUrl}
                 minPrice={item.minPrice}
                 maxPrice={item.maxPrice}
+                totalStock={item.totalStock}
                 salePrice={item.salePrice}
                 originalPriceForSale={item.originalPriceForSale}
                 rating={item.rating}
@@ -616,13 +595,15 @@ interface ShopCardProps {
  * @param props {ShopCardProps}
  */
 export const ShopCard: React.FC<ShopCardProps> = ({ shop, onPress }) => {
+    const { theme } = useTheme();
+
     return (
-        <TouchableOpacity
-            style={shopCardStyles.container}
+        <RipplePressable
+            style={[shopCardStyles.container, { backgroundColor: theme.cardBackground }]}
             onPress={() => onPress(shop.uid)}
             activeOpacity={0.8}
         >
-            <View style={shopCardStyles.imageContainer}>
+            <View style={[shopCardStyles.imageContainer, { backgroundColor: theme.background }]}>
                 {shop.bannerUrl ? (
                     <Image
                         source={{ uri: shop.bannerUrl }}
@@ -630,23 +611,23 @@ export const ShopCard: React.FC<ShopCardProps> = ({ shop, onPress }) => {
                         resizeMode="cover"
                     />
                 ) : (
-                    <View style={shopCardStyles.imageFallback}>
-                        <Text style={shopCardStyles.imageFallbackText}>
+                    <View style={[shopCardStyles.imageFallback, { backgroundColor: theme.primary }]}>
+                        <Text style={[shopCardStyles.imageFallbackText, { color: theme.white }]}>
                             {shop.shopName.charAt(0).toUpperCase()}
                         </Text>
                     </View>
                 )}
             </View>
-            <Text style={shopCardStyles.name} numberOfLines={1}>
+            <Text style={[shopCardStyles.name, { color: theme.textPrimary }]} numberOfLines={1}>
                 {shop.shopName}
             </Text>
-            <Text style={shopCardStyles.location} numberOfLines={1}>
+            <Text style={[shopCardStyles.location, { color: theme.textSecondary }]} numberOfLines={1}>
                 📍 {shop.city}, {shop.province}
             </Text>
             {(shop.orderCount ?? 0) > 0 && (
-                <Text style={shopCardStyles.orders}>{shop.orderCount} orders</Text>
+                <Text style={[shopCardStyles.orders, { color: theme.info }]}>{shop.orderCount} orders</Text>
             )}
-        </TouchableOpacity>
+        </RipplePressable>
     );
 };
 
@@ -656,7 +637,6 @@ const shopCardStyles = StyleSheet.create({
         marginRight: 12,
         borderRadius: 12,
         overflow: 'hidden',
-        backgroundColor: lightPalette.cardBackground,
         elevation: 2,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
@@ -666,37 +646,31 @@ const shopCardStyles = StyleSheet.create({
     imageContainer: {
         width: '100%',
         height: 80,
-        backgroundColor: lightPalette.background,
     },
     image: { width: '100%', height: '100%' },
     imageFallback: {
         width: '100%',
         height: '100%',
-        backgroundColor: lightPalette.primary,
         justifyContent: 'center',
         alignItems: 'center',
     },
     imageFallbackText: {
-        color: lightPalette.white,
         fontSize: 32,
         fontWeight: '700',
     },
     name: {
         fontSize: 13,
         fontWeight: '700',
-        color: lightPalette.textPrimary,
         paddingHorizontal: 10,
         paddingTop: 8,
     },
     location: {
         fontSize: 11,
-        color: lightPalette.textSecondary,
         paddingHorizontal: 10,
         paddingTop: 2,
     },
     orders: {
         fontSize: 11,
-        color: lightPalette.info,
         paddingHorizontal: 10,
         paddingBottom: 10,
         paddingTop: 2,
@@ -721,10 +695,23 @@ export const FeaturedShopsCarousel: React.FC<FeaturedShopsCarouselProps> = ({
     onShopPress,
     isLoading,
 }) => {
+    const { theme } = useTheme();
+
     if (isLoading) {
         return (
-            <View style={carouselStyles.loadingContainer}>
-                <ActivityIndicator size="small" color={lightPalette.primary} />
+            <View style={carouselStyles.section}>
+                <Text style={[carouselStyles.sectionTitle, { color: theme.textPrimary }]}>🏆 Featured Shops</Text>
+                <View style={carouselStyles.scrollContent}>
+                    <View style={carouselStyles.shopSkeletonRow}>
+                        {Array.from({ length: 3 }).map((_, index) => (
+                            <View key={`featured-shop-skeleton-${index}`} style={carouselStyles.shopSkeletonCard}>
+                                <SkeletonLoader height={80} borderRadius={12} />
+                                <SkeletonLoader height={12} width="85%" style={{ marginTop: 8 }} />
+                                <SkeletonLoader height={10} width="65%" style={{ marginTop: 6 }} />
+                            </View>
+                        ))}
+                    </View>
+                </View>
             </View>
         );
     }
@@ -732,7 +719,7 @@ export const FeaturedShopsCarousel: React.FC<FeaturedShopsCarouselProps> = ({
 
     return (
         <View style={carouselStyles.section}>
-            <Text style={carouselStyles.sectionTitle}>🏆 Featured Shops</Text>
+            <Text style={[carouselStyles.sectionTitle, { color: theme.textPrimary }]}>🏆 Featured Shops</Text>
             <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -763,10 +750,23 @@ export const TrendingProductsCarousel: React.FC<TrendingProductsCarouselProps> =
     onProductPress,
     isLoading,
 }) => {
+    const { theme } = useTheme();
+
     if (isLoading) {
         return (
-            <View style={carouselStyles.loadingContainer}>
-                <ActivityIndicator size="small" color={lightPalette.primary} />
+            <View style={carouselStyles.section}>
+                <Text style={[carouselStyles.sectionTitle, { color: theme.textPrimary }]}>🔥 Trending Now</Text>
+                <View style={carouselStyles.scrollContent}>
+                    <View style={carouselStyles.productSkeletonRow}>
+                        {Array.from({ length: 2 }).map((_, index) => (
+                            <View key={`trending-product-skeleton-${index}`} style={carouselStyles.productSkeletonCard}>
+                                <SkeletonLoader height={160} borderRadius={10} />
+                                <SkeletonLoader height={13} width="85%" style={{ marginTop: 8 }} />
+                                <SkeletonLoader height={12} width="55%" style={{ marginTop: 6 }} />
+                            </View>
+                        ))}
+                    </View>
+                </View>
             </View>
         );
     }
@@ -774,7 +774,7 @@ export const TrendingProductsCarousel: React.FC<TrendingProductsCarouselProps> =
 
     return (
         <View style={carouselStyles.section}>
-            <Text style={carouselStyles.sectionTitle}>🔥 Trending Now</Text>
+            <Text style={[carouselStyles.sectionTitle, { color: theme.textPrimary }]}>🔥 Trending Now</Text>
             <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -788,6 +788,7 @@ export const TrendingProductsCarousel: React.FC<TrendingProductsCarouselProps> =
                         thumbnailUrl={item.thumbnailUrl}
                         minPrice={item.minPrice}
                         maxPrice={item.maxPrice}
+                        totalStock={item.totalStock}
                         salePrice={item.salePrice}
                         originalPriceForSale={item.originalPriceForSale}
                         rating={item.rating}
@@ -820,13 +821,26 @@ export const RecommendedSection: React.FC<RecommendedSectionProps> = ({
     isLoading,
     hasActivity,
 }) => {
+    const { theme } = useTheme();
+
     // Only show if user has activity history
     if (!hasActivity) return null;
 
     if (isLoading) {
         return (
-            <View style={carouselStyles.loadingContainer}>
-                <ActivityIndicator size="small" color={lightPalette.primary} />
+            <View style={carouselStyles.section}>
+                <Text style={[carouselStyles.sectionTitle, { color: theme.textPrimary }]}>✨ Recommended For You</Text>
+                <View style={carouselStyles.scrollContent}>
+                    <View style={carouselStyles.productSkeletonRow}>
+                        {Array.from({ length: 2 }).map((_, index) => (
+                            <View key={`recommended-product-skeleton-${index}`} style={carouselStyles.productSkeletonCard}>
+                                <SkeletonLoader height={160} borderRadius={10} />
+                                <SkeletonLoader height={13} width="85%" style={{ marginTop: 8 }} />
+                                <SkeletonLoader height={12} width="55%" style={{ marginTop: 6 }} />
+                            </View>
+                        ))}
+                    </View>
+                </View>
             </View>
         );
     }
@@ -834,7 +848,7 @@ export const RecommendedSection: React.FC<RecommendedSectionProps> = ({
 
     return (
         <View style={carouselStyles.section}>
-            <Text style={carouselStyles.sectionTitle}>✨ Recommended For You</Text>
+            <Text style={[carouselStyles.sectionTitle, { color: theme.textPrimary }]}>✨ Recommended For You</Text>
             <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -848,6 +862,7 @@ export const RecommendedSection: React.FC<RecommendedSectionProps> = ({
                         thumbnailUrl={item.thumbnailUrl}
                         minPrice={item.minPrice}
                         maxPrice={item.maxPrice}
+                        totalStock={item.totalStock}
                         salePrice={item.salePrice}
                         originalPriceForSale={item.originalPriceForSale}
                         rating={item.rating}
@@ -866,15 +881,23 @@ const carouselStyles = StyleSheet.create({
     sectionTitle: {
         fontSize: 17,
         fontWeight: '700',
-        color: lightPalette.textPrimary,
         paddingHorizontal: 16,
         paddingTop: 16,
         paddingBottom: 10,
     },
     scrollContent: { paddingHorizontal: 16 },
-    loadingContainer: {
-        height: 80,
-        justifyContent: 'center',
-        alignItems: 'center',
+    shopSkeletonRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    shopSkeletonCard: {
+        width: 130,
+    },
+    productSkeletonRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    productSkeletonCard: {
+        width: 160,
     },
 });

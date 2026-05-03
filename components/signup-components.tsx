@@ -1,22 +1,17 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Control, Controller, UseFormSetValue, UseFormWatch } from 'react-hook-form';
 import {
-    ActivityIndicator,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+    ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View
 } from 'react-native';
 import { administrativeBoundariesTable } from '../utils/database/administrative-boundaries-table';
-import { lightPalette } from '../utils/theme';
 import { BoundaryItem, Gender, UserRole } from '../utils/types';
 import { validatePassword } from '../utils/utils';
 import { CascadingDropdown } from './address-components';
 import { FormInput } from './ui/form-input';
+import { useTheme } from './ui/theme-provider';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -55,26 +50,30 @@ export const WizardProgressBar: React.FC<WizardProgressBarProps> = ({
     totalSteps,
     currentStep,
 }) => {
+    const { theme } = useTheme();
+
     return (
         <View style={progressStyles.container}>
             {Array.from({ length: totalSteps }, (_, i) => {
                 const stepNum = i + 1;
                 const isCompleted = stepNum < currentStep;
                 const isActive = stepNum === currentStep;
+                const circleBackgroundColor = isCompleted || isActive ? theme.primary : theme.border;
+                const circleTextColor = isCompleted || isActive ? theme.white : theme.gray;
+                const lineBackgroundColor = isCompleted ? theme.primary : theme.border;
+
                 return (
                     <React.Fragment key={stepNum}>
                         <View
                             style={[
                                 progressStyles.circle,
-                                isCompleted && progressStyles.circleCompleted,
-                                isActive && progressStyles.circleActive,
+                                { backgroundColor: circleBackgroundColor },
                             ]}
                         >
                             <Text
                                 style={[
                                     progressStyles.circleText,
-                                    (isActive || isCompleted) &&
-                                    progressStyles.circleTextActive,
+                                    { color: circleTextColor },
                                 ]}
                             >
                                 {isCompleted ? '✓' : stepNum}
@@ -84,7 +83,7 @@ export const WizardProgressBar: React.FC<WizardProgressBarProps> = ({
                             <View
                                 style={[
                                     progressStyles.line,
-                                    isCompleted && progressStyles.lineCompleted,
+                                    { backgroundColor: lineBackgroundColor },
                                 ]}
                             />
                         )}
@@ -106,32 +105,17 @@ const progressStyles = StyleSheet.create({
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: '#E9ECEF',
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    circleActive: {
-        backgroundColor: lightPalette.primary,
-    },
-    circleCompleted: {
-        backgroundColor: lightPalette.success,
     },
     circleText: {
         fontSize: 13,
         fontWeight: '700',
-        color: '#ADB5BD',
-    },
-    circleTextActive: {
-        color: '#FFFFFF',
     },
     line: {
         flex: 1,
         height: 2,
-        backgroundColor: '#E9ECEF',
         marginHorizontal: 4,
-    },
-    lineCompleted: {
-        backgroundColor: lightPalette.success,
     },
 });
 
@@ -152,13 +136,6 @@ const getPasswordStrength = (password: string): PasswordStrength => {
     return 'strong';
 };
 
-const STRENGTH_COLORS: Record<PasswordStrength, string> = {
-    empty: '#E9ECEF',
-    weak: lightPalette.error,
-    medium: lightPalette.warning,
-    strong: lightPalette.success,
-};
-
 const STRENGTH_LABELS: Record<PasswordStrength, string> = {
     empty: '',
     weak: 'Weak',
@@ -173,6 +150,7 @@ const STRENGTH_LABELS: Record<PasswordStrength, string> = {
 export const PasswordStrengthIndicator: React.FC<PasswordStrengthIndicatorProps> = ({
     password,
 }) => {
+    const { theme } = useTheme();
     const strength = getPasswordStrength(password);
     const barWidth =
         strength === 'empty'
@@ -182,12 +160,18 @@ export const PasswordStrengthIndicator: React.FC<PasswordStrengthIndicatorProps>
                 : strength === 'medium'
                     ? '66%'
                     : '100%';
-    const color = STRENGTH_COLORS[strength];
+    const strengthColors: Record<PasswordStrength, string> = {
+        empty: theme.border,
+        weak: theme.error,
+        medium: theme.warning,
+        strong: theme.success,
+    };
+    const color = strengthColors[strength];
     const label = STRENGTH_LABELS[strength];
 
     return (
         <View style={strengthStyles.container}>
-            <View style={strengthStyles.track}>
+            <View style={[strengthStyles.track, { backgroundColor: theme.border }]}>
                 <View
                     style={[
                         strengthStyles.fill,
@@ -210,7 +194,6 @@ const strengthStyles = StyleSheet.create({
     track: {
         height: 4,
         borderRadius: 2,
-        backgroundColor: '#E9ECEF',
         overflow: 'hidden',
     },
     fill: {
@@ -232,20 +215,35 @@ interface RadioOptionProps {
     readonly onPress: () => void;
 }
 
-const RadioOption: React.FC<RadioOptionProps> = ({ label, selected, onPress }) => (
-    <TouchableOpacity
-        style={[radioStyles.option, selected && radioStyles.optionSelected]}
-        onPress={onPress}
-        activeOpacity={0.7}
-    >
-        <View style={[radioStyles.circle, selected && radioStyles.circleSelected]}>
-            {selected && <View style={radioStyles.circleDot} />}
-        </View>
-        <Text style={[radioStyles.label, selected && radioStyles.labelSelected]}>
-            {label}
-        </Text>
-    </TouchableOpacity>
-);
+const RadioOption: React.FC<RadioOptionProps> = ({ label, selected, onPress }) => {
+    const { theme } = useTheme();
+
+    return (
+        <RipplePressable
+            style={[
+                radioStyles.option,
+                {
+                    borderColor: selected ? theme.primary : theme.border,
+                    backgroundColor: selected ? `${theme.primary}14` : theme.background,
+                },
+            ]}
+            onPress={onPress}
+            activeOpacity={0.7}
+        >
+            <View style={[radioStyles.circle, { borderColor: selected ? theme.primary : theme.gray }]}>
+                {selected && <View style={[radioStyles.circleDot, { backgroundColor: theme.primary }]} />}
+            </View>
+            <Text
+                style={[
+                    radioStyles.label,
+                    { color: selected ? theme.primary : theme.textSecondary, fontWeight: selected ? '700' : '500' },
+                ]}
+            >
+                {label}
+            </Text>
+        </RipplePressable>
+    );
+};
 
 const radioStyles = StyleSheet.create({
     option: {
@@ -254,41 +252,25 @@ const radioStyles = StyleSheet.create({
         padding: 16,
         borderRadius: 12,
         borderWidth: 1.5,
-        borderColor: '#E9ECEF',
         marginBottom: 12,
-        backgroundColor: '#FAFAFA',
-    },
-    optionSelected: {
-        borderColor: lightPalette.primary,
-        backgroundColor: '#FFF5F4',
     },
     circle: {
         width: 20,
         height: 20,
         borderRadius: 10,
         borderWidth: 2,
-        borderColor: '#ADB5BD',
         marginRight: 12,
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    circleSelected: {
-        borderColor: lightPalette.primary,
     },
     circleDot: {
         width: 10,
         height: 10,
         borderRadius: 5,
-        backgroundColor: lightPalette.primary,
     },
     label: {
         fontSize: 15,
-        color: '#525F7F',
         fontWeight: '500',
-    },
-    labelSelected: {
-        color: lightPalette.primary,
-        fontWeight: '700',
     },
 });
 
@@ -304,10 +286,12 @@ interface AccountTypeStepProps {
  * Selection is bound via react-hook-form Controller, triggers onNext on selection.
  */
 export const AccountTypeStep: React.FC<AccountTypeStepProps> = ({ control, onNext }) => {
+    const { theme } = useTheme();
+
     return (
         <ScrollView contentContainerStyle={stepStyles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={stepStyles.title}>Join Moda</Text>
-            <Text style={stepStyles.subtitle}>How will you use Moda?</Text>
+            <Text style={[stepStyles.title, { color: theme.textPrimary }]}>Join Moda</Text>
+            <Text style={[stepStyles.subtitle, { color: theme.textSecondary }]}>How will you use Moda?</Text>
             <Controller
                 control={control}
                 name="accountType"
@@ -364,6 +348,7 @@ const MAX_DOB = getMaxDOB();
  * Enforces minimum age of 13 years via a max date validation on the DOB field.
  */
 export const UserInfoStep: React.FC<UserInfoStepProps> = ({ control, errors }) => {
+    const { theme } = useTheme();
     const [showPicker, setShowPicker] = useState(false);
 
     const handleDateChange = (
@@ -385,8 +370,8 @@ export const UserInfoStep: React.FC<UserInfoStepProps> = ({ control, errors }) =
 
     return (
         <ScrollView contentContainerStyle={stepStyles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={stepStyles.title}>Personal Info</Text>
-            <Text style={stepStyles.subtitle}>Tell us about yourself</Text>
+            <Text style={[stepStyles.title, { color: theme.textPrimary }]}>Personal Info</Text>
+            <Text style={[stepStyles.subtitle, { color: theme.textSecondary }]}>Tell us about yourself</Text>
 
             <FormInput
                 name="firstName"
@@ -412,7 +397,7 @@ export const UserInfoStep: React.FC<UserInfoStepProps> = ({ control, errors }) =
             />
 
             {/* Gender Selection */}
-            <Text style={stepStyles.fieldLabel}>Gender *</Text>
+            <Text style={[stepStyles.fieldLabel, { color: theme.textPrimary }]}>Gender *</Text>
             <Controller
                 control={control}
                 name="gender"
@@ -420,11 +405,14 @@ export const UserInfoStep: React.FC<UserInfoStepProps> = ({ control, errors }) =
                 render={({ field: { value, onChange } }) => (
                     <View style={stepStyles.genderRow}>
                         {GENDER_OPTIONS.map((opt) => (
-                            <TouchableOpacity
+                            <RipplePressable
                                 key={opt.value}
                                 style={[
                                     stepStyles.genderChip,
-                                    value === opt.value && stepStyles.genderChipSelected,
+                                    {
+                                        borderColor: value === opt.value ? theme.primary : theme.border,
+                                        backgroundColor: value === opt.value ? `${theme.primary}14` : theme.background,
+                                    },
                                 ]}
                                 onPress={() => onChange(opt.value)}
                                 activeOpacity={0.7}
@@ -432,23 +420,24 @@ export const UserInfoStep: React.FC<UserInfoStepProps> = ({ control, errors }) =
                                 <Text
                                     style={[
                                         stepStyles.genderChipText,
+                                        { color: value === opt.value ? theme.primary : theme.textSecondary },
                                         value === opt.value && stepStyles.genderChipTextSelected,
                                     ]}
                                 >
                                     {opt.label}
                                 </Text>
-                            </TouchableOpacity>
+                            </RipplePressable>
                         ))}
                     </View>
                 )}
             />
             {errors.gender?.message && (
-                <Text style={stepStyles.errorText}>{errors.gender.message}</Text>
+                <Text style={[stepStyles.errorText, { color: theme.error }]}>{errors.gender.message}</Text>
             )}
 
             {/* Date of Birth Picker */}
             <View style={stepStyles.fieldContainer}>
-                <Text style={stepStyles.fieldLabel}>Date of Birth *</Text>
+                <Text style={[stepStyles.fieldLabel, { color: theme.textPrimary }]}>Date of Birth *</Text>
                 <Controller
                     control={control}
                     name="dateOfBirth"
@@ -461,26 +450,30 @@ export const UserInfoStep: React.FC<UserInfoStepProps> = ({ control, errors }) =
                     }}
                     render={({ field: { value, onChange } }) => (
                         <>
-                            <TouchableOpacity
+                            <RipplePressable
                                 style={[
                                     stepStyles.pickerTrigger,
-                                    errors.dateOfBirth && stepStyles.pickerTriggerError
+                                    {
+                                        borderColor: errors.dateOfBirth ? theme.error : theme.border,
+                                        backgroundColor: errors.dateOfBirth ? `${theme.error}14` : theme.background,
+                                    },
                                 ]}
                                 onPress={() => setShowPicker(true)}
                                 activeOpacity={0.7}
                             >
                                 <Text style={[
                                     stepStyles.pickerText,
-                                    !value && stepStyles.pickerPlaceholderText
+                                    { color: value ? theme.textPrimary : theme.gray },
+                                    !value && stepStyles.pickerPlaceholderText,
                                 ]}>
                                     {value || 'Select your date of birth'}
                                 </Text>
                                 <Ionicons
                                     name="calendar-outline"
                                     size={20}
-                                    color={lightPalette.primary}
+                                    color={theme.primary}
                                 />
-                            </TouchableOpacity>
+                            </RipplePressable>
 
                             {showPicker && (
                                 <DateTimePicker
@@ -494,18 +487,21 @@ export const UserInfoStep: React.FC<UserInfoStepProps> = ({ control, errors }) =
 
                             {/* iOS specific confirm button for spinner display */}
                             {Platform.OS === 'ios' && showPicker && (
-                                <TouchableOpacity
-                                    style={stepStyles.iosPickerConfirm}
+                                <RipplePressable
+                                    style={[
+                                        stepStyles.iosPickerConfirm,
+                                        { backgroundColor: `${theme.primary}14`, borderColor: theme.primary },
+                                    ]}
                                     onPress={() => setShowPicker(false)}
                                 >
-                                    <Text style={stepStyles.iosPickerConfirmText}>Done</Text>
-                                </TouchableOpacity>
+                                    <Text style={[stepStyles.iosPickerConfirmText, { color: theme.primary }]}>Done</Text>
+                                </RipplePressable>
                             )}
                         </>
                     )}
                 />
                 {errors.dateOfBirth?.message && (
-                    <Text style={stepStyles.errorText}>{errors.dateOfBirth.message}</Text>
+                    <Text style={[stepStyles.errorText, { color: theme.error }]}>{errors.dateOfBirth.message}</Text>
                 )}
             </View>
         </ScrollView>
@@ -529,10 +525,12 @@ export const AccountInfoStep: React.FC<AccountInfoStepProps> = ({
     errors,
     watchPassword,
 }) => {
+    const { theme } = useTheme();
+
     return (
         <ScrollView contentContainerStyle={stepStyles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={stepStyles.title}>Account Details</Text>
-            <Text style={stepStyles.subtitle}>Set up your login credentials</Text>
+            <Text style={[stepStyles.title, { color: theme.textPrimary }]}>Account Details</Text>
+            <Text style={[stepStyles.subtitle, { color: theme.textSecondary }]}>Set up your login credentials</Text>
 
             <FormInput
                 name="email"
@@ -603,6 +601,7 @@ interface SellerInfoStepProps {
  * Populates address components from administrative_boundaries table.
  */
 export const SellerInfoStep: React.FC<SellerInfoStepProps> = ({ control, errors, setValue, watch }) => {
+    const { theme } = useTheme();
     const [countries, setCountries] = useState<BoundaryItem[]>([]);
     const [provinces, setProvinces] = useState<BoundaryItem[]>([]);
     const [cities, setCities] = useState<BoundaryItem[]>([]);
@@ -692,8 +691,8 @@ export const SellerInfoStep: React.FC<SellerInfoStepProps> = ({ control, errors,
 
     return (
         <ScrollView contentContainerStyle={stepStyles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={stepStyles.title}>Shop Details</Text>
-            <Text style={stepStyles.subtitle}>Tell customers about your shop</Text>
+            <Text style={[stepStyles.title, { color: theme.textPrimary }]}>Shop Details</Text>
+            <Text style={[stepStyles.subtitle, { color: theme.textSecondary }]}>Tell customers about your shop</Text>
 
             <FormInput
                 name="shopName"
@@ -705,7 +704,7 @@ export const SellerInfoStep: React.FC<SellerInfoStepProps> = ({ control, errors,
             />
 
             {loadingBoundary && (
-                <ActivityIndicator size="small" color={lightPalette.primary} style={{ marginBottom: 8 }} />
+                <ActivityIndicator size="small" color={theme.primary} style={{ marginBottom: 8 }} />
             )}
 
             <Controller
@@ -723,7 +722,7 @@ export const SellerInfoStep: React.FC<SellerInfoStepProps> = ({ control, errors,
                             placeholder="Select country"
                         />
                         {errors.shopCountry?.message && (
-                            <Text style={stepStyles.errorText}>{errors.shopCountry.message}</Text>
+                            <Text style={[stepStyles.errorText, { color: theme.error }]}>{errors.shopCountry.message}</Text>
                         )}
                     </View>
                 )}
@@ -745,7 +744,7 @@ export const SellerInfoStep: React.FC<SellerInfoStepProps> = ({ control, errors,
                             placeholder="Select province"
                         />
                         {errors.shopProvince?.message && (
-                            <Text style={stepStyles.errorText}>{errors.shopProvince.message}</Text>
+                            <Text style={[stepStyles.errorText, { color: theme.error }]}>{errors.shopProvince.message}</Text>
                         )}
                     </View>
                 )}
@@ -767,7 +766,7 @@ export const SellerInfoStep: React.FC<SellerInfoStepProps> = ({ control, errors,
                             placeholder="Select city"
                         />
                         {errors.shopCity?.message && (
-                            <Text style={stepStyles.errorText}>{errors.shopCity.message}</Text>
+                            <Text style={[stepStyles.errorText, { color: theme.error }]}>{errors.shopCity.message}</Text>
                         )}
                     </View>
                 )}
@@ -789,7 +788,7 @@ export const SellerInfoStep: React.FC<SellerInfoStepProps> = ({ control, errors,
                             placeholder="Select barangay"
                         />
                         {errors.shopBarangay?.message && (
-                            <Text style={stepStyles.errorText}>{errors.shopBarangay.message}</Text>
+                            <Text style={[stepStyles.errorText, { color: theme.error }]}>{errors.shopBarangay.message}</Text>
                         )}
                     </View>
                 )}
@@ -827,14 +826,15 @@ export const ConfirmationStep: React.FC<ConfirmationStepProps> = ({
     onToggleTerms,
     onViewTerms,
 }) => {
+    const { theme } = useTheme();
     const isSeller = data.accountType === 'seller';
 
     return (
         <ScrollView contentContainerStyle={stepStyles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={stepStyles.title}>Almost there!</Text>
-            <Text style={stepStyles.subtitle}>Please review your information</Text>
+            <Text style={[stepStyles.title, { color: theme.textPrimary }]}>Almost there!</Text>
+            <Text style={[stepStyles.subtitle, { color: theme.textSecondary }]}>Please review your information</Text>
 
-            <View style={confirmStyles.card}>
+            <View style={[confirmStyles.card, { backgroundColor: theme.background, borderColor: theme.border }]}>
                 <SummaryRow label="Account Type" value={isSeller ? 'Seller' : 'Buyer'} />
                 <SummaryRow
                     label="Name"
@@ -855,21 +855,26 @@ export const ConfirmationStep: React.FC<ConfirmationStepProps> = ({
             </View>
 
             {/* Terms & Conditions */}
-            <TouchableOpacity
+            <RipplePressable
                 style={confirmStyles.termsRow}
                 onPress={onToggleTerms}
                 activeOpacity={0.7}
             >
-                <View style={[confirmStyles.checkbox, agreedToTerms && confirmStyles.checkboxChecked]}>
+                <View
+                    style={[
+                        confirmStyles.checkbox,
+                        { borderColor: agreedToTerms ? theme.primary : theme.gray, backgroundColor: agreedToTerms ? theme.primary : theme.transparent },
+                    ]}
+                >
                     {agreedToTerms && <Text style={confirmStyles.checkmark}>✓</Text>}
                 </View>
-                <Text style={confirmStyles.termsText}>
+                <Text style={[confirmStyles.termsText, { color: theme.textSecondary }]}>
                     I agree to the{' '}
-                    <Text style={confirmStyles.termsLink} onPress={onViewTerms}>
+                    <Text style={[confirmStyles.termsLink, { color: theme.primary }]} onPress={onViewTerms}>
                         Terms & Conditions
                     </Text>
                 </Text>
-            </TouchableOpacity>
+            </RipplePressable>
         </ScrollView>
     );
 };
@@ -879,19 +884,21 @@ interface SummaryRowProps {
     readonly value: string;
 }
 
-const SummaryRow: React.FC<SummaryRowProps> = ({ label, value }) => (
-    <View style={confirmStyles.row}>
-        <Text style={confirmStyles.rowLabel}>{label}</Text>
-        <Text style={confirmStyles.rowValue}>{value}</Text>
-    </View>
-);
+const SummaryRow: React.FC<SummaryRowProps> = ({ label, value }) => {
+    const { theme } = useTheme();
+
+    return (
+        <View style={[confirmStyles.row, { borderBottomColor: theme.border }]}>
+            <Text style={[confirmStyles.rowLabel, { color: theme.textSecondary }]}>{label}</Text>
+            <Text style={[confirmStyles.rowValue, { color: theme.textPrimary }]}>{value}</Text>
+        </View>
+    );
+};
 
 const confirmStyles = StyleSheet.create({
     card: {
-        backgroundColor: '#FAFAFA',
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: '#E9ECEF',
         padding: 16,
         marginBottom: 20,
     },
@@ -900,16 +907,13 @@ const confirmStyles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingVertical: 8,
         borderBottomWidth: 1,
-        borderBottomColor: '#F0F0F0',
     },
     rowLabel: {
         fontSize: 13,
-        color: '#525F7F',
         flex: 1,
     },
     rowValue: {
         fontSize: 13,
-        color: '#32325D',
         fontWeight: '600',
         flex: 2,
         textAlign: 'right',
@@ -924,14 +928,9 @@ const confirmStyles = StyleSheet.create({
         height: 22,
         borderRadius: 4,
         borderWidth: 2,
-        borderColor: '#ADB5BD',
         marginRight: 10,
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    checkboxChecked: {
-        backgroundColor: lightPalette.primary,
-        borderColor: lightPalette.primary,
     },
     checkmark: {
         color: '#FFFFFF',
@@ -940,12 +939,10 @@ const confirmStyles = StyleSheet.create({
     },
     termsText: {
         fontSize: 14,
-        color: '#525F7F',
         flex: 1,
         flexWrap: 'wrap',
     },
     termsLink: {
-        color: lightPalette.primary,
         fontWeight: '600',
         textDecorationLine: 'underline',
     },
@@ -961,20 +958,17 @@ const stepStyles = StyleSheet.create({
     title: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#32325D',
         textAlign: 'center',
         marginBottom: 6,
     },
     subtitle: {
         fontSize: 14,
-        color: '#525F7F',
         textAlign: 'center',
         marginBottom: 24,
     },
     fieldLabel: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#333',
         marginBottom: 8,
     },
     genderRow: {
@@ -987,25 +981,16 @@ const stepStyles = StyleSheet.create({
         paddingVertical: 10,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#E9ECEF',
         alignItems: 'center',
-        backgroundColor: '#FAFAFA',
-    },
-    genderChipSelected: {
-        borderColor: lightPalette.primary,
-        backgroundColor: '#FFF5F4',
     },
     genderChipText: {
         fontSize: 13,
-        color: '#525F7F',
         fontWeight: '500',
     },
     genderChipTextSelected: {
-        color: lightPalette.primary,
         fontWeight: '700',
     },
     errorText: {
-        color: lightPalette.error,
         fontSize: 12,
         marginTop: 4,
         marginBottom: 12,
@@ -1021,31 +1006,20 @@ const stepStyles = StyleSheet.create({
         paddingVertical: 12,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#E9ECEF',
-        backgroundColor: '#FAFAFA',
-    },
-    pickerTriggerError: {
-        borderColor: lightPalette.error,
-        backgroundColor: '#FFF5F4',
     },
     pickerText: {
         fontSize: 16,
-        color: '#32325D',
     },
     pickerPlaceholderText: {
-        color: '#ADB5BD',
     },
     iosPickerConfirm: {
         alignItems: 'center',
         paddingVertical: 12,
-        backgroundColor: '#FFF5F4',
         borderRadius: 8,
         marginTop: 8,
         borderWidth: 1,
-        borderColor: lightPalette.primary,
     },
     iosPickerConfirmText: {
-        color: lightPalette.primary,
         fontSize: 16,
         fontWeight: '700',
     },

@@ -1,17 +1,11 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
-    Alert,
-    FlatList,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+    FlatList, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, View
 } from 'react-native';
 import Animated from 'react-native-reanimated';
 
@@ -56,6 +50,11 @@ interface ConfirmDialogState {
     readonly variant?: 'danger' | 'info' | 'warning';
 }
 
+function normalizeUserRole(role: unknown): string {
+    if (typeof role !== 'string') return '';
+    return role.trim().toLowerCase();
+}
+
 // ---------------------------------------------------------------------------
 // Main Screen
 // ---------------------------------------------------------------------------
@@ -94,12 +93,12 @@ export default function LoginScreen(): React.JSX.Element {
         void checkBiometrics();
 
         if (params.error) {
-            Alert.alert(
+            AppAlert.alert(
                 'Authentication Error',
                 (params.error_description as string)?.replace(/\+/g, ' ') || 'An error occurred during verification.',
             );
         } else if (params.message) {
-            Alert.alert('Success', (params.message as string)?.replace(/\+/g, ' '));
+            AppAlert.alert('Success', (params.message as string)?.replace(/\+/g, ' '));
         }
     }, [params]);
 
@@ -140,11 +139,14 @@ export default function LoginScreen(): React.JSX.Element {
 
     const navigateByRole = async (authId: string): Promise<void> => {
         const { data: user } = await usersTable.getByAuthId(authId);
-        if (user?.role === 'seller') {
-            router.replace('/home/seller-dashboard');
-        } else {
-            router.replace('/(tabs)');
+        const normalizedRole = normalizeUserRole(user?.role);
+        const targetRoute = normalizedRole === 'seller' ? '/home/seller-dashboard' : '/home/catalog';
+
+        if (router.canDismiss()) {
+            router.dismissAll();
         }
+
+        router.replace(targetRoute as Parameters<typeof router.replace>[0]);
     };
 
     const finalizeLogin = async (session: { user: { id: string; email?: string }; refresh_token?: string }): Promise<void> => {
@@ -180,7 +182,7 @@ export default function LoginScreen(): React.JSX.Element {
     // -- Event Handlers --------------------------------------------------------
     const onSubmitEmail = async (data: LoginFormData): Promise<void> => {
         if (cooldownTime > Date.now()) {
-            Alert.alert('Rate Limited', 'Please wait before trying again.');
+            AppAlert.alert('Rate Limited', 'Please wait before trying again.');
             return;
         }
         setIsLoading(true);
@@ -192,9 +194,9 @@ export default function LoginScreen(): React.JSX.Element {
             setFailedAttempts(newFailed);
             if (newFailed >= MAX_FAILED_ATTEMPTS) {
                 setCooldownTime(Date.now() + COOLDOWN_MS);
-                Alert.alert('Too many failed attempts', 'Please wait 1 minute before trying again.');
+                AppAlert.alert('Too many failed attempts', 'Please wait 1 minute before trying again.');
             } else {
-                Alert.alert('Login Failed', 'Invalid email or password.');
+                AppAlert.alert('Login Failed', 'Invalid email or password.');
             }
             return;
         }
@@ -206,7 +208,7 @@ export default function LoginScreen(): React.JSX.Element {
         const { data, error } = await authApi.refreshSession(account.token);
         setIsLoading(false);
         if (error || !data.session) {
-            Alert.alert('Session Expired', 'Please login with your email and password again.');
+            AppAlert.alert('Session Expired', 'Please login with your email and password again.');
             setShowLoginForm(true);
         } else {
             await navigateByRole(data.session.user.id);
@@ -250,7 +252,7 @@ export default function LoginScreen(): React.JSX.Element {
         <SafeScreen>
             <Animated.View
                 entering={Animation.Presets.FadeInDown}
-                exiting={Animation.Presets.FadeOutUp}
+                exiting={Animation.Presets.FadeOutDown}
                 style={styles.container}
             >
                 <KeyboardAvoidingView
@@ -268,7 +270,7 @@ export default function LoginScreen(): React.JSX.Element {
                                 keyExtractor={(item) => item.email}
                                 scrollEnabled={false}
                                 renderItem={({ item }) => (
-                                    <TouchableOpacity
+                                    <RipplePressable
                                         style={[styles.accountCard, {
                                             backgroundColor: theme.cardBackground,
                                             borderColor: theme.border,
@@ -292,19 +294,19 @@ export default function LoginScreen(): React.JSX.Element {
                                             <Text style={[styles.accountName, { color: theme.textPrimary }]}>{`${item.firstName} ${item.lastName}`}</Text>
                                             <Text style={[styles.accountEmail, { color: theme.textSecondary }]}>{item.email}</Text>
                                         </View>
-                                    </TouchableOpacity>
+                                    </RipplePressable>
                                 )}
                             />
 
                             {biometricSupported && (
-                                <TouchableOpacity style={styles.biometricBtn} onPress={() => void handleBiometricLogin()}>
+                                <RipplePressable style={styles.biometricBtn} onPress={() => void handleBiometricLogin()}>
                                     <Text style={[styles.biometricBtnText, { color: theme.primary }]}>Login with Biometrics</Text>
-                                </TouchableOpacity>
+                                </RipplePressable>
                             )}
 
-                            <TouchableOpacity style={styles.switchBtn} onPress={() => setShowLoginForm(true)}>
+                            <RipplePressable style={styles.switchBtn} onPress={() => setShowLoginForm(true)}>
                                 <Text style={[styles.switchBtnText, { color: theme.info }]}>Login to another account</Text>
-                            </TouchableOpacity>
+                            </RipplePressable>
                         </View>
                     )}
 
@@ -334,7 +336,7 @@ export default function LoginScreen(): React.JSX.Element {
                                 error={errors.password?.message}
                             />
 
-                            <TouchableOpacity
+                            <RipplePressable
                                 style={[styles.loginBtn, { backgroundColor: theme.primary }, isLoading && styles.loginBtnDisabled]}
                                 onPress={() => void handleSubmit(onSubmitEmail)()}
                                 disabled={isLoading}
@@ -344,7 +346,7 @@ export default function LoginScreen(): React.JSX.Element {
                                 ) : (
                                     <Text style={[styles.loginBtnText, { color: theme.white }]}>Log In</Text>
                                 )}
-                            </TouchableOpacity>
+                            </RipplePressable>
 
                             {isCooldown && (
                                 <Text style={[styles.cooldownText, { color: theme.error }]}>
@@ -353,9 +355,9 @@ export default function LoginScreen(): React.JSX.Element {
                             )}
 
                             {savedAccounts.length > 0 && (
-                                <TouchableOpacity style={styles.switchBtn} onPress={() => setShowLoginForm(false)}>
+                                <RipplePressable style={styles.switchBtn} onPress={() => setShowLoginForm(false)}>
                                     <Text style={[styles.switchBtnText, { color: theme.info }]}>Cancel</Text>
-                                </TouchableOpacity>
+                                </RipplePressable>
                             )}
                         </View>
                     )}
@@ -363,9 +365,9 @@ export default function LoginScreen(): React.JSX.Element {
                     {/* ------- Sign Up Link ------- */}
                     <View style={styles.signupRow}>
                         <Text style={[styles.signupText, { color: theme.textSecondary }]}>Don't have an account? </Text>
-                        <TouchableOpacity onPress={() => router.push('/auth/signup' as never)}>
+                        <RipplePressable onPress={() => router.push('/auth/signup' as never)}>
                             <Text style={[styles.signupLink, { color: theme.primary }]}>Sign Up</Text>
-                        </TouchableOpacity>
+                        </RipplePressable>
                     </View>
                 </KeyboardAvoidingView>
 
@@ -381,7 +383,7 @@ export default function LoginScreen(): React.JSX.Element {
                             if (currentAuthId) {
                                 void navigateByRole(currentAuthId);
                             } else {
-                                router.replace('/(tabs)');
+                                router.push('/home/catalog');
                             }
                         }
                     }}

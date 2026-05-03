@@ -1,14 +1,7 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import React, { useEffect } from 'react';
-import {
-    ActivityIndicator,
-    Image,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { usePaymentMethods } from '../hooks/use-payment-methods';
+import { ActivityIndicator, Image, Modal, StyleSheet, Text, View } from 'react-native';
+import { parseStoredCardAccountNumber, usePaymentMethods } from '../hooks/use-payment-methods';
 import { formatPrice } from '../utils/utils';
 import { useTheme } from './ui/theme-provider';
 
@@ -154,6 +147,9 @@ export const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
                 <View style={styles.paymentMethodsList}>
                     {methods.map((method, index) => {
                         const isSelected = selectedMethodUid === method.uid;
+                        const cardLast4 = method.type === 'card'
+                            ? (parseStoredCardAccountNumber(method.account_number).last4 ?? '••••')
+                            : method.account_number.slice(-4);
                         // Find matching options for icon and label
                         const optionInfo = PAYMENT_OPTIONS.find(o => o.type === method.type) || { icon: '💳', label: method.type, description: 'Payment Method', type: method.type as PaymentMethodType };
 
@@ -165,7 +161,7 @@ export const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
                                 {showSeparator && (
                                     <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 8 }} />
                                 )}
-                                <TouchableOpacity
+                                <RipplePressable
                                     style={[
                                         styles.paymentCardRow, 
                                         { borderColor: theme.border, backgroundColor: theme.cardBackground }, 
@@ -185,7 +181,7 @@ export const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
                                                 optionInfo.disabled && { color: theme.gray }
                                             ]}
                                         >
-                                            {optionInfo.label} •••• {method.account_number.slice(-4)}
+                                            {optionInfo.label} •••• {cardLast4}
                                         </Text>
                                         <Text style={[styles.paymentDesc, { color: optionInfo.disabled ? theme.gray : theme.textSecondary }]}>
                                             {optionInfo.disabled ? 'Currently Unavailable' : (method.is_default ? 'Default' : optionInfo.description)}
@@ -196,18 +192,18 @@ export const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
                                             <Text style={[styles.selectedCheck, { color: theme.white }]}>✓</Text>
                                         </View>
                                     )}
-                                </TouchableOpacity>
+                                </RipplePressable>
                             </React.Fragment>
                         );
                     })}
 
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[styles.addMethodBtn, { borderColor: theme.primary, backgroundColor: theme.primary + '05' }]}
                         onPress={onAddNew}
                         activeOpacity={0.7}
                     >
                         <Text style={[styles.addMethodText, { color: theme.primary }]}>+ Add New Method</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
 
                     {methods.length === 0 && (
                         <Text style={[styles.noMethodsText, { color: theme.warning }]}>No payment methods found. Please add one.</Text>
@@ -244,14 +240,14 @@ export const OrderSummaryFooter: React.FC<OrderSummaryFooterProps> = ({
                 <Text style={[styles.footerItems, { color: theme.textSecondary }]}>{itemCount} item{itemCount !== 1 ? 's' : ''}</Text>
                 <Text style={[styles.footerTotal, { color: theme.primary }]}>{formatPrice(totalAmount)}</Text>
             </View>
-            <TouchableOpacity
+            <RipplePressable
                 style={[styles.placeOrderBtn, { backgroundColor: theme.primary }, isDisabled && styles.placeOrderBtnDisabled]}
                 onPress={onPlaceOrder}
                 disabled={isDisabled}
                 id="place-order-button"
             >
                 <Text style={[styles.placeOrderText, { color: theme.white }]}>Place Order</Text>
-            </TouchableOpacity>
+            </RipplePressable>
         </View>
     );
 };
@@ -282,13 +278,13 @@ export const PaymentLoadingOverlay: React.FC<PaymentLoadingOverlayProps> = ({
                     <Text style={[styles.paymentOverlayTitle, { color: theme.textPrimary }]}>Processing Payment</Text>
                     <Text style={[styles.paymentOverlayMessage, { color: theme.textSecondary }]}>{message}</Text>
                     {onCancel !== undefined && (
-                        <TouchableOpacity
+                        <RipplePressable
                             style={[styles.paymentCancelBtn, { backgroundColor: theme.border }]}
                             onPress={onCancel}
                             id="cancel-payment-button"
                         >
                             <Text style={[styles.paymentCancelText, { color: theme.textSecondary }]}>Cancel</Text>
-                        </TouchableOpacity>
+                        </RipplePressable>
                     )}
                 </View>
             </View>

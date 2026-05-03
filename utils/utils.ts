@@ -33,6 +33,42 @@ export const formatPriceRange = (min: number, max: number): string => {
     return `₱${min.toLocaleString('en-PH')} - ₱${max.toLocaleString('en-PH')}`;
 };
 
+export type InventoryStockState = 'in-stock' | 'low-stock' | 'sold-out';
+
+export const DEFAULT_LOW_STOCK_THRESHOLD = 5;
+
+export const getInventoryStockState = (
+    stock: number,
+    lowStockThreshold: number = DEFAULT_LOW_STOCK_THRESHOLD,
+): InventoryStockState => {
+    if (stock <= 0) {
+        return 'sold-out';
+    }
+
+    if (stock <= lowStockThreshold) {
+        return 'low-stock';
+    }
+
+    return 'in-stock';
+};
+
+export const getInventoryStockLabel = (
+    stock: number,
+    lowStockThreshold: number = DEFAULT_LOW_STOCK_THRESHOLD,
+): 'In Stock' | 'Low Stock' | 'Sold Out' => {
+    const state = getInventoryStockState(stock, lowStockThreshold);
+
+    if (state === 'sold-out') {
+        return 'Sold Out';
+    }
+
+    if (state === 'low-stock') {
+        return 'Low Stock';
+    }
+
+    return 'In Stock';
+};
+
 // Date Formatters
 export const formatDate = (date: string | Date | number): string => {
     const d = new Date(date);

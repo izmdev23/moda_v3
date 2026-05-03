@@ -1,6 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 interface Props {
     children: ReactNode;
 }
@@ -35,9 +36,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 <View style={styles.container}>
                     <Text style={styles.title}>Oops! Something went wrong.</Text>
                     <Text style={styles.message}>{this.state.error?.message || 'Unexpected error occurred.'}</Text>
-                    <TouchableOpacity style={styles.button} onPress={this.handleRetry}>
+                    <RipplePressable style={styles.button} onPress={this.handleRetry}>
                         <Text style={styles.buttonText}>Try Again</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 </View>
             );
         }

@@ -1,55 +1,145 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { Image } from 'expo-image';
+import React, { useCallback, useMemo, useState } from 'react';
+import { FlatList, Modal, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import type { Edge } from 'react-native-safe-area-context';
-import { OrderCard, OrderItemData } from '../../components/my-orders-components';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmptyList } from '../../components/ui/empty-list';
+import { RipplePressable } from '../../components/ui/ripple-pressable';
 import { SafeScreen } from '../../components/ui/safe-screen';
 import { useTheme } from '../../components/ui/theme-provider';
+import { useCurrentUser } from '../../hooks/use-current-user';
+import { SellerOrderedProductCard, useMarkVariantAsDelivering, useSellerOrdersData } from '../../hooks/use-orders';
+import { AppAlert } from '../../utils/app-alert';
+import { formatDate, formatPrice } from '../../utils/utils';
 
 const SELLER_ORDERS_SAFE_AREA_EDGES: readonly Edge[] = ['top', 'left', 'right'];
 
-export default function MyOrdersSellerScreen() {
+function getProductSelectionKey(product: SellerOrderedProductCard): string {
+    return `${product.productId ?? 'missing'}-${product.productName}`;
+}
+
+export default function MyOrdersSellerScreen(): React.JSX.Element {
     const { theme } = useTheme();
-    const [orders, setOrders] = useState<OrderItemData[]>([]);
+    const insets = useSafeAreaInsets();
+    const { data: currentUser } = useCurrentUser();
+    const sellerUserId = currentUser?.id ?? null;
+    const {
+        data: sellerOrdersData,
+        isLoading,
+        isRefetching,
+        refetch,
+    } = useSellerOrdersData(sellerUserId);
+    const markVariantAsDeliveringMutation = useMarkVariantAsDelivering();
+    const [selectedProductKey, setSelectedProductKey] = useState<string | null>(null);
 
-    // grouping function
-    const groupedOrders = orders.reduce((acc, order) => {
-        const buyer = order.buyerName || 'Unknown Buyer';
-        if (!acc[buyer]) acc[buyer] = [];
-        acc[buyer].push(order);
-        return acc;
-    }, {} as Record<string, OrderItemData[]>);
+    useFocusEffect(
+        useCallback((): void => {
+            if (sellerUserId === null) {
+                return;
+            }
 
-    const handleActionClick = (orderId: string, action: 'confirm' | 'ship' | 'receive' | 'rate') => {
-        setOrders(prev => prev.map(o => {
-            if (o.id !== orderId) return o;
-            if (action === 'confirm') return { ...o, status: 'confirmed', deadline: new Date(Date.now() + 1000 * 60 * 60 * 48) }; // seller has 48h to ship
-            if (action === 'ship') return { ...o, status: 'shipped' };
-            return o;
-        }));
-    };
+            void refetch();
+        }, [sellerUserId, refetch]),
+    );
 
-    const renderGroup = ({ item: buyerName }: { item: string }) => {
-        const buyerOrders = groupedOrders[buyerName];
+    const orderedProducts = sellerOrdersData?.products ?? [];
+    const pendingCount = sellerOrdersData?.overview.pendingCount ?? 0;
+    const toShipCount = sellerOrdersData?.overview.toShipCount ?? 0;
+    const deliveringCount = sellerOrdersData?.overview.deliveringCount ?? 0;
+    const receivedCount = sellerOrdersData?.overview.receivedCount ?? 0;
+
+    const selectedProduct = useMemo(() => {
+        if (selectedProductKey === null) {
+            return null;
+        }
+
+        return orderedProducts.find((product) => getProductSelectionKey(product) === selectedProductKey) ?? null;
+    }, [orderedProducts, selectedProductKey]);
+
+    const selectedVariants = useMemo(() => selectedProduct?.variants ?? [], [selectedProduct]);
+
+    const handleMarkSentToCourier = useCallback((variantId: number | null, variantName: string): void => {
+        if (variantId === null) {
+            AppAlert.alert('Unavailable', 'This variant cannot be updated right now.');
+            return;
+        }
+
+        AppAlert.alert(
+            'Send to courier?',
+            `Mark ${variantName} orders as delivering?`,
+            [
+                {
+                    text: 'Cancel',
+                    style: 'cancel',
+                },
+                {
+                    text: 'Confirm',
+                    onPress: () => {
+                        markVariantAsDeliveringMutation.mutate(
+                            { variantId },
+                            {
+                                onSuccess: (updatedCount) => {
+                                    if (updatedCount > 0) {
+                                        AppAlert.alert('Updated', `${updatedCount} order(s) were sent to courier.`);
+                                        return;
+                                    }
+
+                                    AppAlert.alert('No Changes', 'No pending or confirmed orders were found for this variant.');
+                                },
+                                onError: (error) => {
+                                    AppAlert.alert('Error', error.message);
+                                },
+                            },
+                        );
+                    },
+                },
+            ],
+        );
+    }, [markVariantAsDeliveringMutation]);
+
+    const renderProductCard = ({ item }: { item: SellerOrderedProductCard }): React.JSX.Element => {
+        const hasShippedOrders: boolean = item.variants.some(
+            (variant): boolean => variant.deliveringOrderCount > 0 || variant.receivedOrderCount > 0,
+        );
+
         return (
-            <View style={[styles.groupContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-                <View style={[styles.groupHeader, { borderBottomColor: theme.border }]}>
-                    <MaterialIcons name="person" size={20} color={theme.textPrimary} />
-                    <Text style={[styles.groupBuyerName, { color: theme.textPrimary }]}>{buyerName}</Text>
+            <RipplePressable
+                style={[styles.productCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+                onPress={() => setSelectedProductKey(getProductSelectionKey(item))}
+                activeOpacity={0.85}
+            >
+                {item.thumbnailUrl.length > 0 ? (
+                    <Image source={{ uri: item.thumbnailUrl }} style={styles.productImage} contentFit="cover" />
+                ) : (
+                    <View style={[styles.productImageFallback, { backgroundColor: theme.background }]}>
+                        <MaterialIcons name="inventory-2" size={28} color={theme.textSecondary} />
+                    </View>
+                )}
+
+                <View style={styles.productBody}>
+                    <Text style={[styles.productTitle, { color: theme.textPrimary }]} numberOfLines={2}>
+                        {item.productName}
+                    </Text>
+
+                    {hasShippedOrders && (
+                        <View style={[styles.productStatusChip, { backgroundColor: theme.success }]}>
+                            <Text style={[styles.productStatusChipText, { color: theme.white }]}>Shipped</Text>
+                        </View>
+                    )}
+
+                    <View style={styles.productMetaRow}>
+                        <Text style={[styles.productMetaText, { color: theme.textSecondary }]}>Orders: {item.orderCount}</Text>
+                        <Text style={[styles.productMetaText, { color: theme.textSecondary }]}>Qty: {item.totalOrderedQuantity}</Text>
+                    </View>
+
+                    <View style={styles.productMetaRow}>
+                        <Text style={[styles.productAmountText, { color: theme.primary }]}>{formatPrice(item.totalSalesAmount)}</Text>
+                        <Text style={[styles.productMetaText, { color: theme.textSecondary }]}>{formatDate(item.latestOrderAt)}</Text>
+                    </View>
                 </View>
-                <View style={styles.groupOrders}>
-                    {buyerOrders.map(order => (
-                        <OrderCard
-                            key={order.id}
-                            order={order}
-                            isSeller={true}
-                            onPress={() => { }}
-                            onActionClick={(action) => handleActionClick(order.id, action)}
-                        />
-                    ))}
-                </View>
-            </View>
+            </RipplePressable>
         );
     };
 
@@ -57,21 +147,107 @@ export default function MyOrdersSellerScreen() {
         <SafeScreen style={styles.container} edges={SELLER_ORDERS_SAFE_AREA_EDGES}>
             <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.cardBackground }]}>
                 <Text style={[styles.headerText, { color: theme.textPrimary }]}>Customer Orders</Text>
+                <Text style={[styles.headerSubtext, { color: theme.textSecondary }]}>
+                    Pending: {pendingCount} • To Ship: {toShipCount} • Delivering: {deliveringCount} • Received: {receivedCount}
+                </Text>
             </View>
 
             <FlatList
-                data={Object.keys(groupedOrders)}
-                keyExtractor={item => item}
+                data={orderedProducts}
+                keyExtractor={(item) => `${item.productId ?? item.productName}`}
                 contentContainerStyle={styles.listContent}
-                renderItem={renderGroup}
-                ListEmptyComponent={
-                    <EmptyList
-                        icon={<MaterialIcons name="inventory" size={48} color={theme.textSecondary} />}
-                        message="No pending orders"
-                        submessage="Share your products to get more sales!"
+                renderItem={renderProductCard}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={isRefetching}
+                        onRefresh={() => { void refetch(); }}
+                        tintColor={theme.primary}
                     />
                 }
+                ListEmptyComponent={
+                    isLoading
+                        ? <View style={styles.loadingPlaceholder} />
+                        : (
+                            <EmptyList
+                                icon={<MaterialIcons name="inventory" size={48} color={theme.textSecondary} />}
+                                message="No order activity yet"
+                                submessage="New orders for your products will appear here."
+                            />
+                        )
+                }
             />
+
+            <Modal
+                visible={selectedProduct !== null}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setSelectedProductKey(null)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View
+                        style={[
+                            styles.modalCard,
+                            {
+                                backgroundColor: theme.cardBackground,
+                                paddingBottom: Math.max(12, insets.bottom + 8),
+                            },
+                        ]}
+                    >
+                        <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+                            <Text style={[styles.modalTitle, { color: theme.textPrimary }]} numberOfLines={2}>
+                                {selectedProduct?.productName ?? 'Order Variants'}
+                            </Text>
+                            <RipplePressable onPress={() => setSelectedProductKey(null)}>
+                                <MaterialIcons name="close" size={24} color={theme.textPrimary} />
+                            </RipplePressable>
+                        </View>
+
+                        <FlatList
+                            data={selectedVariants}
+                            keyExtractor={(item) => `${item.variantId ?? item.variantName}`}
+                            contentContainerStyle={styles.variantListContent}
+                            renderItem={({ item }) => (
+                                <View style={[styles.variantRow, { borderBottomColor: theme.border }]}>
+                                    <View style={styles.variantInfoColumn}>
+                                        <Text style={[styles.variantTitle, { color: theme.textPrimary }]} numberOfLines={2}>
+                                            {item.variantName}
+                                        </Text>
+                                        <Text style={[styles.variantMetaText, { color: theme.textSecondary }]}>Quantity: {item.quantity}</Text>
+                                        <Text style={[styles.variantMetaText, { color: theme.textSecondary }]}>To Ship: {item.toShipOrderCount}</Text>
+                                        <Text style={[styles.variantMetaText, { color: theme.textSecondary }]}>Delivering: {item.deliveringOrderCount}</Text>
+                                        <Text style={[styles.variantMetaText, { color: theme.textSecondary }]}>Received: {item.receivedOrderCount}</Text>
+                                    </View>
+
+                                    <View style={styles.variantAmountColumn}>
+                                        <Text style={[styles.variantMetaText, { color: theme.textSecondary }]}>Price: {formatPrice(item.unitPrice)}</Text>
+                                        <Text style={[styles.variantTotalText, { color: theme.primary }]}>Total: {formatPrice(item.totalPrice)}</Text>
+                                        {(item.deliveringOrderCount > 0 || item.receivedOrderCount > 0) && (
+                                            <View style={[styles.shippedIndicator, { backgroundColor: theme.success }]}>
+                                                <Text style={[styles.shippedIndicatorText, { color: theme.white }]}>Shipped</Text>
+                                            </View>
+                                        )}
+                                        {item.toShipOrderCount > 0 && (
+                                            <RipplePressable
+                                                style={[
+                                                    styles.sentToCourierButton,
+                                                    {
+                                                        backgroundColor: theme.primary,
+                                                        opacity: markVariantAsDeliveringMutation.isPending ? 0.7 : 1,
+                                                    },
+                                                ]}
+                                                onPress={() => handleMarkSentToCourier(item.variantId, item.variantName)}
+                                                disabled={markVariantAsDeliveringMutation.isPending}
+                                            >
+                                                <Text style={styles.sentToCourierButtonText}>Send to Courier</Text>
+                                            </RipplePressable>
+                                        )}
+                                    </View>
+                                </View>
+                            )}
+                        />
+                    </View>
+                </View>
+            </Modal>
         </SafeScreen>
     );
 }
@@ -88,31 +264,147 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: 'bold',
     },
+    headerSubtext: {
+        fontSize: 12,
+        marginTop: 4,
+    },
     listContent: {
         paddingHorizontal: 16,
         paddingTop: 16,
         paddingBottom: 24,
-        gap: 16,
     },
-    groupContainer: {
+    productCard: {
         borderWidth: 1,
-        borderRadius: 8,
-        overflow: 'hidden',
-    },
-    groupHeader: {
+        borderRadius: 12,
+        marginBottom: 12,
+        padding: 12,
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 12,
-        borderBottomWidth: 1,
-        gap: 8,
-        backgroundColor: 'rgba(0,0,0,0.02)',
+        gap: 12,
     },
-    groupBuyerName: {
-        fontSize: 16,
+    productImage: {
+        width: 84,
+        height: 84,
+        borderRadius: 10,
+    },
+    productImageFallback: {
+        width: 84,
+        height: 84,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    productBody: {
+        flex: 1,
+        justifyContent: 'center',
+        gap: 6,
+    },
+    productTitle: {
+        fontSize: 15,
         fontWeight: 'bold',
     },
-    groupOrders: {
-        padding: 12,
-        gap: 12,
-    }
+    productStatusChip: {
+        alignSelf: 'flex-start',
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+    },
+    productStatusChipText: {
+        fontSize: 10,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+    },
+    productMetaRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    productMetaText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    productAmountText: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    loadingPlaceholder: {
+        height: 12,
+    },
+    modalOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        backgroundColor: 'rgba(0,0,0,0.4)',
+    },
+    modalCard: {
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        maxHeight: '72%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderBottomWidth: 1,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        gap: 10,
+    },
+    modalTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        flex: 1,
+    },
+    variantListContent: {
+        paddingHorizontal: 16,
+        paddingBottom: 16,
+    },
+    variantRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderBottomWidth: 1,
+        paddingVertical: 12,
+    },
+    variantInfoColumn: {
+        flex: 1,
+        paddingRight: 12,
+        gap: 4,
+    },
+    variantAmountColumn: {
+        alignItems: 'flex-end',
+        gap: 4,
+    },
+    variantTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    variantMetaText: {
+        fontSize: 12,
+    },
+    variantTotalText: {
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    sentToCourierButton: {
+        marginTop: 6,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+    },
+    sentToCourierButtonText: {
+        color: '#FFFFFF',
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    shippedIndicator: {
+        marginTop: 6,
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+    },
+    shippedIndicatorText: {
+        fontSize: 10,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+    },
 });

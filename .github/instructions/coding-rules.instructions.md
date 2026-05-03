@@ -3,8 +3,6 @@ description: Describe when these instructions should be loaded by the agent base
 # applyTo: 'Describe when these instructions should be loaded by the agent based on task context' # when provided, instructions will automatically be added to the request context when the pattern matches an attached file
 ---
 
-<!-- Tip: Use /create-instructions in chat to generate content with agent assistance -->
-
 ---
 trigger: always_on
 ---
@@ -34,19 +32,21 @@ Your code must be lightweight, frictionless, strictly typed, highly stable, and 
 ## III. React Architecture & Component Modularity
 
 * **Single Component Principle:** Strictly maintain exactly one React component per `.tsx` file. **NEVER** define custom helper or nested components within the same file as the component that uses them.
+* **Minimize `useEffect`:** Minimize the use of the `useEffect` hook. Do not use it for data transformations or derived state. Only use it when synchronization with external systems is strictly required.
+* **Strict `useEffect` Dependencies:** If `useEffect` must be used, you **MUST** provide a dependency array. If the effect should only run on the initial mount, always add an empty dependency array (`[]`) to prevent the effect from firing after every single render cycle and causing performance loops.
 * **Modular Reusability:** When creating a new component, you **MUST** design it to be modular so that it can be easily reused across other screens and contexts.
 * **Single Source of Truth (SSOT):** Always maintain a single source of truth for components, data values, and properties. Before implementing new logic or UI, **ALWAYS** check the project for existing code to prevent duplication.
 * **No Redundant Creation:** **NEVER** hard code any values or create a new component without first looking for a single source of truth (e.g., a shared utility, a global component, or a centralized config).
-* **Component Placement:**
-    * **Global:** Reusable, app-wide UI components belong in `components/ui/`.
-    * **Page-Specific:** Nested or supporting components exclusive to a specific route **MUST** be placed in `app/components/[page-name]-components.tsx` (e.g., `app/components/home-components.tsx`).
+* **Global Component Placement:** Reusable, app-wide UI components belong in `components/ui/`.
+* **Page-Specific Component Placement:** Nested or supporting components exclusive to a specific route **MUST** be placed in `app/components/[page-name]-components.tsx` (e.g., `app/components/home-components.tsx`).
 * **Component Splitting Trigger:** If a component grows too large, manages distinct sections of UI, or contains complex nested maps, you **MUST** extract the sub-sections into their own components following the placement rules above.
 * **Immutability Preferred:** Treat props and state as strictly immutable. Use `readonly` modifiers inside your interfaces where applicable.
 * **Predictable Naming:** Use `PascalCase` for files containing React components and their interfaces. Use `camelCase` for all standard functions, hooks, and variables.
 
 ## IV. "Antigravity" Frictionless Protocols
 
-* **Simplicity & Conciseness (KISS):** Do not over-engineer solutions. Keep it simple. Do not write excessively long code blocks; write less code but ensure the quality, performance, and readability are exceptionally high.
+* **Simplicity & Conciseness (KISS):** Write shorter and simpler code. Do not write excessively long code blocks or overly complex, "clever" code. Keep it simple; write less code but ensure the quality, performance, and readability are exceptionally high.
+* **No Recursion:** Avoid recursion. **NEVER** implement recursive code. Always utilize standard iterative approaches (e.g., `for` or `while` loops) to maintain predictability and prevent stack overflow risks.
 * **Graceful Fallbacks:** If rendering data from props or an API, **ALWAYS** account for `null`, `undefined`, or empty arrays to prevent the UI from crashing.
 * **No Magic Numbers or Strings:** Extract all hardcoded numbers, timeout values, and specific string literals into explicitly typed, uppercase `const` variables at the top of the file or in a shared config.
 * **Empty Lists:** If a list/FlatList is empty, it **MUST** render a dedicated custom "Empty State" component. This component must contain an icon and a catchy, context-specific text string indicating the list is empty.
@@ -57,20 +57,18 @@ Your code must be lightweight, frictionless, strictly typed, highly stable, and 
 
 * **Free Tier Optimization:** Supabase is on the free tier. You **MUST** write highly optimized queries, request only necessary columns (e.g., `.select('col1, col2')`), and minimize database round-trips.
 * **Typed Supabase Client:** Whenever making requests via the Supabase client, you **MUST** explicitly pass the auto-generated database types to ensure end-to-end type safety.
-* **Primary Keys vs. Public UIDs:**
-    * Every table **MUST** have a private primary key defined as `id int8 generated always as identity`. **NEVER** expose this `id` to the frontend.
-    * Every table **MUST** have a public identifier column named `uid` defined as `uuid default gen_random_uuid()`. 
-    * All frontend API requests and database foreign key client references **MUST** use the `uid`.
+* **Private Primary Keys:** Every table **MUST** have a private primary key defined as `id int8 generated always as identity`. **NEVER** expose this `id` to the frontend.
+* **Public UIDs:** Every table **MUST** have a public identifier column named `uid` defined as `uuid default gen_random_uuid()`. All frontend API requests and database foreign key client references **MUST** use this `uid`.
 * **Strict RLS:** Row-Level Security (RLS) **MUST** be enabled for EVERY table. Always write explicit policies for `SELECT`, `INSERT`, `UPDATE`, and `DELETE`.
 * **Foreign Key Cascades:** When referencing a row in the database via a foreign key, it **MUST** be set up to cascade on updates (`ON UPDATE CASCADE`).
 
 ## VI. Local-First Migration Workflow
 
 When modifying the database schema or creating new tables, you **MUST** strictly adhere to this local-first workflow:
-1.  **NEVER** use tools to send DDL/SQL directly to the remote Supabase project.
-2.  Generate migrations locally using: `supabase migration new <descriptive_name>`.
-3.  Write the required PostgreSQL statements (including RLS policies and triggers) into the newly generated `.sql` file inside `supabase/migrations/`.
-4.  Stop your execution. Instruct the user to review the `.sql` code and manually run `supabase db push` in their terminal to apply the changes.
+1. **NEVER** use tools to send DDL/SQL directly to the remote Supabase project.
+2. Generate migrations locally using: `supabase migration new <descriptive_name>`.
+3. Write the required PostgreSQL statements (including RLS policies and triggers) into the newly generated `.sql` file inside `supabase/migrations/`.
+4. Stop your execution. Instruct the user to review the `.sql` code and manually run `supabase db push` in their terminal to apply the changes.
 
 ## VII. Security & Theming
 

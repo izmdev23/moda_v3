@@ -15,19 +15,23 @@ AppState.addEventListener('change', (status) => {
  * Singleton QueryClient shared across the app.
  *
  * Stale-time rationale:
- *  - Default 2 min: products, reviews, shops (read-heavy, tolerate slight staleness)
+ *  - Default 5 min: products, reviews, shops (read-heavy, tolerate slight staleness)
  *  - Overridden per-query for cart (30 s) and user identity (Infinity)
  *
- * gcTime 10 min: keep inactive cache resident in memory for fast back-navigation.
+ * gcTime 30 min: keep inactive cache resident in memory for near-instant back-navigation.
  */
 export const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
-            staleTime: 2 * 60 * 1000,  // 2 minutes
-            gcTime: 10 * 60 * 1000,    // 10 minutes
-            retry: 2,
-            refetchOnWindowFocus: true,
+            staleTime: 5 * 60 * 1000,
+            gcTime: 30 * 60 * 1000,
+            retry: 1,
+            refetchOnWindowFocus: false,
+            refetchOnMount: false,
             refetchOnReconnect: true,
+        },
+        mutations: {
+            retry: 1,
         },
     },
 });

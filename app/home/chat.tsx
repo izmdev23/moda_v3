@@ -1,12 +1,31 @@
+import { AppAlert } from '@/utils/app-alert';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { ChatThreadItem, ChatThreadList } from '../../components/chat-components';
 import { EmptyList } from '../../components/ui/empty-list';
-import { LoadingIndicator } from '../../components/ui/loading-indicator';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { SkeletonLoader } from '../../components/ui/skeleton-loader';
 import { useTheme } from '../../components/ui/theme-provider';
 import { supabase } from '../../supabase/supabaseClient';
+
+const CHAT_SKELETON_ROW_COUNT = 6;
+
+function ChatThreadsSkeleton(): React.JSX.Element {
+    return (
+        <View style={styles.skeletonWrap}>
+            {Array.from({ length: CHAT_SKELETON_ROW_COUNT }).map((_, index) => (
+                <View key={`chat-skeleton-${index}`} style={styles.skeletonRow}>
+                    <SkeletonLoader width={50} height={50} borderRadius={25} />
+                    <View style={styles.skeletonBody}>
+                        <SkeletonLoader width="55%" height={14} style={styles.skeletonLineGap} />
+                        <SkeletonLoader width="80%" height={12} />
+                    </View>
+                </View>
+            ))}
+        </View>
+    );
+}
 
 /** ChatScreen — displays all chat threads for the logged-in user. */
 export default function ChatScreen(): React.JSX.Element {
@@ -48,7 +67,7 @@ export default function ChatScreen(): React.JSX.Element {
                 setThreads(mockThreads);
             } catch (error) {
                 console.error('Failed to load chat threads', error);
-                Alert.alert('Error', 'Failed to load chat threads.');
+                AppAlert.alert('Error', 'Failed to load chat threads.');
             } finally {
                 setLoading(false);
             }
@@ -61,16 +80,6 @@ export default function ChatScreen(): React.JSX.Element {
         router.push(`/home/chat-thread?thread_id=${uid}` as never);
     };
 
-    if (loading) {
-        return (
-            <SafeScreen>
-                <View style={[styles.center, { backgroundColor: theme.background }]}>
-                    <LoadingIndicator message="Loading chats..." />
-                </View>
-            </SafeScreen>
-        );
-    }
-
     return (
         <SafeScreen>
             <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
@@ -78,21 +87,25 @@ export default function ChatScreen(): React.JSX.Element {
             </View>
 
             <View style={[styles.container, { backgroundColor: theme.background }]}>
-                <ChatThreadList
-                    items={threads}
-                    onThreadPress={handleThreadPress}
-                    ListEmptyComponent={
-                        <EmptyList
-                            icon={<Text style={styles.emptyIcon}>💬</Text>}
-                            message="No messages yet"
-                            submessage="Start a conversation with a seller to see it here."
-                            actionButton={{
-                                label: "Browse Products",
-                                onPress: () => router.push('/home/catalog' as never)
-                            }}
-                        />
-                    }
-                />
+                {loading ? (
+                    <ChatThreadsSkeleton />
+                ) : (
+                    <ChatThreadList
+                        items={threads}
+                        onThreadPress={handleThreadPress}
+                        ListEmptyComponent={
+                            <EmptyList
+                                icon={<Text style={styles.emptyIcon}>💬</Text>}
+                                message="No messages yet"
+                                submessage="Start a conversation with a seller to see it here."
+                                actionButton={{
+                                    label: 'Browse Products',
+                                    onPress: () => router.push('/home/catalog' as never),
+                                }}
+                            />
+                        }
+                    />
+                )}
             </View>
         </SafeScreen>
     );
@@ -116,6 +129,22 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    skeletonWrap: {
+        paddingTop: 8,
+    },
+    skeletonRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
+    skeletonBody: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    skeletonLineGap: {
+        marginBottom: 8,
     },
     emptyIcon: {
         fontSize: 40,

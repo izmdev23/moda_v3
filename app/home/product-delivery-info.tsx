@@ -1,24 +1,233 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { DeliveryTimer, OrderStatus, OrderStatusBadge } from '../../components/my-orders-components';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { SkeletonLoader } from '../../components/ui/skeleton-loader';
 import { useTheme } from '../../components/ui/theme-provider';
+import { supabase } from '../../supabase/supabaseClient';
 
-export default function ProductDeliveryInfoScreen() {
+interface OrderItemLookupRow {
+    readonly order_id: number;
+    readonly shop_id: number | null;
+    readonly product_name: string;
+    readonly unit_price: number;
+}
+
+interface OrderLookupRow {
+    readonly status: string;
+    readonly delivery_deadline: string | null;
+    readonly address_id: number;
+}
+
+interface ShopLookupRow {
+    readonly country: string;
+    readonly province: string;
+    readonly city: string;
+    readonly address_detail: string;
+}
+
+interface DeliveryAddressLookupRow {
+    readonly country: string;
+    readonly province: string;
+    readonly city: string;
+    readonly barangay: string;
+    readonly address_detail: string;
+}
+
+interface ProductDeliveryDetails {
+    readonly title: string;
+    readonly price: number;
+    readonly origin: string;
+    readonly destination: string;
+    readonly status: OrderStatus;
+    readonly deadline?: Date;
+}
+
+const UNAVAILABLE_LOCATION_TEXT = 'Unavailable location';
+const NO_SAVED_LOCATION_TEXT = 'No saved location';
+const TRACKING_NUMBER_FALLBACK = 'JT123456789PH';
+
+function normalizeOrderStatus(rawStatus: string): OrderStatus {
+    const normalizedStatus = rawStatus.trim().toLowerCase();
+
+    if (normalizedStatus === 'shipped') return 'shipped';
+    if (normalizedStatus === 'delivered') return 'delivered';
+    if (normalizedStatus === 'cancelled' || normalizedStatus === 'canceled') return 'cancelled';
+
+    // Buyer display rule: keep confirmed under pending until seller sends to courier.
+    return 'pending';
+}
+
+function formatAddress(parts: readonly string[]): string {
+    const resolvedParts = parts
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0);
+
+    if (resolvedParts.length === 0) {
+        return NO_SAVED_LOCATION_TEXT;
+    }
+
+    return resolvedParts.join(', ');
+}
+
+async function fetchProductDeliveryDetails(orderItemUid: string): Promise<ProductDeliveryDetails | null> {
+    const { data: orderItemData, error: orderItemError } = await supabase
+        .from('order_items')
+        .select('order_id, shop_id, product_name, unit_price')
+        .eq('uid', orderItemUid)
+        .maybeSingle();
+
+    if (orderItemError !== null) {
+        throw new Error(orderItemError.message);
+    }
+
+    if (orderItemData === null) {
+        return null;
+    }
+
+    const orderItem = orderItemData as OrderItemLookupRow;
+
+    const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .select('status, delivery_deadline, address_id')
+        .eq('id', orderItem.order_id)
+        .maybeSingle();
+
+    if (orderError !== null) {
+        throw new Error(orderError.message);
+    }
+
+    if (orderData === null) {
+        return null;
+    }
+
+    const order = orderData as OrderLookupRow;
+
+    const shopPromise = orderItem.shop_id === null
+        ? Promise.resolve({ data: null as ShopLookupRow | null, error: null })
+        : supabase
+            .from('shops')
+            .select('country, province, city, address_detail')
+            .eq('id', orderItem.shop_id)
+            .is('deleted_at', null)
+            .maybeSingle();
+
+    const addressPromise = supabase
+        .from('addresses')
+        .select('country, province, city, barangay, address_detail')
+        .eq('id', order.address_id)
+        .maybeSingle();
+
+    const [shopResult, addressResult] = await Promise.all([shopPromise, addressPromise]);
+
+    if (shopResult.error !== null) {
+        throw new Error(shopResult.error.message);
+    }
+
+    if (addressResult.error !== null) {
+        throw new Error(addressResult.error.message);
+    }
+
+    const shopLocation = shopResult.data as ShopLookupRow | null;
+    const deliveryAddress = addressResult.data as DeliveryAddressLookupRow | null;
+
+    const originAddress = shopLocation === null
+        ? NO_SAVED_LOCATION_TEXT
+        : formatAddress([
+            shopLocation.address_detail,
+            shopLocation.city,
+            shopLocation.province,
+            shopLocation.country,
+        ]);
+
+    const destinationAddress = deliveryAddress === null
+        ? NO_SAVED_LOCATION_TEXT
+        : formatAddress([
+            deliveryAddress.address_detail,
+            deliveryAddress.barangay,
+            deliveryAddress.city,
+            deliveryAddress.province,
+            deliveryAddress.country,
+        ]);
+
+    return {
+        title: orderItem.product_name,
+        price: orderItem.unit_price,
+        origin: originAddress,
+        destination: destinationAddress,
+        status: normalizeOrderStatus(order.status),
+        deadline: order.delivery_deadline === null ? undefined : new Date(order.delivery_deadline),
+    };
+}
+
+export default function ProductDeliveryInfoScreen(): React.JSX.Element {
     const { theme } = useTheme();
     const { orderId } = useLocalSearchParams();
 
-    // Stub data
-    const orderDetails = {
-        title: 'Vintage Checkered Shirt',
-        price: 450.00,
-        origin: 'Retro Revival, Quezon City, Metro Manila',
-        destination: 'Jose Rizal, 123 Mapagpala St, Barangay San Antonio, Pasig City, Metro Manila',
-        status: 'shipped' as OrderStatus,
-        deadline: new Date(Date.now() + 1000 * 60 * 60 * 48), // 48h from now
+    const normalizedOrderItemUid = typeof orderId === 'string' ? orderId : '';
+
+    const { data: orderDetails, isLoading, isError } = useQuery<ProductDeliveryDetails | null>({
+        queryKey: ['product-delivery-info', normalizedOrderItemUid],
+        queryFn: () => fetchProductDeliveryDetails(normalizedOrderItemUid),
+        enabled: normalizedOrderItemUid.length > 0,
+    });
+
+    if (isLoading) {
+        return (
+            <SafeScreen style={styles.container}>
+                <ScrollView contentContainerStyle={styles.scrollContent}>
+                    <View style={[styles.section, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}> 
+                        <SkeletonLoader width="70%" height={24} style={styles.skeletonGap} />
+                        <SkeletonLoader width="35%" height={30} style={styles.skeletonGap} />
+                        <View style={styles.statusRow}>
+                            <SkeletonLoader width={88} height={26} borderRadius={999} />
+                            <SkeletonLoader width={120} height={18} />
+                        </View>
+                    </View>
+
+                    <View style={[styles.section, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}> 
+                        <SkeletonLoader width="42%" height={20} style={styles.skeletonGap} />
+                        <View style={styles.routeItem}>
+                            <SkeletonLoader width={24} height={24} borderRadius={12} />
+                            <View style={styles.routeDetails}>
+                                <SkeletonLoader width="40%" height={14} style={styles.skeletonGapSmall} />
+                                <SkeletonLoader width="92%" height={14} />
+                            </View>
+                        </View>
+
+                        <View style={[styles.routeLine, { borderLeftColor: theme.border }]} />
+
+                        <View style={styles.routeItem}>
+                            <SkeletonLoader width={24} height={24} borderRadius={12} />
+                            <View style={styles.routeDetails}>
+                                <SkeletonLoader width="44%" height={14} style={styles.skeletonGapSmall} />
+                                <SkeletonLoader width="88%" height={14} />
+                            </View>
+                        </View>
+                    </View>
+
+                    <View style={[styles.section, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}> 
+                        <SkeletonLoader width="52%" height={20} style={styles.skeletonGap} />
+                        <SkeletonLoader width="58%" height={14} style={styles.skeletonGapSmall} />
+                        <SkeletonLoader width="66%" height={14} />
+                    </View>
+                </ScrollView>
+            </SafeScreen>
+        );
+    }
+
+    const fallbackDetails: ProductDeliveryDetails = {
+        title: 'Order Item',
+        price: 0,
+        origin: isError ? UNAVAILABLE_LOCATION_TEXT : NO_SAVED_LOCATION_TEXT,
+        destination: isError ? UNAVAILABLE_LOCATION_TEXT : NO_SAVED_LOCATION_TEXT,
+        status: 'pending',
     };
+
+    const resolvedDetails = orderDetails ?? fallbackDetails;
 
     return (
         <SafeScreen style={styles.container}>
@@ -26,11 +235,11 @@ export default function ProductDeliveryInfoScreen() {
 
                 {/* Header */}
                 <View style={[styles.section, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
-                    <Text style={[styles.title, { color: theme.textPrimary }]}>{orderDetails.title}</Text>
-                    <Text style={[styles.price, { color: theme.primary }]}>₱{orderDetails.price.toFixed(2)}</Text>
+                    <Text style={[styles.title, { color: theme.textPrimary }]}>{resolvedDetails.title}</Text>
+                    <Text style={[styles.price, { color: theme.primary }]}>₱{resolvedDetails.price.toFixed(2)}</Text>
                     <View style={styles.statusRow}>
-                        <OrderStatusBadge status={orderDetails.status} />
-                        <DeliveryTimer status={orderDetails.status} deadline={orderDetails.deadline} />
+                        <OrderStatusBadge status={resolvedDetails.status} />
+                        <DeliveryTimer status={resolvedDetails.status} deadline={resolvedDetails.deadline} />
                     </View>
                 </View>
 
@@ -42,7 +251,7 @@ export default function ProductDeliveryInfoScreen() {
                         <MaterialIcons name="store" size={24} color={theme.textSecondary} />
                         <View style={styles.routeDetails}>
                             <Text style={[styles.routeLabel, { color: theme.textPrimary }]}>Origin (Seller)</Text>
-                            <Text style={[styles.routeAddress, { color: theme.textSecondary }]}>{orderDetails.origin}</Text>
+                            <Text style={[styles.routeAddress, { color: theme.textSecondary }]}>{resolvedDetails.origin}</Text>
                         </View>
                     </View>
 
@@ -52,7 +261,7 @@ export default function ProductDeliveryInfoScreen() {
                         <MaterialIcons name="home" size={24} color={theme.primary} />
                         <View style={styles.routeDetails}>
                             <Text style={[styles.routeLabel, { color: theme.primary }]}>Destination (You)</Text>
-                            <Text style={[styles.routeAddress, { color: theme.textSecondary }]}>{orderDetails.destination}</Text>
+                            <Text style={[styles.routeAddress, { color: theme.textSecondary }]}>{resolvedDetails.destination}</Text>
                         </View>
                     </View>
                 </View>
@@ -64,7 +273,7 @@ export default function ProductDeliveryInfoScreen() {
                         Courier: J&T Express
                     </Text>
                     <Text style={[styles.trackingText, { color: theme.textSecondary }]}>
-                        Tracking Number: {orderId || 'JT123456789PH'}
+                        Tracking Number: {orderId || TRACKING_NUMBER_FALLBACK}
                     </Text>
                 </View>
 
@@ -131,5 +340,11 @@ const styles = StyleSheet.create({
     trackingText: {
         fontSize: 14,
         marginBottom: 8,
-    }
+    },
+    skeletonGap: {
+        marginBottom: 12,
+    },
+    skeletonGapSmall: {
+        marginBottom: 8,
+    },
 });

@@ -13,11 +13,55 @@ export interface StoredPaymentMethod {
     readonly is_default: boolean;
 }
 
+interface ParsedCardAccount {
+    readonly paymentMethodId: string | null;
+    readonly last4: string | null;
+}
+
+const CARD_ACCOUNT_SEPARATOR = '|';
+const LAST4_DIGITS_LENGTH = 4;
+const LAST4_REGEX = /^\d{4}$/;
+
 interface AddMethodPayload {
     userId: number;
     type: StoredPaymentType;
     accountNumber: string;
     isFirst: boolean;
+}
+
+export function encodeStoredCardAccountNumber(paymentMethodId: string, last4?: string | null): string {
+    const sanitizedLast4 = (last4 ?? '').replace(/\D/g, '').slice(-LAST4_DIGITS_LENGTH);
+    if (!paymentMethodId.startsWith('pm_')) {
+        return paymentMethodId;
+    }
+    if (sanitizedLast4.length !== LAST4_DIGITS_LENGTH) {
+        return paymentMethodId;
+    }
+    return `${paymentMethodId}${CARD_ACCOUNT_SEPARATOR}${sanitizedLast4}`;
+}
+
+export function parseStoredCardAccountNumber(accountNumber: string): ParsedCardAccount {
+    if (!accountNumber.startsWith('pm_')) {
+        return { paymentMethodId: null, last4: null };
+    }
+
+    const separatorIndex = accountNumber.lastIndexOf(CARD_ACCOUNT_SEPARATOR);
+    if (separatorIndex <= 0) {
+        return { paymentMethodId: accountNumber, last4: null };
+    }
+
+    const paymentMethodId = accountNumber.slice(0, separatorIndex);
+    const last4 = accountNumber.slice(separatorIndex + 1);
+
+    if (!paymentMethodId.startsWith('pm_') || !LAST4_REGEX.test(last4)) {
+        return { paymentMethodId: accountNumber, last4: null };
+    }
+
+    return { paymentMethodId, last4 };
+}
+
+export function getStripePaymentMethodIdFromStoredAccount(accountNumber: string): string | null {
+    return parseStoredCardAccountNumber(accountNumber).paymentMethodId;
 }
 
 // ─── Fetch fn ─────────────────────────────────────────────────────────────────

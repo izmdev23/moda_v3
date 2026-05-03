@@ -1,13 +1,8 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    Dimensions,
-    FlatList,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+    Dimensions, FlatList, RefreshControl, StyleSheet, Text, View
 } from 'react-native';
 import type { Edge } from 'react-native-safe-area-context';
 import { CatalogFilterPanel, CatalogFilterState, CatalogSearchBar, CatalogSortPicker, FeaturedShopsCarousel, RecommendedSection, SortOption, TrendingProductsCarousel } from '../../components/catalog-components';
@@ -16,6 +11,7 @@ import { EmptyList } from '../../components/ui/empty-list';
 import { ProductCard } from '../../components/ui/product-card';
 import { SafeScreen } from '../../components/ui/safe-screen';
 import { SkeletonLoader } from '../../components/ui/skeleton-loader';
+import { useTheme } from '../../components/ui/theme-provider';
 import type { CatalogProductItem, ShopCardItem } from '../../hooks/use-catalog';
 import { useCatalogProducts, useFeaturedShops, useRecommendations, useTrendingProducts } from '../../hooks/use-catalog';
 import { useCurrentUser } from '../../hooks/use-current-user';
@@ -55,6 +51,8 @@ const skeletonStyles = StyleSheet.create({
  * Shows featured shops, trending, recommendations, search/filter/sort, and paginated grid.
  */
 export default function CatalogScreen(): React.JSX.Element {
+    const { theme } = useTheme();
+
     // ── Search / filter / sort state (UI-local, not server state) ─────────
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [isShopSearch, setIsShopSearch] = useState<boolean>(false);
@@ -97,13 +95,13 @@ export default function CatalogScreen(): React.JSX.Element {
     const { data: recommendationsData, isLoading: recommendedLoading } = useRecommendations(userId);
 
     const products: CatalogProductItem[] = productsData?.pages.flatMap((p) => p.items) ?? [];
-    const recommendedProducts = recommendationsData?.products ?? [];
+    const recommendedProducts = useMemo(() => recommendationsData?.products ?? [], [recommendationsData?.products]);
     const hasActivity = recommendationsData?.hasActivity ?? false;
 
     // ── Redirect sellers to seller dashboard ─────────────────────────────
     useEffect(() => {
         if (currentUser?.role === 'seller') {
-            router.replace('/home/seller-dashboard');
+            router.push('/home/seller-dashboard');
         }
     }, [currentUser?.role]);
 
@@ -145,6 +143,7 @@ export default function CatalogScreen(): React.JSX.Element {
             thumbnailUrl={item.thumbnailUrl}
             minPrice={item.minPrice}
             maxPrice={item.maxPrice}
+            totalStock={item.totalStock}
             salePrice={item.salePrice}
             originalPriceForSale={item.originalPriceForSale}
             rating={item.rating}
@@ -160,37 +159,44 @@ export default function CatalogScreen(): React.JSX.Element {
             <TrendingProductsCarousel products={trendingProducts as CatalogProductItem[]} onProductPress={handleProductPress} isLoading={trendingLoading} />
             <RecommendedSection products={recommendedProducts as CatalogProductItem[]} onProductPress={handleProductPress} isLoading={recommendedLoading} hasActivity={hasActivity} />
 
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
             <CatalogSearchBar onSearch={setSearchQuery} onToggleShopSearch={setIsShopSearch} isShopSearch={isShopSearch} />
             <View style={styles.controlsRow}>
-                <TouchableOpacity
-                    style={[styles.controlBtn, hasActiveFilters && styles.controlBtnActive]}
+                <RipplePressable
+                    style={[
+                        styles.controlBtn,
+                        { borderColor: theme.border, backgroundColor: theme.cardBackground },
+                        hasActiveFilters && { borderColor: theme.primary, backgroundColor: `${theme.primary}12` },
+                    ]}
                     onPress={() => setShowFilters(true)}
                 >
-                    <Text style={[styles.controlBtnText, hasActiveFilters && styles.controlBtnTextActive]}>
+                    <Text style={[styles.controlBtnText, { color: hasActiveFilters ? theme.primary : theme.textSecondary }]}>
                         ⚙️ Filter{hasActiveFilters ? ' ●' : ''}
                     </Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.controlBtn} onPress={() => setShowSort(true)}>
-                    <Text style={styles.controlBtnText}>↕️ Sort</Text>
-                </TouchableOpacity>
+                </RipplePressable>
+                <RipplePressable
+                    style={[styles.controlBtn, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}
+                    onPress={() => setShowSort(true)}
+                >
+                    <Text style={[styles.controlBtnText, { color: theme.textSecondary }]}>↕️ Sort</Text>
+                </RipplePressable>
             </View>
-            <Text style={styles.sectionHeading}>All Products</Text>
+            <Text style={[styles.sectionHeading, { color: theme.textPrimary }]}>All Products</Text>
         </View>
     ), [
         featuredShops, shopsLoading, trendingProducts, trendingLoading,
         recommendedProducts, recommendedLoading, hasActivity, handleShopPress,
-        handleProductPress, isShopSearch, hasActiveFilters,
+        handleProductPress, isShopSearch, hasActiveFilters, theme,
     ]);
 
     const ListFooter = useCallback((): React.JSX.Element | null =>
         isFetchingNextPage ? (
             <View style={styles.footerLoading}>
-                <Text style={styles.footerText}>Loading more…</Text>
+                <Text style={[styles.footerText, { color: theme.gray }]}>Loading more…</Text>
             </View>
         ) : null,
-        [isFetchingNextPage]);
+        [isFetchingNextPage, theme]);
 
     const ListEmpty = useCallback((): React.JSX.Element => (
         <EmptyList
@@ -221,8 +227,8 @@ export default function CatalogScreen(): React.JSX.Element {
                 refreshControl={
                     <RefreshControl
                         refreshing={isRefetchingProducts}
-                        onRefresh={handleRefresh}
-                        colors={['#F44336']}
+                        onRefresh={() => { void handleRefresh(); }}
+                        colors={[theme.primary]}
                     />
                 }
                 contentContainerStyle={styles.listContent}
@@ -240,29 +246,24 @@ const styles = StyleSheet.create({
     root: { flex: 1 },
     listContent: { paddingBottom: 0 },
     columnWrapper: { paddingHorizontal: 8 },
-    divider: { height: 4, backgroundColor: '#F0F0F0', marginVertical: 8 },
+    divider: { height: 4, marginVertical: 8 },
     controlsRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginBottom: 8 },
     controlBtn: {
         flex: 1,
         paddingVertical: 10,
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: '#E9ECEF',
-        backgroundColor: '#FFFFFF',
         alignItems: 'center',
     },
-    controlBtnActive: { borderColor: '#F44336', backgroundColor: 'rgba(244,67,54,0.07)' },
-    controlBtnText: { fontSize: 14, fontWeight: '600', color: '#525F7F' },
-    controlBtnTextActive: { color: '#F44336' },
+    controlBtnText: { fontSize: 14, fontWeight: '600' },
     sectionHeading: {
         fontSize: 17,
         fontWeight: '700',
-        color: '#32325D',
         paddingHorizontal: 16,
         paddingTop: 8,
         paddingBottom: 12,
     },
     footerLoading: { paddingVertical: 16, alignItems: 'center' },
-    footerText: { color: '#ADB5BD', fontSize: 13 },
+    footerText: { fontSize: 13 },
     emptyIcon: { fontSize: 40 },
 });

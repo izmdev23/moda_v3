@@ -1,18 +1,7 @@
+import { AppAlert } from '@/utils/app-alert';
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { supabase } from '../supabase/supabaseClient';
 import { BoundaryItem } from '../utils/types';
 import { useTheme } from './ui/theme-provider';
@@ -88,28 +77,28 @@ export const AddressCard: React.FC<AddressCardProps> = ({
 
             <View style={styles.cardActions}>
                 {!address.is_default && (
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[styles.actionBtn, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}
                         onPress={() => onSetDefault(address.uid)}
                         id={`set-default-${address.uid}`}
                     >
                         <Text style={[styles.actionBtnText, { color: theme.textPrimary }]}>Set Default</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 )}
-                <TouchableOpacity
+                <RipplePressable
                     style={[styles.actionBtn, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}
                     onPress={() => onEdit(address)}
                     id={`edit-address-${address.uid}`}
                 >
                     <Text style={[styles.actionBtnText, { color: theme.textPrimary }]}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                </RipplePressable>
+                <RipplePressable
                     style={[styles.actionBtn, { borderColor: theme.error, backgroundColor: `${theme.error}12` }]}
                     onPress={() => onDelete(address.uid)}
                     id={`delete-address-${address.uid}`}
                 >
                     <Text style={[styles.deleteBtnText, { color: theme.error }]}>Delete</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             </View>
         </View>
     );
@@ -154,7 +143,7 @@ export const CascadingDropdown: React.FC<CascadingDropdownProps> = ({
     return (
         <View style={styles.fieldGroup}>
             <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{label}</Text>
-            <TouchableOpacity
+            <RipplePressable
                 style={[styles.dropdownTrigger, { borderColor: theme.border, backgroundColor: theme.cardBackground }, disabled && { backgroundColor: theme.background, borderColor: theme.border, opacity: 0.6 }]}
                 onPress={() => { if (!disabled) setOpen(true); }}
                 activeOpacity={disabled ? 1 : 0.7}
@@ -170,22 +159,22 @@ export const CascadingDropdown: React.FC<CascadingDropdownProps> = ({
                     {value.length > 0 ? value : placeholder}
                 </Text>
                 <Text style={[styles.dropdownChevron, { color: theme.gray }]}>{disabled ? '—' : '▾'}</Text>
-            </TouchableOpacity>
+            </RipplePressable>
 
             <Modal visible={open} transparent animationType="slide">
                 <View style={styles.sheetOverlay}>
                     <View style={[styles.sheet, { backgroundColor: theme.cardBackground }]}>
                         <View style={[styles.sheetHeader, { borderBottomColor: theme.border }]}>
                             <Text style={[styles.sheetTitle, { color: theme.textPrimary }]}>{label}</Text>
-                            <TouchableOpacity onPress={() => setOpen(false)} id={`close-dropdown-${label}`}>
+                            <RipplePressable onPress={() => setOpen(false)} id={`close-dropdown-${label}`}>
                                 <Text style={[styles.sheetClose, { color: theme.gray }]}>✕</Text>
-                            </TouchableOpacity>
+                            </RipplePressable>
                         </View>
                         <FlatList
                             data={items}
                             keyExtractor={(item) => String(item.id)}
                             renderItem={({ item }) => (
-                                <TouchableOpacity
+                                <RipplePressable
                                     style={[
                                         styles.sheetItem,
                                         { borderBottomColor: theme.border },
@@ -206,7 +195,7 @@ export const CascadingDropdown: React.FC<CascadingDropdownProps> = ({
                                     {item.name === value && (
                                         <Text style={[styles.sheetItemCheck, { color: theme.primary }]}>✓</Text>
                                     )}
-                                </TouchableOpacity>
+                                </RipplePressable>
                             )}
                             ListEmptyComponent={
                                 <View style={styles.emptyDropdown}>
@@ -432,15 +421,15 @@ export const AddressForm: React.FC<AddressFormProps> = ({
 
     const handleSave = useCallback(async (): Promise<void> => {
         if (country.length === 0 || province.length === 0 || city.length === 0 || barangay.length === 0) {
-            Alert.alert('Missing Fields', 'Please fill in all location fields.');
+            AppAlert.alert('Missing Fields', 'Please fill in all location fields.');
             return;
         }
         if (addressDetail.trim().length === 0) {
-            Alert.alert('Missing Fields', 'Please enter your block/lot/street details.');
+            AppAlert.alert('Missing Fields', 'Please enter your block/lot/street details.');
             return;
         }
         if (!PHONE_REGEX.test(phoneNumber.trim())) {
-            Alert.alert('Invalid Phone', 'Please enter a valid phone number (7–20 characters).');
+            AppAlert.alert('Invalid Phone', 'Please enter a valid phone number (7–20 characters).');
             return;
         }
 
@@ -512,7 +501,7 @@ export const AddressForm: React.FC<AddressFormProps> = ({
                 }
             }
         } catch {
-            Alert.alert('Error', 'Failed to save address. Please try again.');
+            AppAlert.alert('Error', 'Failed to save address. Please try again.');
         } finally {
             setSaving(false);
         }
@@ -533,20 +522,20 @@ export const AddressForm: React.FC<AddressFormProps> = ({
                     <Text style={[styles.formTitle, { color: theme.textPrimary }]}>
                         {initialData !== null && initialData !== undefined ? 'Edit Address' : 'Add New Address'}
                     </Text>
-                    <TouchableOpacity onPress={onCancel} id="close-address-form">
+                    <RipplePressable onPress={onCancel} id="close-address-form">
                         <Text style={[styles.cancelText, { color: theme.gray }]}>✕</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 </View>
 
                 {/* Copy from shop */}
                 {shopAddress !== null && shopAddress !== undefined && initialData === null && (
-                    <TouchableOpacity
+                    <RipplePressable
                         style={[styles.copyShopBtn, { backgroundColor: `${theme.primary}14` }]}
                         onPress={() => { void handleCopyFromShop(); }}
                         id="copy-from-shop"
                     >
                         <Text style={[styles.copyShopText, { color: theme.primary }]}>📋 Copy from shop address</Text>
-                    </TouchableOpacity>
+                    </RipplePressable>
                 )}
 
                 {loadingBoundary && (
@@ -630,10 +619,10 @@ export const AddressForm: React.FC<AddressFormProps> = ({
 
                 {/* Actions */}
                 <View style={styles.formActions}>
-                    <TouchableOpacity style={[styles.cancelFormBtn, { backgroundColor: theme.border }]} onPress={onCancel} id="cancel-form-btn">
+                    <RipplePressable style={[styles.cancelFormBtn, { backgroundColor: theme.border }]} onPress={onCancel} id="cancel-form-btn">
                         <Text style={[styles.cancelFormText, { color: theme.textSecondary }]}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
+                    </RipplePressable>
+                    <RipplePressable
                         style={[styles.saveBtn, { backgroundColor: theme.primary }, saving && styles.saveBtnDisabled]}
                         onPress={() => { void handleSave(); }}
                         disabled={saving}
@@ -644,7 +633,7 @@ export const AddressForm: React.FC<AddressFormProps> = ({
                         ) : (
                             <Text style={[styles.saveBtnText, { color: theme.white }]}>Save Address</Text>
                         )}
-                    </TouchableOpacity>
+                    </RipplePressable>
                 </View>
             </ScrollView>
         </KeyboardAvoidingView>

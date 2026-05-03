@@ -1,12 +1,9 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ScrollView, StyleSheet, Text, View
 } from 'react-native';
 // Using Alert for simple feedback — Toast will be added in Phase 20
 import { AddToCartSection, ChatWithSellerButton, InlineRatingStars, ProductImageCarousel, ReviewItem, ReviewsList, SaleCountdownTimer, ShopHeader, VariantSelector } from '../../components/product-details-components';
@@ -16,12 +13,16 @@ import { useTheme } from '../../components/ui/theme-provider';
 import { useCurrentUser } from '../../hooks/use-current-user';
 import { useAddToCart, useProduct, useProductImages, useProductVariants, useRatingCount, useReviews, useShopForProduct, useUpsertRating, useUserRating, type VariantItem } from '../../hooks/use-product-details';
 import { supabase } from '../../supabase/supabaseClient';
-import { formatPrice } from '../../utils/utils';
+import { formatPrice, getInventoryStockLabel, getInventoryStockState } from '../../utils/utils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const REVIEWS_PAGE_SIZE = 5;
-const VTON_ENABLED_CATEGORIES: readonly string[] = ['tops', 'bottoms', 'full_body'];
+const VTON_ENABLED_CATEGORIES: readonly string[] = ['headwear', 'upperwear', 'lowerwear', 'footwear'];
+const EMPTY_IMAGE_URLS: readonly string[] = [];
+const EMPTY_VARIANTS: readonly VariantItem[] = [];
+const EMPTY_REVIEWS: readonly ReviewItem[] = [];
+const INVALID_URL_LITERALS: readonly string[] = ['null', 'undefined', 'n/a', 'na'];
 
 function isVtonCategoryEnabled(category: string): boolean {
     return VTON_ENABLED_CATEGORIES.includes(category);
@@ -32,6 +33,161 @@ function formatCategoryLabel(category: string): string {
         .split('_')
         .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
         .join(' ');
+}
+
+function decodeHtmlEntities(content: string): string {
+    return content
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'");
+}
+
+function parseHtmlDescription(content: string): string {
+    const withLineBreaks = content
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<li>/gi, '• ');
+
+    const withoutTags = withLineBreaks.replace(/<[^>]*>/g, ' ');
+    const decoded = decodeHtmlEntities(withoutTags);
+
+    return decoded
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n\s+/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+function normalizeNonEmptyUrl(url: string | null | undefined): string | null {
+    if (typeof url !== 'string') {
+        return null;
+    }
+
+    const trimmedUrl = url.trim();
+    if (trimmedUrl.length === 0) {
+        return null;
+    }
+
+    const normalizedLowercaseUrl = trimmedUrl.toLowerCase();
+    if (INVALID_URL_LITERALS.includes(normalizedLowercaseUrl)) {
+        return null;
+    }
+
+    if (!/^https?:\/\//i.test(trimmedUrl)) {
+        return null;
+    }
+
+    return trimmedUrl;
+}
+
+function resolveVariantPreviewImageUrl(variant: VariantItem | null | undefined): string | null {
+    const extractedImageUrl = normalizeNonEmptyUrl(variant?.extractedOutfitUrl);
+    if (extractedImageUrl !== null) {
+        return extractedImageUrl;
+    }
+
+    return normalizeNonEmptyUrl(variant?.imageUrl);
+}
+
+function resolveProductThumbnailUrl(
+    fallbackThumbnailUrl: string,
+    variants: readonly VariantItem[],
+): string {
+    const normalizedFallbackThumbnailUrl = normalizeNonEmptyUrl(fallbackThumbnailUrl);
+    if (normalizedFallbackThumbnailUrl !== null) {
+        return normalizedFallbackThumbnailUrl;
+    }
+
+    if (variants.length > 1) {
+        const firstVariantImage = resolveVariantPreviewImageUrl(variants[0] ?? null);
+        if (firstVariantImage !== null) {
+            return firstVariantImage;
+        }
+    }
+
+    return '';
+}
+
+function buildProductCarouselImages(
+    selectedVariant: VariantItem | null,
+    variants: readonly VariantItem[],
+    imageUrls: readonly string[],
+    thumbnailUrl: string,
+): string[] {
+    const dedupedUrls: string[] = [];
+
+    const pushUniqueUrl = (candidateUrl: string | null): void => {
+        if (candidateUrl === null) {
+            return;
+        }
+
+        if (!dedupedUrls.includes(candidateUrl)) {
+            dedupedUrls.push(candidateUrl);
+        }
+    };
+
+    for (const imageUrl of imageUrls) {
+        pushUniqueUrl(normalizeNonEmptyUrl(imageUrl));
+    }
+
+    pushUniqueUrl(normalizeNonEmptyUrl(thumbnailUrl));
+
+    const selectedVariantImageUrl = resolveVariantPreviewImageUrl(selectedVariant);
+    if (selectedVariantImageUrl !== null) {
+        pushUniqueUrl(selectedVariantImageUrl);
+    }
+
+    for (const variant of variants) {
+        pushUniqueUrl(resolveVariantPreviewImageUrl(variant));
+    }
+
+    if (dedupedUrls.length === 0) {
+        pushUniqueUrl(normalizeNonEmptyUrl(thumbnailUrl));
+        pushUniqueUrl(selectedVariantImageUrl);
+    }
+
+    return dedupedUrls;
+}
+
+function resolveTryOnGarmentImageUrl(
+    selectedVariant: VariantItem | null,
+    variants: readonly VariantItem[],
+    images: readonly string[],
+    fallbackThumbnailUrl: string,
+): string {
+    const selectedExtractedUrl = normalizeNonEmptyUrl(selectedVariant?.extractedOutfitUrl);
+    if (selectedExtractedUrl !== null) {
+        return selectedExtractedUrl;
+    }
+
+    const selectedVariantImageUrl = normalizeNonEmptyUrl(selectedVariant?.imageUrl);
+    if (selectedVariantImageUrl !== null) {
+        return selectedVariantImageUrl;
+    }
+
+    const firstExtractedVariant = variants.find((variant) => normalizeNonEmptyUrl(variant.extractedOutfitUrl) !== null) ?? null;
+    const firstExtractedUrl = normalizeNonEmptyUrl(firstExtractedVariant?.extractedOutfitUrl);
+    if (firstExtractedUrl !== null) {
+        return firstExtractedUrl;
+    }
+
+    const firstVariantWithImage = variants.find((variant) => normalizeNonEmptyUrl(variant.imageUrl) !== null) ?? null;
+    const firstVariantImageUrl = normalizeNonEmptyUrl(firstVariantWithImage?.imageUrl);
+    if (firstVariantImageUrl !== null) {
+        return firstVariantImageUrl;
+    }
+
+    const firstProductImageUrl = images.find((url) => normalizeNonEmptyUrl(url) !== null) ?? null;
+    if (firstProductImageUrl !== null) {
+        return firstProductImageUrl;
+    }
+
+    return fallbackThumbnailUrl;
 }
 
 // ─── Product Details Skeleton ─────────────────────────────────────────────────
@@ -63,22 +219,39 @@ const detailsSkeletonStyles = StyleSheet.create({
  * Route param: `uid` — the product's public UID.
  */
 export default function ProductDetailsScreen(): React.JSX.Element {
-    const params = useLocalSearchParams<{ uid: string }>();
+    const params = useLocalSearchParams<{ uid: string; sellerView?: string }>();
     const productUid = params.uid ?? '';
     const { theme } = useTheme();
 
     // ── Identity ───────────────────────────────────────────────────────────
     const { data: currentUser } = useCurrentUser();
     const userId = currentUser?.id ?? null;
+    const isSellerViewParam = params.sellerView === 'true';
 
     // ── Server-state queries ───────────────────────────────────────────────
     const { data: product, isLoading: productLoading } = useProduct(productUid || null);
     const { data: shop } = useShopForProduct(product?.shopId ?? null);
-    const { data: images = [] } = useProductImages(product?.id ?? null);
-    const { data: variants = [] } = useProductVariants(product?.id ?? null);
+    const { data: imageData } = useProductImages(product?.id ?? null);
+    const { data: variantData } = useProductVariants(product?.id ?? null);
     const { data: ratingCount = 0 } = useRatingCount(product?.id ?? null);
     const { data: userRating = null } = useUserRating(product?.id ?? null, userId);
-    const { data: initialReviews = [] } = useReviews(product?.id ?? null);
+    const { data: reviewData } = useReviews(product?.id ?? null);
+
+    const images: readonly string[] = imageData ?? EMPTY_IMAGE_URLS;
+    const variants: readonly VariantItem[] = variantData ?? EMPTY_VARIANTS;
+    const initialReviews: readonly ReviewItem[] = reviewData ?? EMPTY_REVIEWS;
+
+    const isReadOnlySellerView =
+        isSellerViewParam ||
+        (currentUser?.role === 'seller' && userId !== null && shop?.sellerId === userId);
+
+    const parsedDescription = useMemo<string>(() => {
+        if (product === null || product === undefined) {
+            return '';
+        }
+
+        return parseHtmlDescription(product.description);
+    }, [product]);
 
     // ── Mutations ──────────────────────────────────────────────────────────
     const addToCartMutation = useAddToCart(userId);
@@ -184,24 +357,27 @@ export default function ProductDetailsScreen(): React.JSX.Element {
     // ── Handlers ───────────────────────────────────────────────────────────
 
     const handleAddToCart = useCallback((quantity: number): void => {
+        if (isReadOnlySellerView) return;
         if (!selectedVariant || !product) return;
 
         addToCartMutation.mutate(
             { productId: product.id, variantId: selectedVariant.id, quantity },
             {
-                onSuccess: () => Alert.alert('✓ Added to Cart', `${product.name} (${selectedVariant.name}) × ${quantity}`),
-                onError: () => Alert.alert('Error', 'Failed to add to cart. Please try again.'),
+                onSuccess: () => AppAlert.alert('✓ Added to Cart', `${product.name} (${selectedVariant.name}) × ${quantity}`),
+                onError: () => AppAlert.alert('Error', 'Failed to add to cart. Please try again.'),
             }
         );
-    }, [selectedVariant, product, addToCartMutation]);
+    }, [isReadOnlySellerView, selectedVariant, product, addToCartMutation]);
 
     const handleRate = useCallback((rating: number): void => {
+        if (isReadOnlySellerView) return;
         upsertRatingMutation.mutate(rating, {
-            onError: () => Alert.alert('Error', 'Failed to submit rating. Please try again.'),
+            onError: () => AppAlert.alert('Error', 'Failed to submit rating. Please try again.'),
         });
-    }, [upsertRatingMutation]);
+    }, [isReadOnlySellerView, upsertRatingMutation]);
 
     const handleChatWithSeller = useCallback(async (): Promise<void> => {
+        if (isReadOnlySellerView) return;
         if (!shop || userId === null || !product) return;
 
         setIsChatLoading(true);
@@ -233,41 +409,51 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                 }
             }
         } catch {
-            Alert.alert('Error', 'Could not open chat. Please try again.');
+            AppAlert.alert('Error', 'Could not open chat. Please try again.');
         } finally {
             setIsChatLoading(false);
         }
-    }, [shop, userId, product]);
+    }, [isReadOnlySellerView, shop, userId, product]);
 
     const handleWriteReview = useCallback((): void => {
+        if (isReadOnlySellerView) return;
         if (!product) return;
         router.push({ pathname: '/home/review-form' as string, params: { productUid: product.uid } } as Parameters<typeof router.push>[0]);
-    }, [product]);
+    }, [isReadOnlySellerView, product]);
 
     const handleVisitShop = useCallback((): void => {
+        if (isReadOnlySellerView) return;
         if (!shop) return;
         router.push({ pathname: '/home/shop-landing' as string, params: { uid: shop.uid } } as Parameters<typeof router.push>[0]);
-    }, [shop]);
+    }, [isReadOnlySellerView, shop]);
 
     const handleOpenVirtualTryOn = useCallback((): void => {
         if (!product) return;
 
         if (!isVtonCategoryEnabled(product.category)) {
-            Alert.alert('Virtual Try-On Unavailable', 'Virtual try-on is only available for tops, bottoms, and full_body products.');
+            AppAlert.alert('Virtual Try-On Unavailable', 'Virtual try-on is only available for headwear, upperwear, lowerwear, and footwear products.');
             return;
         }
+
+        if (variants.length > 0 && selectedVariant === null) {
+            AppAlert.alert('Select Variant', 'Please select a variant before starting virtual try-on.');
+            return;
+        }
+
+        const garmentImageUrl = resolveTryOnGarmentImageUrl(selectedVariant, variants, images, product.thumbnailUrl);
 
         router.push({
             pathname: '/home/virtual-tryon' as string,
             params: {
                 productId: String(product.id),
                 productName: product.name,
-                garmentImageUrl: images[0] ?? product.thumbnailUrl,
+                garmentImageUrl,
                 productCategory: product.category,
+                isFullBody: selectedVariant?.isFullBody === true ? 'true' : 'false',
                 userId: userId !== null ? String(userId) : '',
             },
         } as Parameters<typeof router.push>[0]);
-    }, [images, product, userId]);
+    }, [images, product, selectedVariant, userId, variants]);
 
     // ── Sale info for selected variant ─────────────────────────────────────
 
@@ -276,10 +462,19 @@ export default function ProductDetailsScreen(): React.JSX.Element {
         selectedVariant !== null &&
         selectedVariant.salePrice !== null &&
         selectedVariant.salePrice !== undefined &&
-        selectedVariant.saleStartDate != null &&
-        selectedVariant.saleEndDate != null &&
+        selectedVariant.saleStartDate !== null &&
+        selectedVariant.saleEndDate !== null &&
         new Date(selectedVariant.saleStartDate as string) <= now &&
         new Date(selectedVariant.saleEndDate as string) >= now;
+
+    const selectedVariantStock = selectedVariant?.stock ?? 0;
+    const selectedVariantStockLabel = getInventoryStockLabel(selectedVariantStock);
+    const selectedVariantStockState = getInventoryStockState(selectedVariantStock);
+    const selectedVariantStockColor = selectedVariantStockState === 'sold-out'
+        ? theme.error
+        : selectedVariantStockState === 'low-stock'
+            ? theme.warning
+            : theme.success;
 
     // ── Render ─────────────────────────────────────────────────────────────
 
@@ -296,20 +491,23 @@ export default function ProductDetailsScreen(): React.JSX.Element {
             <SafeScreen style={styles.errorContainer}>
                 <Text style={styles.errorIcon}>😕</Text>
                 <Text style={[styles.errorText, { color: theme.textPrimary }]}>Product not found</Text>
-                <TouchableOpacity style={[styles.backBtn, { backgroundColor: theme.primary }]} onPress={() => router.back()}>
+                <RipplePressable style={[styles.backBtn, { backgroundColor: theme.primary }]} onPress={() => router.back()}>
                     <Text style={[styles.backBtnText, { color: theme.white }]}>Go Back</Text>
-                </TouchableOpacity>
+                </RipplePressable>
             </SafeScreen>
         );
     }
+
+    const resolvedThumbnailUrl = resolveProductThumbnailUrl(product.thumbnailUrl, variants);
+    const carouselImageUrls = buildProductCarouselImages(selectedVariant, variants, images, resolvedThumbnailUrl);
 
     return (
         <SafeScreen style={styles.root}>
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Image carousel */}
                 <ProductImageCarousel
-                    imageUrls={images}
-                    thumbnailUrl={product.thumbnailUrl}
+                    imageUrls={carouselImageUrls}
+                    thumbnailUrl={resolvedThumbnailUrl}
                     showVton={isVtonCategoryEnabled(product.category)}
                     onVtonPress={handleOpenVirtualTryOn}
                 />
@@ -321,6 +519,7 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                         city={shop.city}
                         province={shop.province}
                         onVisitShop={handleVisitShop}
+                        isVisitDisabled={isReadOnlySellerView}
                     />
                 )}
 
@@ -352,6 +551,17 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                         </View>
                     )}
 
+                    {selectedVariant && (
+                        <View style={styles.stockRow}>
+                            <Text style={[styles.stockChip, { backgroundColor: `${selectedVariantStockColor}1A`, color: selectedVariantStockColor }]}>
+                                {selectedVariantStockLabel}
+                            </Text>
+                            <Text style={[styles.stockCountText, { color: theme.textSecondary }]}>
+                                {selectedVariantStock} left
+                            </Text>
+                        </View>
+                    )}
+
                     {/* Sale countdown */}
                     {activeSale && selectedVariant?.saleEndDate && (
                         <SaleCountdownTimer saleEndDate={selectedVariant.saleEndDate} />
@@ -364,7 +574,9 @@ export default function ProductDetailsScreen(): React.JSX.Element {
 
                     {/* Description */}
                     <Text style={[styles.descriptionLabel, { color: theme.textPrimary }]}>Description</Text>
-                    <Text style={[styles.descriptionText, { color: theme.textSecondary }]}>{product.description}</Text>
+                    <Text style={[styles.descriptionText, { color: theme.textSecondary }]}>
+                        {parsedDescription.length > 0 ? parsedDescription : 'No description provided.'}
+                    </Text>
                 </View>
 
                 {/* Variant selection */}
@@ -381,12 +593,17 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                     onAddToCart={handleAddToCart}
                     isLoading={addToCartMutation.isPending}
                     maxStock={selectedVariant?.stock ?? 0}
-                    isDisabled={selectedVariant === null}
+                    isDisabled={selectedVariant === null || isReadOnlySellerView}
+                    disabledLabel={isReadOnlySellerView ? 'Seller read-only mode' : 'Select a Variant'}
                 />
 
                 {/* Chat with Seller */}
                 {shop && userId !== null && (
-                    <ChatWithSellerButton onPress={handleChatWithSeller} isLoading={isChatLoading} />
+                    <ChatWithSellerButton
+                        onPress={() => { void handleChatWithSeller(); }}
+                        isLoading={isChatLoading}
+                        isDisabled={isReadOnlySellerView}
+                    />
                 )}
 
                 {/* Rating */}
@@ -396,6 +613,7 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                     userRating={userRating}
                     onRate={handleRate}
                     isSubmitting={upsertRatingMutation.isPending}
+                    isReadOnly={isReadOnlySellerView}
                 />
 
                 {/* Reviews */}
@@ -405,6 +623,7 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                     onLoadMore={handleLoadMoreReviews}
                     hasMore={hasMoreReviews}
                     onWriteReview={handleWriteReview}
+                    isReadOnly={isReadOnlySellerView}
                 />
             </ScrollView>
 
@@ -441,11 +660,29 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 4 },
+    stockRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+    },
     priceText: { fontSize: 24, fontWeight: '700' },
     salePriceText: { fontSize: 24, fontWeight: '700' },
     originalPriceText: {
         fontSize: 16,
         textDecorationLine: 'line-through',
+    },
+    stockChip: {
+        fontSize: 12,
+        fontWeight: '700',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 999,
+        textTransform: 'uppercase',
+    },
+    stockCountText: {
+        fontSize: 12,
+        fontWeight: '600',
     },
     salesText: { fontSize: 12, marginTop: 6 },
     descriptionLabel: {

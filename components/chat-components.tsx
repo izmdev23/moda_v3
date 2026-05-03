@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { ActivityIndicator, FlatList, ListRenderItem, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, ListRenderItem, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { ImageWithFallback } from './ui/image-with-fallback';
 import { useTheme } from './ui/theme-provider';
 
@@ -22,7 +23,7 @@ export interface ChatThreadCardProps {
 export const ChatThreadCard: React.FC<ChatThreadCardProps> = ({ item, onPress }) => {
     const { theme } = useTheme();
     return (
-        <TouchableOpacity style={[threadStyles.container, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]} onPress={onPress} activeOpacity={0.7}>
+        <RipplePressable style={[threadStyles.container, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]} onPress={onPress} activeOpacity={0.7}>
             {item.otherPartyAvatar ? (
                 <ImageWithFallback src={item.otherPartyAvatar} style={threadStyles.avatar} />
             ) : (
@@ -52,7 +53,7 @@ export const ChatThreadCard: React.FC<ChatThreadCardProps> = ({ item, onPress })
                     )}
                 </View>
             </View>
-        </TouchableOpacity>
+        </RipplePressable>
     );
 };
 
@@ -250,14 +251,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     return (
         <View style={[inputStyles.wrapper, { backgroundColor: theme.cardBackground, borderTopColor: theme.border }]}>
-            <TouchableOpacity
+            <RipplePressable
                 style={inputStyles.attachButton}
                 onPress={onAttachImage}
                 disabled={isSending}
                 activeOpacity={0.7}
             >
                 <Ionicons name="image-outline" size={24} color={theme.textSecondary} />
-            </TouchableOpacity>
+            </RipplePressable>
 
             <View style={[inputStyles.inputContainer, { backgroundColor: theme.background, borderColor: theme.border }]}>
                 <TextInput
@@ -272,7 +273,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 />
             </View>
 
-            <TouchableOpacity
+            <RipplePressable
                 style={[
                     inputStyles.sendButton,
                     { backgroundColor: hasContent ? theme.primary : theme.border }
@@ -286,7 +287,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 ) : (
                     <Ionicons name="send" size={18} color={hasContent ? theme.white : theme.gray} />
                 )}
-            </TouchableOpacity>
+            </RipplePressable>
         </View>
     );
 };

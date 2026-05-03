@@ -395,6 +395,11 @@ verify_jwt = false
 [functions.payment-create]
 verify_jwt = false
 
+# extract-outfit is called from React Native with publishable keys; disable
+# gateway JWT checks and handle auth context inside the function code.
+[functions.extract-outfit]
+verify_jwt = false
+
 # virtual-tryon handles JWT validation internally and enforces usage limits.
 [functions.virtual-tryon]
 verify_jwt = false

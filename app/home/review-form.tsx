@@ -1,12 +1,15 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
+import { AppAlert } from '@/utils/app-alert';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ReviewImageUploader } from '../../components/review-components';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { ImageWithFallback } from '../../components/ui/image-with-fallback';
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
 import { SafeScreen } from '../../components/ui/safe-screen';
+import { SkeletonLoader } from '../../components/ui/skeleton-loader';
 import { useTheme } from '../../components/ui/theme-provider';
 import { supabase } from '../../supabase/supabaseClient';
 
@@ -65,11 +68,11 @@ export default function ReviewFormScreen(): React.JSX.Element {
 
     const handleSubmitPress = () => {
         if (rating === 0) {
-            Alert.alert('Required', 'Please select a star rating.');
+            AppAlert.alert('Required', 'Please select a star rating.');
             return;
         }
         if (reviewText.trim().length === 0) {
-            Alert.alert('Required', 'Please write a review text.');
+            AppAlert.alert('Required', 'Please write a review text.');
             return;
         }
 
@@ -92,34 +95,24 @@ export default function ReviewFormScreen(): React.JSX.Element {
             // 2. Insert into `ratings` (or `reviews`) table
             await new Promise((resolve) => setTimeout(resolve, 1500));
 
-            Alert.alert('Success', 'Your review has been submitted successfully.', [
+            AppAlert.alert('Success', 'Your review has been submitted successfully.', [
                 { text: 'OK', onPress: () => router.back() }
             ]);
 
         } catch (error) {
             console.error('Submit review error:', error);
-            Alert.alert('Error', 'Could not submit your review. Please try again.');
+            AppAlert.alert('Error', 'Could not submit your review. Please try again.');
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    if (loading) {
-        return (
-            <SafeScreen>
-                <View style={styles.center}>
-                    <LoadingIndicator message="Loading..." />
-                </View>
-            </SafeScreen>
-        );
-    }
-
     return (
         <SafeScreen>
             <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <RipplePressable onPress={() => router.back()} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
-                </TouchableOpacity>
+                </RipplePressable>
                 <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>{review_id ? 'Edit Review' : 'Write a Review'}</Text>
             </View>
 
@@ -129,69 +122,101 @@ export default function ReviewFormScreen(): React.JSX.Element {
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
             >
-                <View style={[styles.productBanner, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-                    <ImageWithFallback src={productImage} style={styles.productImage} />
-                    <View style={styles.productInfo}>
-                        <Text style={[styles.productName, { color: theme.textPrimary }]} numberOfLines={2}>{productName}</Text>
-                        <Text style={[styles.productSubtitle, { color: theme.textSecondary }]}>Rate your purchase</Text>
+                {loading ? (
+                    <View>
+                        <View style={[styles.productBanner, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                            <SkeletonLoader width={60} height={60} borderRadius={8} />
+                            <View style={styles.productInfo}>
+                                <SkeletonLoader width="70%" height={14} style={{ marginBottom: 8 }} />
+                                <SkeletonLoader width="45%" height={12} />
+                            </View>
+                        </View>
+
+                        <View style={styles.formSection}>
+                            <SkeletonLoader width={96} height={14} style={{ marginBottom: 12 }} />
+                            <View style={styles.starsContainer}>
+                                {Array.from({ length: 5 }).map((_, index) => (
+                                    <SkeletonLoader key={`star-skeleton-${index}`} width={32} height={32} borderRadius={16} />
+                                ))}
+                            </View>
+
+                            <SkeletonLoader width={92} height={14} style={{ marginBottom: 12 }} />
+                            <SkeletonLoader width="100%" height={140} borderRadius={12} />
+                        </View>
+
+                        <SkeletonLoader width="100%" height={110} borderRadius={12} />
+
+                        <View style={styles.submitButton}>
+                            <SkeletonLoader width="100%" height={50} borderRadius={12} />
+                        </View>
                     </View>
-                </View>
+                ) : (
+                    <>
+                        <View style={[styles.productBanner, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                            <ImageWithFallback uri={productImage} style={styles.productImage} />
+                            <View style={styles.productInfo}>
+                                <Text style={[styles.productName, { color: theme.textPrimary }]} numberOfLines={2}>{productName}</Text>
+                                <Text style={[styles.productSubtitle, { color: theme.textSecondary }]}>Rate your purchase</Text>
+                            </View>
+                        </View>
 
-                {/* Rating Input and Star Visuals */}
-                <View style={styles.formSection}>
-                    <Text style={[styles.label, { color: theme.textPrimary }]}>Your Rating</Text>
-                    <View style={styles.starsContainer}>
-                        {[1, 2, 3, 4, 5].map((star) => (
-                            <TouchableOpacity key={star} onPress={() => setRating(star)} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}>
-                                <Ionicons
-                                    name={star <= rating ? 'star' : 'star-outline'}
-                                    size={40}
-                                    color={star <= rating ? theme.starColor : theme.border}
-                                />
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                        {/* Rating Input and Star Visuals */}
+                        <View style={styles.formSection}>
+                            <Text style={[styles.label, { color: theme.textPrimary }]}>Your Rating</Text>
+                            <View style={styles.starsContainer}>
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                    <RipplePressable key={star} onPress={() => setRating(star)} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}>
+                                        <Ionicons
+                                            name={star <= rating ? 'star' : 'star-outline'}
+                                            size={40}
+                                            color={star <= rating ? theme.starColor : theme.border}
+                                        />
+                                    </RipplePressable>
+                                ))}
+                            </View>
 
-                    <Text style={[styles.label, { color: theme.textPrimary }]}>Your Review</Text>
-                    <View style={[styles.inputContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-                        <React.Fragment>
-                            {/* We use standard TextInput, manually bound for flexibility in screen layer without complex wrappers */}
-                            <TextInput
-                                style={[styles.input, { color: theme.textPrimary }]}
-                                value={reviewText}
-                                onChangeText={setReviewText}
-                                placeholder="What did you like or dislike?"
-                                placeholderTextColor={theme.gray}
-                                multiline
-                                numberOfLines={5}
-                                maxLength={500}
-                                textAlignVertical="top"
-                            />
-                        </React.Fragment>
-                    </View>
-                    <Text style={[styles.charCount, { color: theme.textSecondary }]}>{reviewText.length}/500</Text>
-                </View>
+                            <Text style={[styles.label, { color: theme.textPrimary }]}>Your Review</Text>
+                            <View style={[styles.inputContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                                <React.Fragment>
+                                    {/* We use standard TextInput, manually bound for flexibility in screen layer without complex wrappers */}
+                                    <TextInput
+                                        style={[styles.input, { color: theme.textPrimary }]}
+                                        value={reviewText}
+                                        onChangeText={setReviewText}
+                                        placeholder="What did you like or dislike?"
+                                        placeholderTextColor={theme.gray}
+                                        multiline
+                                        numberOfLines={5}
+                                        maxLength={500}
+                                        textAlignVertical="top"
+                                    />
+                                </React.Fragment>
+                            </View>
+                            <Text style={[styles.charCount, { color: theme.textSecondary }]}>{reviewText.length}/500</Text>
+                        </View>
 
-                {/* Image Uploader */}
-                <ReviewImageUploader
-                    images={images}
-                    onAddImage={handleAddImage}
-                    onRemoveImage={handleRemoveImage}
-                    maxImages={3}
-                />
+                        {/* Image Uploader */}
+                        <ReviewImageUploader
+                            images={images}
+                            onAddImage={handleAddImage}
+                            onRemoveImage={handleRemoveImage}
+                            maxImages={3}
+                        />
 
-                <TouchableOpacity
-                    style={[styles.submitButton, { backgroundColor: theme.primary }, isSubmitting && styles.submitButtonDisabled]}
-                    onPress={handleSubmitPress}
-                    disabled={isSubmitting}
-                    activeOpacity={0.8}
-                >
-                    {isSubmitting ? (
-                        <LoadingIndicator message="" />
-                    ) : (
-                        <Text style={[styles.submitButtonText, { color: theme.white }]}>Submit Review</Text>
-                    )}
-                </TouchableOpacity>
+                        <RipplePressable
+                            style={[styles.submitButton, { backgroundColor: theme.primary }, isSubmitting && styles.submitButtonDisabled]}
+                            onPress={handleSubmitPress}
+                            disabled={isSubmitting}
+                            activeOpacity={0.8}
+                        >
+                            {isSubmitting ? (
+                                <LoadingIndicator message="" />
+                            ) : (
+                                <Text style={[styles.submitButtonText, { color: theme.white }]}>Submit Review</Text>
+                            )}
+                        </RipplePressable>
+                    </>
+                )}
             </ScrollView>
 
             <ConfirmDialog
