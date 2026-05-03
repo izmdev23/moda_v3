@@ -24,6 +24,17 @@ interface ProductWithVariantsRow {
     readonly product_variants: readonly ProductVariantPriceRow[] | null;
 }
 
+interface ProductOrderItemRow {
+    readonly order_id: number;
+    readonly product_id: number | null;
+    readonly quantity: number;
+}
+
+interface ProductOrderStatusRow {
+    readonly id: number;
+    readonly status: string;
+}
+
 export interface MyStoreProduct {
     readonly id: number;
     readonly uid: string;
@@ -81,7 +92,70 @@ function normalizeTags(rawTags: Json): string[] {
     return [];
 }
 
-function mapProductRow(row: ProductWithVariantsRow): MyStoreProduct {
+function isRefundOrderStatus(status: string): boolean {
+    const normalizedStatus = status.trim().toLowerCase();
+
+    return normalizedStatus.includes('refund') || normalizedStatus === 'cancelled' || normalizedStatus === 'canceled';
+}
+
+async function fetchSoldCountByProductId(
+    shopId: number,
+    productIds: readonly number[],
+): Promise<Readonly<Record<number, number>>> {
+    if (productIds.length === 0) {
+        return {};
+    }
+
+    const { data: orderItemsData, error: orderItemsError } = await supabase
+        .from('order_items')
+        .select('order_id, product_id, quantity')
+        .eq('shop_id', shopId)
+        .in('product_id', productIds);
+
+    if (orderItemsError !== null) {
+        throw new Error(orderItemsError.message);
+    }
+
+    const orderItems = (orderItemsData ?? []) as ProductOrderItemRow[];
+    const orderIds = Array.from(new Set(orderItems.map((item) => item.order_id)));
+
+    if (orderIds.length === 0) {
+        return {};
+    }
+
+    const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select('id, status')
+        .in('id', orderIds);
+
+    if (ordersError !== null) {
+        throw new Error(ordersError.message);
+    }
+
+    const refundedOrderIds = new Set<number>();
+    for (const order of (ordersData ?? []) as ProductOrderStatusRow[]) {
+        if (isRefundOrderStatus(order.status)) {
+            refundedOrderIds.add(order.id);
+        }
+    }
+
+    const soldCountByProductId: Record<number, number> = {};
+    for (const item of orderItems) {
+        if (item.product_id === null) {
+            continue;
+        }
+
+        if (refundedOrderIds.has(item.order_id)) {
+            continue;
+        }
+
+        soldCountByProductId[item.product_id] = (soldCountByProductId[item.product_id] ?? 0) + item.quantity;
+    }
+
+    return soldCountByProductId;
+}
+
+function mapProductRow(row: ProductWithVariantsRow, soldCountByProductId: Readonly<Record<number, number>>): MyStoreProduct {
     const variants = row.product_variants ?? [];
     const prices = variants.map((variant) => variant.price);
     const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
@@ -99,13 +173,16 @@ function mapProductRow(row: ProductWithVariantsRow): MyStoreProduct {
         return saleStart <= now && saleEnd >= now;
     });
 
+    const hasSoldCountOverride = Object.prototype.hasOwnProperty.call(soldCountByProductId, row.id);
+    const resolvedSoldCount = hasSoldCountOverride ? soldCountByProductId[row.id] ?? 0 : row.total_sales;
+
     return {
         id: row.id,
         uid: row.uid,
         name: row.name,
         thumbnailUrl: row.thumbnail_url,
         rating: row.rating_avg,
-        totalSales: row.total_sales,
+        totalSales: resolvedSoldCount,
         totalStock,
         tags: normalizeTags(row.tags),
         minPrice,
@@ -187,6 +264,14 @@ async function fetchMyStoreData(shopUid: string): Promise<MyStoreData | null> {
     }
 
     const productRows = (productsResult.data ?? []) as unknown as ProductWithVariantsRow[];
+    const productIds = productRows.map((row) => row.id);
+
+    let soldCountByProductId: Readonly<Record<number, number>> = {};
+    try {
+        soldCountByProductId = await fetchSoldCountByProductId(shopData.id, productIds);
+    } catch (soldCountError: unknown) {
+        console.warn('[my-store] Falling back to products.total_sales for best-seller counts:', soldCountError);
+    }
 
     return {
         shop: {
@@ -198,7 +283,7 @@ async function fetchMyStoreData(shopUid: string): Promise<MyStoreData | null> {
             bannerUrl: shopData.banner_url,
             ownerUserId: shopData.user_id,
         },
-        products: productRows.map(mapProductRow),
+        products: productRows.map((row) => mapProductRow(row, soldCountByProductId)),
     };
 }
 

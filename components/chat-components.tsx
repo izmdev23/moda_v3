@@ -1,7 +1,8 @@
+import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, FlatList, ListRenderItem, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
-import { RipplePressable } from '@/components/ui/ripple-pressable';
 import { ImageWithFallback } from './ui/image-with-fallback';
 import { useTheme } from './ui/theme-provider';
 
@@ -150,6 +151,7 @@ export interface ChatMessageItem {
     readonly timestamp: string;
     readonly isOwn: boolean;
     readonly isRead: boolean;
+    readonly messageType?: 'text' | 'image';
 }
 
 export interface ChatBubbleProps {
@@ -158,6 +160,27 @@ export interface ChatBubbleProps {
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
     const { theme } = useTheme();
+
+    const messageContent = message.content?.trim() ?? '';
+    const isProductLink = messageContent.startsWith('[PRODUCT_LINK]');
+    const isOrderLink = messageContent.startsWith('[ORDER_LINK]');
+
+    const productLinkPayload = isProductLink
+        ? messageContent.replace('[PRODUCT_LINK]', '').split('|')
+        : [];
+    const orderLinkPayload = isOrderLink
+        ? messageContent.replace('[ORDER_LINK]', '').split('|')
+        : [];
+
+    const linkedProductUid = productLinkPayload[0] ?? '';
+    const linkedProductName = productLinkPayload[1] ?? 'Linked Product';
+
+    const linkedOrderUid = orderLinkPayload[0] ?? '';
+    const linkedOrderItemUid = orderLinkPayload[1] ?? '';
+    const linkedOrderProductName = orderLinkPayload[2] ?? 'Linked Order Item';
+    const linkedOrderVariantName = orderLinkPayload[3] ?? '';
+    const linkedOrderStatus = orderLinkPayload[4] ?? '';
+
     return (
         <View style={[bubbleStyles.container, message.isOwn ? bubbleStyles.ownContainer : bubbleStyles.otherContainer]}>
             <View style={[bubbleStyles.bubble, message.isOwn ? { backgroundColor: theme.primary, borderBottomRightRadius: 4 } : { backgroundColor: theme.cardBackground, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: theme.border }]}>
@@ -165,10 +188,49 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
                     <ImageWithFallback src={message.imageUrl} style={bubbleStyles.image} />
                 )}
 
-                {message.content && (
+                {!isProductLink && !isOrderLink && message.content && (
                     <Text style={[bubbleStyles.text, { color: message.isOwn ? theme.white : theme.textPrimary }]}>
                         {message.content}
                     </Text>
+                )}
+
+                {isProductLink && (
+                    <View style={[bubbleStyles.linkCard, { borderColor: message.isOwn ? `${theme.white}55` : theme.border, backgroundColor: message.isOwn ? `${theme.white}20` : theme.background }]}> 
+                        <Text style={[bubbleStyles.linkLabel, { color: message.isOwn ? theme.white : theme.textSecondary }]}>Linked Product</Text>
+                        <Text style={[bubbleStyles.linkTitle, { color: message.isOwn ? theme.white : theme.textPrimary }]} numberOfLines={2}>
+                            {linkedProductName}
+                        </Text>
+                        <RipplePressable
+                            style={[bubbleStyles.linkButton, { borderColor: message.isOwn ? theme.white : theme.primary }]}
+                            onPress={() => {
+                                if (linkedProductUid.length === 0) return;
+                                router.push({ pathname: '/home/product-details', params: { uid: linkedProductUid } } as never);
+                            }}
+                        >
+                            <Text style={[bubbleStyles.linkButtonText, { color: message.isOwn ? theme.white : theme.primary }]}>View Product</Text>
+                        </RipplePressable>
+                    </View>
+                )}
+
+                {isOrderLink && (
+                    <View style={[bubbleStyles.linkCard, { borderColor: message.isOwn ? `${theme.white}55` : theme.border, backgroundColor: message.isOwn ? `${theme.white}20` : theme.background }]}> 
+                        <Text style={[bubbleStyles.linkLabel, { color: message.isOwn ? theme.white : theme.textSecondary }]}>Linked Order</Text>
+                        <Text style={[bubbleStyles.linkTitle, { color: message.isOwn ? theme.white : theme.textPrimary }]} numberOfLines={2}>
+                            {linkedOrderProductName}{linkedOrderVariantName.length > 0 ? ` (${linkedOrderVariantName})` : ''}
+                        </Text>
+                        <Text style={[bubbleStyles.linkSubtext, { color: message.isOwn ? theme.white : theme.textSecondary }]} numberOfLines={1}>
+                            {linkedOrderUid.length > 0 ? `Order #${linkedOrderUid}` : 'Order reference'}{linkedOrderStatus.length > 0 ? ` • ${linkedOrderStatus}` : ''}
+                        </Text>
+                        <RipplePressable
+                            style={[bubbleStyles.linkButton, { borderColor: message.isOwn ? theme.white : theme.primary }]}
+                            onPress={() => {
+                                if (linkedOrderItemUid.length === 0) return;
+                                router.push({ pathname: '/home/product-delivery-info', params: { orderId: linkedOrderItemUid } } as never);
+                            }}
+                        >
+                            <Text style={[bubbleStyles.linkButtonText, { color: message.isOwn ? theme.white : theme.primary }]}>Open Order</Text>
+                        </RipplePressable>
+                    </View>
                 )}
             </View>
 
@@ -227,6 +289,36 @@ const bubbleStyles = StyleSheet.create({
     },
     readReceipt: {
         marginLeft: 4,
+    },
+    linkCard: {
+        borderWidth: 1,
+        borderRadius: 10,
+        padding: 10,
+        gap: 6,
+    },
+    linkLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.4,
+    },
+    linkTitle: {
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    linkSubtext: {
+        fontSize: 11,
+    },
+    linkButton: {
+        alignSelf: 'flex-start',
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+    },
+    linkButtonText: {
+        fontSize: 12,
+        fontWeight: '700',
     },
 });
 

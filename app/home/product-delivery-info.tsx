@@ -1,8 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
+import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { DeliveryTimer, OrderStatus, OrderStatusBadge } from '../../components/my-orders-components';
 import { SafeScreen } from '../../components/ui/safe-screen';
 import { SkeletonLoader } from '../../components/ui/skeleton-loader';
@@ -14,6 +15,7 @@ interface OrderItemLookupRow {
     readonly shop_id: number | null;
     readonly product_name: string;
     readonly unit_price: number;
+    readonly seller_shipping_status: string;
 }
 
 interface OrderLookupRow {
@@ -37,6 +39,20 @@ interface DeliveryAddressLookupRow {
     readonly address_detail: string;
 }
 
+interface RefundRequestDetailsRow {
+    readonly status: string;
+    readonly reason: string;
+    readonly evidence_image_urls: readonly string[];
+}
+
+type RefundDisplayStatus = 'pending' | 'accepted' | 'rejected';
+
+interface RefundDetails {
+    readonly status: RefundDisplayStatus;
+    readonly message: string;
+    readonly evidenceImageUrls: readonly string[];
+}
+
 interface ProductDeliveryDetails {
     readonly title: string;
     readonly price: number;
@@ -44,6 +60,7 @@ interface ProductDeliveryDetails {
     readonly destination: string;
     readonly status: OrderStatus;
     readonly deadline?: Date;
+    readonly refundDetails: RefundDetails | null;
 }
 
 const UNAVAILABLE_LOCATION_TEXT = 'Unavailable location';
@@ -61,6 +78,80 @@ function normalizeOrderStatus(rawStatus: string): OrderStatus {
     return 'pending';
 }
 
+function normalizeSellerShippingStatus(rawStatus: string): 'pending' | 'shipped' | 'delivered' {
+    const normalizedStatus = rawStatus.trim().toLowerCase();
+
+    if (normalizedStatus === 'delivered') {
+        return 'delivered';
+    }
+
+    if (normalizedStatus === 'shipped') {
+        return 'shipped';
+    }
+
+    return 'pending';
+}
+
+function resolveBuyerItemStatus(orderStatus: string, sellerShippingStatus: string): OrderStatus {
+    const normalizedOrderStatus = normalizeOrderStatus(orderStatus);
+    const normalizedShippingStatus = normalizeSellerShippingStatus(sellerShippingStatus);
+
+    if (normalizedOrderStatus === 'delivered' || normalizedOrderStatus === 'cancelled') {
+        return normalizedOrderStatus;
+    }
+
+    if (normalizedShippingStatus === 'delivered') {
+        return 'delivered';
+    }
+
+    if (normalizedShippingStatus === 'shipped' || normalizedOrderStatus === 'shipped') {
+        return 'shipped';
+    }
+
+    return normalizedOrderStatus;
+}
+
+function toRefundDisplayStatus(rawStatus: string): RefundDisplayStatus {
+    const normalizedStatus = rawStatus.trim().toLowerCase();
+
+    if (normalizedStatus === 'accepted') {
+        return 'accepted';
+    }
+
+    if (normalizedStatus === 'rejected') {
+        return 'rejected';
+    }
+
+    return 'pending';
+}
+
+function getRefundStatusStyles(
+    refundStatus: RefundDisplayStatus,
+    theme: ReturnType<typeof useTheme>['theme'],
+): { readonly label: string; readonly color: string; readonly backgroundColor: string } {
+    if (refundStatus === 'accepted') {
+        return {
+            label: 'Refunded',
+            color: theme.success,
+            backgroundColor: `${theme.success}20`,
+        };
+    }
+
+    if (refundStatus === 'rejected') {
+        return {
+            label: 'Declined',
+            color: theme.error,
+            backgroundColor: `${theme.error}20`,
+        };
+    }
+
+    return {
+        label: 'Pending',
+        color: theme.warning,
+        backgroundColor: `${theme.warning}20`,
+    };
+}
+
 function formatAddress(parts: readonly string[]): string {
     const resolvedParts = parts
         .map((part) => part.trim())
@@ -76,7 +167,7 @@ function formatAddress(parts: readonly string[]): string {
 async function fetchProductDeliveryDetails(orderItemUid: string): Promise<ProductDeliveryDetails | null> {
     const { data: orderItemData, error: orderItemError } = await supabase
         .from('order_items')
-        .select('order_id, shop_id, product_name, unit_price')
+        .select('order_id, shop_id, product_name, unit_price, seller_shipping_status')
         .eq('uid', orderItemUid)
         .maybeSingle();
 
@@ -153,13 +244,35 @@ async function fetchProductDeliveryDetails(orderItemUid: string): Promise<Produc
             deliveryAddress.country,
         ]);
 
+    const { data: refundRequestData, error: refundRequestError } = await supabase
+        .from('refund_requests')
+        .select('status, reason, evidence_image_urls')
+        .eq('order_item_uid', orderItemUid)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (refundRequestError !== null) {
+        throw new Error(refundRequestError.message);
+    }
+
+    const refundRequest = refundRequestData as RefundRequestDetailsRow | null;
+    const refundDetails: RefundDetails | null = refundRequest === null
+        ? null
+        : {
+            status: toRefundDisplayStatus(refundRequest.status),
+            message: refundRequest.reason,
+            evidenceImageUrls: refundRequest.evidence_image_urls,
+        };
+
     return {
         title: orderItem.product_name,
         price: orderItem.unit_price,
         origin: originAddress,
         destination: destinationAddress,
-        status: normalizeOrderStatus(order.status),
+        status: resolveBuyerItemStatus(order.status, orderItem.seller_shipping_status),
         deadline: order.delivery_deadline === null ? undefined : new Date(order.delivery_deadline),
+        refundDetails,
     };
 }
 
@@ -225,9 +338,13 @@ export default function ProductDeliveryInfoScreen(): React.JSX.Element {
         origin: isError ? UNAVAILABLE_LOCATION_TEXT : NO_SAVED_LOCATION_TEXT,
         destination: isError ? UNAVAILABLE_LOCATION_TEXT : NO_SAVED_LOCATION_TEXT,
         status: 'pending',
+        refundDetails: null,
     };
 
     const resolvedDetails = orderDetails ?? fallbackDetails;
+    const refundDetails = resolvedDetails.refundDetails;
+    const hasRefundDetails = refundDetails !== null;
+    const refundStatusStyles = hasRefundDetails ? getRefundStatusStyles(refundDetails.status, theme) : null;
 
     return (
         <SafeScreen style={styles.container}>
@@ -243,39 +360,66 @@ export default function ProductDeliveryInfoScreen(): React.JSX.Element {
                     </View>
                 </View>
 
-                {/* Tracking Flow */}
-                <View style={[styles.section, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
-                    <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Delivery Route</Text>
+                {hasRefundDetails ? (
+                    <View style={[styles.section, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Refund Details</Text>
 
-                    <View style={styles.routeItem}>
-                        <MaterialIcons name="store" size={24} color={theme.textSecondary} />
-                        <View style={styles.routeDetails}>
-                            <Text style={[styles.routeLabel, { color: theme.textPrimary }]}>Origin (Seller)</Text>
-                            <Text style={[styles.routeAddress, { color: theme.textSecondary }]}>{resolvedDetails.origin}</Text>
+                        {refundStatusStyles !== null && (
+                            <View style={[styles.refundStatusChip, { backgroundColor: refundStatusStyles.backgroundColor }]}> 
+                                <Text style={[styles.refundStatusText, { color: refundStatusStyles.color }]}>{refundStatusStyles.label}</Text>
+                            </View>
+                        )}
+
+                        <View style={[styles.refundMessageBox, { borderColor: theme.border, backgroundColor: theme.background }]}> 
+                            <Text style={[styles.refundMessageLabel, { color: theme.textSecondary }]}>Your Message</Text>
+                            <Text style={[styles.refundMessageValue, { color: theme.textPrimary }]}>{refundDetails.message}</Text>
                         </View>
+
+                        {refundDetails.evidenceImageUrls.length > 0 && (
+                            <FlatList
+                                horizontal
+                                data={refundDetails.evidenceImageUrls}
+                                keyExtractor={(imageUrl) => imageUrl}
+                                style={styles.imagesList}
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.imagesListContent}
+                                renderItem={({ item: imageUrl }) => (
+                                    <Image source={{ uri: imageUrl }} style={styles.evidenceImage} contentFit="cover" />
+                                )}
+                            />
+                        )}
                     </View>
+                ) : (
+                    <>
+                        <View style={[styles.section, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
+                            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Delivery Route</Text>
 
-                    <View style={[styles.routeLine, { borderLeftColor: theme.border }]} />
+                            <View style={styles.routeItem}>
+                                <MaterialIcons name="store" size={24} color={theme.textSecondary} />
+                                <View style={styles.routeDetails}>
+                                    <Text style={[styles.routeLabel, { color: theme.textPrimary }]}>Origin (Seller)</Text>
+                                    <Text style={[styles.routeAddress, { color: theme.textSecondary }]}>{resolvedDetails.origin}</Text>
+                                </View>
+                            </View>
 
-                    <View style={styles.routeItem}>
-                        <MaterialIcons name="home" size={24} color={theme.primary} />
-                        <View style={styles.routeDetails}>
-                            <Text style={[styles.routeLabel, { color: theme.primary }]}>Destination (You)</Text>
-                            <Text style={[styles.routeAddress, { color: theme.textSecondary }]}>{resolvedDetails.destination}</Text>
+                            <View style={[styles.routeLine, { borderLeftColor: theme.border }]} />
+
+                            <View style={styles.routeItem}>
+                                <MaterialIcons name="home" size={24} color={theme.primary} />
+                                <View style={styles.routeDetails}>
+                                    <Text style={[styles.routeLabel, { color: theme.primary }]}>Destination (You)</Text>
+                                    <Text style={[styles.routeAddress, { color: theme.textSecondary }]}>{resolvedDetails.destination}</Text>
+                                </View>
+                            </View>
                         </View>
-                    </View>
-                </View>
 
-                {/* More Details (could include courier tracking) */}
-                <View style={[styles.section, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
-                    <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Tracking Information</Text>
-                    <Text style={[styles.trackingText, { color: theme.textSecondary }]}>
-                        Courier: J&T Express
-                    </Text>
-                    <Text style={[styles.trackingText, { color: theme.textSecondary }]}>
-                        Tracking Number: {orderId || TRACKING_NUMBER_FALLBACK}
-                    </Text>
-                </View>
+                        <View style={[styles.section, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
+                            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Tracking Information</Text>
+                            <Text style={[styles.trackingText, { color: theme.textSecondary }]}>Courier: J&T Express</Text>
+                            <Text style={[styles.trackingText, { color: theme.textSecondary }]}>Tracking Number: {orderId || TRACKING_NUMBER_FALLBACK}</Text>
+                        </View>
+                    </>
+                )}
 
             </ScrollView>
         </SafeScreen>
@@ -346,5 +490,41 @@ const styles = StyleSheet.create({
     },
     skeletonGapSmall: {
         marginBottom: 8,
+    },
+    refundStatusChip: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+        marginBottom: 14,
+    },
+    refundStatusText: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    refundMessageBox: {
+        borderWidth: 1,
+        borderRadius: 10,
+        padding: 12,
+    },
+    refundMessageLabel: {
+        fontSize: 12,
+        marginBottom: 6,
+    },
+    refundMessageValue: {
+        fontSize: 14,
+        lineHeight: 20,
+    },
+    imagesList: {
+        marginTop: 14,
+    },
+    imagesListContent: {
+        gap: 8,
+        paddingRight: 8,
+    },
+    evidenceImage: {
+        width: 100,
+        height: 100,
+        borderRadius: 10,
     },
 });

@@ -18,7 +18,7 @@ export interface CheckoutItemData {
     readonly variantId?: number;
 }
 
-export type PaymentMethodType = 'gcash' | 'paymaya' | 'card';
+export type PaymentMethodType = 'gcash' | 'paymaya' | 'card' | 'credits';
 
 export interface PaymentMethodOption {
     readonly type: PaymentMethodType;
@@ -27,6 +27,8 @@ export interface PaymentMethodOption {
     readonly description: string;
     readonly disabled?: boolean;
 }
+
+export const CREDITS_PAYMENT_UID = 'buyer-credits';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -93,6 +95,8 @@ interface PaymentMethodSelectorProps {
     readonly onSelect: (uid: string, type: PaymentMethodType, accountNumber: string) => void;
     readonly onAddNew: () => void;
     readonly onEmpty?: () => void;
+    readonly creditsBalance?: number;
+    readonly enableCredits?: boolean;
 }
 
 /**
@@ -104,17 +108,28 @@ export const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
     onSelect,
     onAddNew,
     onEmpty,
+    creditsBalance = 0,
+    enableCredits = false,
 }): React.JSX.Element => {
     const { theme } = useTheme();
     const { data: methods = [], isLoading } = usePaymentMethods(userId);
+    const hasCredits = enableCredits && creditsBalance > 0;
 
     // Auto-select a payment method when methods load or change (e.g. after returning
     // from the Add Payment screen). Invalidation in useAddPaymentMethod / useDeletePaymentMethod
     // triggers a refetch, so this effect runs with fresh data automatically.
     useEffect(() => {
         if (isLoading) return;
+
+        if (selectedMethodUid === null && hasCredits) {
+            onSelect(CREDITS_PAYMENT_UID, 'credits', String(creditsBalance));
+            return;
+        }
+
         if (methods.length === 0) {
-            onEmpty?.();
+            if (!hasCredits) {
+                onEmpty?.();
+            }
             return;
         }
         if (selectedMethodUid !== null) return;
@@ -134,7 +149,7 @@ export const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
                 onSelect(firstAvailable.uid, firstAvailable.type as PaymentMethodType, firstAvailable.account_number);
             }
         }
-    }, [methods, isLoading]);
+    }, [creditsBalance, hasCredits, isLoading, methods, onEmpty, onSelect, selectedMethodUid]);
 
     return (
         <View style={styles.paymentContainer}>
@@ -145,6 +160,42 @@ export const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
                 </View>
             ) : (
                 <View style={styles.paymentMethodsList}>
+                    {enableCredits && (
+                        <RipplePressable
+                            style={[
+                                styles.paymentCardRow,
+                                { borderColor: theme.border, backgroundColor: theme.cardBackground },
+                                selectedMethodUid === CREDITS_PAYMENT_UID && { borderColor: theme.primary, backgroundColor: theme.primary + '0A' },
+                                !hasCredits && { opacity: 0.5, backgroundColor: theme.border + '1A' }
+                            ]}
+                            onPress={() => {
+                                if (!hasCredits) {
+                                    return;
+                                }
+
+                                onSelect(CREDITS_PAYMENT_UID, 'credits', String(creditsBalance));
+                            }}
+                            disabled={!hasCredits}
+                        >
+                            <Text style={styles.paymentIconRow}>🪙</Text>
+                            <View style={styles.paymentInfoRow}>
+                                <Text style={[styles.paymentLabel, { color: selectedMethodUid === CREDITS_PAYMENT_UID ? theme.primary : theme.textPrimary }]}>
+                                    Moda Credits
+                                </Text>
+                                <Text style={[styles.paymentDesc, { color: hasCredits ? theme.textSecondary : theme.gray }]}>
+                                    {hasCredits
+                                        ? `${formatPrice(creditsBalance)} available`
+                                        : 'No available credits'}
+                                </Text>
+                            </View>
+                            {selectedMethodUid === CREDITS_PAYMENT_UID && (
+                                <View style={[styles.selectedIndicatorRow, { backgroundColor: theme.primary }]}>
+                                    <Text style={[styles.selectedCheck, { color: theme.white }]}>✓</Text>
+                                </View>
+                            )}
+                        </RipplePressable>
+                    )}
+
                     {methods.map((method, index) => {
                         const isSelected = selectedMethodUid === method.uid;
                         const cardLast4 = method.type === 'card'

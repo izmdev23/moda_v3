@@ -205,11 +205,21 @@ export interface VariantData {
     is_extracting: boolean;
 }
 
+export interface SavedExtractedImageOption {
+    readonly publicUrl: string;
+    readonly storagePath: string;
+    readonly label: string;
+}
+
 interface VariantFieldGroupProps {
-    variants: VariantData[];
-    onChange: (variants: VariantData[]) => void;
-    isAccessoryCategory: boolean;
-    onSelectTryOnImage: (variantId: string, image: ImageDetail) => Promise<void>;
+    readonly variants: VariantData[];
+    readonly onChange: (variants: VariantData[]) => void;
+    readonly isAccessoryCategory: boolean;
+    readonly onSelectTryOnImage: (variantId: string, image: ImageDetail) => Promise<void>;
+    readonly savedExtractedImages: readonly SavedExtractedImageOption[];
+    readonly isSavedExtractedLoading: boolean;
+    readonly onRefreshSavedExtractedImages: () => Promise<void>;
+    readonly onSelectSavedExtractedImage: (variantId: string, image: SavedExtractedImageOption) => void;
 }
 
 export const VariantFieldGroup: React.FC<VariantFieldGroupProps> = ({
@@ -217,9 +227,14 @@ export const VariantFieldGroup: React.FC<VariantFieldGroupProps> = ({
     onChange,
     isAccessoryCategory,
     onSelectTryOnImage,
+    savedExtractedImages,
+    isSavedExtractedLoading,
+    onRefreshSavedExtractedImages,
+    onSelectSavedExtractedImage,
 }) => {
     const { theme } = useTheme();
     const [actionVariantId, setActionVariantId] = React.useState<string | null>(null);
+    const [savedPickerVariantId, setSavedPickerVariantId] = React.useState<string | null>(null);
     const [fullscreenImageUrl, setFullscreenImageUrl] = React.useState<string | null>(null);
 
     const handleUpdate = <K extends keyof VariantData>(id: string, field: K, value: VariantData[K]): void => {
@@ -320,6 +335,10 @@ export const VariantFieldGroup: React.FC<VariantFieldGroupProps> = ({
         ? null
         : variants.find((variant) => variant.id === actionVariantId) ?? null;
 
+    const savedPickerVariant = savedPickerVariantId === null
+        ? null
+        : variants.find((variant) => variant.id === savedPickerVariantId) ?? null;
+
     return (
         <View style={styles.container}>
             <Text style={[styles.label, { color: theme.textPrimary }]}>Variants ({variants.length})</Text>
@@ -382,6 +401,16 @@ export const VariantFieldGroup: React.FC<VariantFieldGroupProps> = ({
                                 )}
                             </RipplePressable>
 
+                            <RipplePressable
+                                style={[styles.savedExtractedButton, { borderColor: theme.border }]}
+                                onPress={() => setSavedPickerVariantId(v.id)}
+                                disabled={v.is_extracting}
+                            >
+                                <Text style={[styles.savedExtractedButtonText, { color: theme.textSecondary }]}>
+                                    {isSavedExtractedLoading ? 'Loading saved extracted images...' : 'Use saved extracted image'}
+                                </Text>
+                            </RipplePressable>
+
                             {v.extraction_error ? (
                                 <Text style={[styles.errorText, { color: theme.error }]}>{v.extraction_error}</Text>
                             ) : null}
@@ -441,6 +470,19 @@ export const VariantFieldGroup: React.FC<VariantFieldGroupProps> = ({
                         <RipplePressable
                             style={[styles.actionButton, { borderColor: theme.border }]}
                             onPress={() => {
+                                const variantId = activeVariant?.id ?? null;
+                                setActionVariantId(null);
+                                if (variantId !== null) {
+                                    setSavedPickerVariantId(variantId);
+                                }
+                            }}
+                        >
+                            <Text style={[styles.actionButtonText, { color: theme.textPrimary }]}>Use Saved Extracted Image</Text>
+                        </RipplePressable>
+
+                        <RipplePressable
+                            style={[styles.actionButton, { borderColor: theme.border }]}
+                            onPress={() => {
                                 const extractedOutfitUrl = activeVariant?.extracted_outfit_url ?? null;
                                 if (extractedOutfitUrl !== null) {
                                     setFullscreenImageUrl(extractedOutfitUrl);
@@ -456,6 +498,64 @@ export const VariantFieldGroup: React.FC<VariantFieldGroupProps> = ({
                             onPress={() => setActionVariantId(null)}
                         >
                             <Text style={[styles.actionButtonText, { color: theme.textSecondary }]}>Cancel</Text>
+                        </RipplePressable>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                transparent
+                visible={savedPickerVariant !== null}
+                animationType="fade"
+                onRequestClose={() => setSavedPickerVariantId(null)}
+            >
+                <View style={styles.modalBackdrop}>
+                    <View style={[styles.actionModalCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                        <Text style={[styles.actionModalTitle, { color: theme.textPrimary }]}>Saved Extracted Images</Text>
+
+                        <RipplePressable
+                            style={[styles.actionButton, { borderColor: theme.border }]}
+                            onPress={() => { void onRefreshSavedExtractedImages(); }}
+                            disabled={isSavedExtractedLoading}
+                        >
+                            {isSavedExtractedLoading ? (
+                                <ActivityIndicator size="small" color={theme.primary} />
+                            ) : (
+                                <Text style={[styles.actionButtonText, { color: theme.textPrimary }]}>Refresh List</Text>
+                            )}
+                        </RipplePressable>
+
+                        <ScrollView style={styles.savedExtractedList} contentContainerStyle={styles.savedExtractedListContent}>
+                            {!isSavedExtractedLoading && savedExtractedImages.length === 0 ? (
+                                <Text style={[styles.savedExtractedEmptyText, { color: theme.textSecondary }]}>No saved extracted images yet.</Text>
+                            ) : null}
+
+                            {savedExtractedImages.map((savedImage) => (
+                                <RipplePressable
+                                    key={savedImage.storagePath}
+                                    style={[styles.savedExtractedItem, { borderColor: theme.border }]}
+                                    onPress={() => {
+                                        if (savedPickerVariant === null) {
+                                            return;
+                                        }
+
+                                        onSelectSavedExtractedImage(savedPickerVariant.id, savedImage);
+                                        setSavedPickerVariantId(null);
+                                    }}
+                                >
+                                    <Image source={{ uri: savedImage.publicUrl }} style={styles.savedExtractedItemImage} contentFit="cover" />
+                                    <Text style={[styles.savedExtractedItemLabel, { color: theme.textPrimary }]} numberOfLines={1}>
+                                        {savedImage.label}
+                                    </Text>
+                                </RipplePressable>
+                            ))}
+                        </ScrollView>
+
+                        <RipplePressable
+                            style={[styles.actionButton, { borderColor: theme.border }]}
+                            onPress={() => setSavedPickerVariantId(null)}
+                        >
+                            <Text style={[styles.actionButtonText, { color: theme.textSecondary }]}>Close</Text>
                         </RipplePressable>
                     </View>
                 </View>
@@ -648,6 +748,18 @@ const styles = StyleSheet.create({
         width: '100%',
         height: 100,
     },
+    savedExtractedButton: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    savedExtractedButtonText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
     errorText: {
         fontSize: 12,
         marginBottom: 8,
@@ -678,6 +790,36 @@ const styles = StyleSheet.create({
     },
     actionButtonText: {
         fontSize: 14,
+        fontWeight: '600',
+    },
+    savedExtractedList: {
+        maxHeight: 260,
+    },
+    savedExtractedListContent: {
+        gap: 8,
+        paddingVertical: 4,
+    },
+    savedExtractedEmptyText: {
+        fontSize: 13,
+        textAlign: 'center',
+        paddingVertical: 10,
+    },
+    savedExtractedItem: {
+        borderWidth: 1,
+        borderRadius: 8,
+        padding: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    savedExtractedItemImage: {
+        width: 64,
+        height: 64,
+        borderRadius: 8,
+    },
+    savedExtractedItemLabel: {
+        flex: 1,
+        fontSize: 12,
         fontWeight: '600',
     },
     fullscreenBackdrop: {

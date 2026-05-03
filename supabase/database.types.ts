@@ -284,6 +284,10 @@ export type Database = {
           product_id: number | null
           product_name: string
           quantity: number
+          refund_requested_at: string | null
+          refund_resolved_at: string | null
+          refund_status: string
+          seller_shipping_status: string
           shop_id: number | null
           total_price: number
           uid: string
@@ -299,6 +303,10 @@ export type Database = {
           product_id?: number | null
           product_name: string
           quantity: number
+          refund_requested_at?: string | null
+          refund_resolved_at?: string | null
+          refund_status?: string
+          seller_shipping_status?: string
           shop_id?: number | null
           total_price: number
           uid?: string
@@ -314,6 +322,10 @@ export type Database = {
           product_id?: number | null
           product_name?: string
           quantity?: number
+          refund_requested_at?: string | null
+          refund_resolved_at?: string | null
+          refund_status?: string
+          seller_shipping_status?: string
           shop_id?: number | null
           total_price?: number
           uid?: string
@@ -895,6 +907,105 @@ export type Database = {
           },
         ]
       }
+      refund_requests: {
+        Row: {
+          buyer_id: number
+          created_at: string
+          evidence_image_urls: string[]
+          id: number
+          order_id: number
+          order_item_id: number
+          order_item_uid: string
+          product_name: string
+          reason: string
+          refund_amount: number
+          resolved_at: string | null
+          seller_response: string | null
+          seller_user_id: number
+          shop_id: number | null
+          status: string
+          uid: string
+          updated_at: string
+          variant_name: string
+        }
+        Insert: {
+          buyer_id: number
+          created_at?: string
+          evidence_image_urls?: string[]
+          id?: number
+          order_id: number
+          order_item_id: number
+          order_item_uid: string
+          product_name: string
+          reason: string
+          refund_amount: number
+          resolved_at?: string | null
+          seller_response?: string | null
+          seller_user_id: number
+          shop_id?: number | null
+          status?: string
+          uid?: string
+          updated_at?: string
+          variant_name: string
+        }
+        Update: {
+          buyer_id?: number
+          created_at?: string
+          evidence_image_urls?: string[]
+          id?: number
+          order_id?: number
+          order_item_id?: number
+          order_item_uid?: string
+          product_name?: string
+          reason?: string
+          refund_amount?: number
+          resolved_at?: string | null
+          seller_response?: string | null
+          seller_user_id?: number
+          shop_id?: number | null
+          status?: string
+          uid?: string
+          updated_at?: string
+          variant_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refund_requests_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_requests_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_requests_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_requests_seller_user_id_fkey"
+            columns: ["seller_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_requests_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shops: {
         Row: {
           address_detail: string
@@ -1010,6 +1121,166 @@ export type Database = {
           },
           {
             foreignKeyName: "transaction_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_notifications: {
+        Row: {
+          actor_user_id: number | null
+          created_at: string
+          id: number
+          is_read: boolean
+          message: string
+          metadata: Json
+          notification_type: string
+          read_at: string | null
+          recipient_user_id: number
+          title: string
+          uid: string
+        }
+        Insert: {
+          actor_user_id?: number | null
+          created_at?: string
+          id?: number
+          is_read?: boolean
+          message: string
+          metadata?: Json
+          notification_type: string
+          read_at?: string | null
+          recipient_user_id: number
+          title: string
+          uid?: string
+        }
+        Update: {
+          actor_user_id?: number | null
+          created_at?: string
+          id?: number
+          is_read?: boolean
+          message?: string
+          metadata?: Json
+          notification_type?: string
+          read_at?: string | null
+          recipient_user_id?: number
+          title?: string
+          uid?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_notifications_actor_user_id_fkey"
+            columns: ["actor_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_notifications_recipient_user_id_fkey"
+            columns: ["recipient_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      buyer_credit_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          id: number
+          note: string | null
+          order_id: number | null
+          order_item_id: number | null
+          refund_request_id: number | null
+          transaction_type: string
+          uid: string
+          user_id: number
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: number
+          note?: string | null
+          order_id?: number | null
+          order_item_id?: number | null
+          refund_request_id?: number | null
+          transaction_type: string
+          uid?: string
+          user_id: number
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: number
+          note?: string | null
+          order_id?: number | null
+          order_item_id?: number | null
+          refund_request_id?: number | null
+          transaction_type?: string
+          uid?: string
+          user_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buyer_credit_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buyer_credit_transactions_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buyer_credit_transactions_refund_request_id_fkey"
+            columns: ["refund_request_id"]
+            isOneToOne: false
+            referencedRelation: "refund_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buyer_credit_transactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      buyer_credits: {
+        Row: {
+          balance: number
+          created_at: string
+          id: number
+          uid: string
+          updated_at: string
+          user_id: number
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          id?: number
+          uid?: string
+          updated_at?: string
+          user_id: number
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          id?: number
+          uid?: string
+          updated_at?: string
+          user_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buyer_credits_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
@@ -1296,6 +1567,14 @@ export type Database = {
         Returns: undefined
       }
       get_average_rating: { Args: { p_product_id: number }; Returns: number }
+      process_refund_request_decision: {
+        Args: {
+          p_decision: string
+          p_refund_uid: string
+          p_seller_response?: string
+        }
+        Returns: boolean
+      }
       recalculate_user_affinity: {
         Args: { p_user_id: number }
         Returns: undefined
@@ -1303,6 +1582,14 @@ export type Database = {
       refresh_user_recommendations: {
         Args: { p_user_id: number }
         Returns: undefined
+      }
+      submit_refund_request: {
+        Args: {
+          p_evidence_urls?: string[]
+          p_order_item_uid: string
+          p_reason: string
+        }
+        Returns: string
       }
       update_delivered_orders: { Args: never; Returns: undefined }
     }

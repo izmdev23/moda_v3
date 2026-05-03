@@ -20,6 +20,7 @@ export interface OrderItemData {
     deadline?: Date;
     shopName?: string;
     buyerName?: string;
+    refundStatus?: 'none' | 'pending' | 'accepted' | 'rejected';
 }
 
 interface OrderStatusBadgeProps {
@@ -119,7 +120,7 @@ interface OrderCardProps {
     order: OrderItemData;
     isSeller: boolean;
     onPress: () => void;
-    onActionClick: (action: 'confirm' | 'ship' | 'receive' | 'rate') => void;
+    onActionClick: (action: 'confirm' | 'ship' | 'receive' | 'rate' | 'refund') => void;
 }
 
 export const OrderCard: React.FC<OrderCardProps> = ({ order, isSeller, onPress, onActionClick }) => {
@@ -171,13 +172,34 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, isSeller, onPress, 
             )}
 
             {order.status === 'delivered' && !isSeller && (
-                <View style={[styles.cardFooter, { borderTopColor: theme.border, justifyContent: 'flex-end' }]}>
+                <View style={[styles.cardFooter, { borderTopColor: theme.border, justifyContent: 'space-between' }]}>
                     <RipplePressable
                         style={[styles.actionBtn, { backgroundColor: theme.cardBackground, borderColor: theme.primary }]}
                         onPress={() => onActionClick('rate')}
                     >
                         <Text style={{ color: theme.primary, fontSize: 13, fontWeight: 'bold' }}>Rate & Review</Text>
                     </RipplePressable>
+
+                    {order.refundStatus === 'pending' ? (
+                        <View style={[styles.actionBtn, { backgroundColor: `${theme.warning}20`, borderColor: theme.warning }]}> 
+                            <Text style={{ color: theme.warning, fontSize: 13, fontWeight: 'bold' }}>Pending</Text>
+                        </View>
+                    ) : order.refundStatus === 'accepted' ? (
+                        <View style={[styles.actionBtn, { backgroundColor: `${theme.success}20`, borderColor: theme.success }]}> 
+                            <Text style={{ color: theme.success, fontSize: 13, fontWeight: 'bold' }}>Refunded</Text>
+                        </View>
+                    ) : order.refundStatus === 'rejected' ? (
+                        <View style={[styles.actionBtn, { backgroundColor: `${theme.error}20`, borderColor: theme.error }]}> 
+                            <Text style={{ color: theme.error, fontSize: 13, fontWeight: 'bold' }}>Declined</Text>
+                        </View>
+                    ) : (
+                        <RipplePressable
+                            style={[styles.actionBtn, { backgroundColor: theme.cardBackground, borderColor: theme.error }]}
+                            onPress={() => onActionClick('refund')}
+                        >
+                            <Text style={{ color: theme.error, fontSize: 13, fontWeight: 'bold' }}>Request Refund</Text>
+                        </RipplePressable>
+                    )}
                 </View>
             )}
         </RipplePressable>
@@ -187,7 +209,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, isSeller, onPress, 
 interface OrderStatusActionsProps {
     isSeller: boolean;
     status: OrderStatus;
-    onAction: (action: 'confirm' | 'ship' | 'receive' | 'rate') => void;
+    onAction: (action: 'confirm' | 'ship' | 'receive' | 'rate' | 'refund') => void;
 }
 
 export const OrderStatusActions: React.FC<OrderStatusActionsProps> = ({ isSeller, status, onAction }) => {

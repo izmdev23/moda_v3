@@ -19,6 +19,33 @@ interface DashboardStatsWidgetProps {
     readonly onViewPress?: () => void;
 }
 
+function formatCompactNumber(value: number): string {
+    const absoluteValue = Math.abs(value);
+
+    if (absoluteValue < 1000) {
+        return Math.round(value).toLocaleString('en-US');
+    }
+
+    const compactUnits: ReadonlyArray<{ readonly threshold: number; readonly suffix: string }> = [
+        { threshold: 1_000_000_000, suffix: 'B' },
+        { threshold: 1_000_000, suffix: 'M' },
+        { threshold: 1_000, suffix: 'k' },
+    ];
+
+    for (const unit of compactUnits) {
+        if (absoluteValue >= unit.threshold) {
+            const compactValue = value / unit.threshold;
+            const formattedValue = Math.abs(compactValue) >= 100
+                ? compactValue.toFixed(0)
+                : compactValue.toFixed(1);
+
+            return `${formattedValue.replace(/\.0$/, '')}${unit.suffix}`;
+        }
+    }
+
+    return value.toLocaleString('en-US');
+}
+
 export function DashboardStatsWidget({ totalSales, totalOrders, totalRefunds, totalProducts, isLoading = false, onViewPress }: DashboardStatsWidgetProps): React.JSX.Element {
     const { theme } = useTheme();
 
@@ -43,7 +70,7 @@ export function DashboardStatsWidget({ totalSales, totalOrders, totalRefunds, to
                         </>
                     ) : (
                         <>
-                            <Text style={[styles.statValue, { color: theme.primary }]}>₱{totalSales.toLocaleString()}</Text>
+                            <Text style={[styles.statValue, { color: theme.primary }]}>₱{formatCompactNumber(totalSales)}</Text>
                             <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Sales</Text>
                         </>
                     )}
@@ -56,8 +83,8 @@ export function DashboardStatsWidget({ totalSales, totalOrders, totalRefunds, to
                         </>
                     ) : (
                         <>
-                            <Text style={[styles.statValue, { color: theme.primary }]}>{totalOrders}</Text>
-                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Orders</Text>
+                            <Text style={[styles.statValue, { color: theme.primary }]}>{formatCompactNumber(totalProducts)}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Products</Text>
                         </>
                     )}
                 </View>
@@ -69,8 +96,8 @@ export function DashboardStatsWidget({ totalSales, totalOrders, totalRefunds, to
                         </>
                     ) : (
                         <>
-                            <Text style={[styles.statValue, { color: theme.error }]}>{totalRefunds}</Text>
-                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Refunds</Text>
+                            <Text style={[styles.statValue, { color: theme.primary }]}>{formatCompactNumber(totalOrders)}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Orders</Text>
                         </>
                     )}
                 </View>
@@ -82,8 +109,8 @@ export function DashboardStatsWidget({ totalSales, totalOrders, totalRefunds, to
                         </>
                     ) : (
                         <>
-                            <Text style={[styles.statValue, { color: theme.primary }]}>{totalProducts}</Text>
-                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Products</Text>
+                            <Text style={[styles.statValue, { color: theme.error }]}>{formatCompactNumber(totalRefunds)}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Refunds</Text>
                         </>
                     )}
                 </View>
@@ -256,13 +283,14 @@ const styles = StyleSheet.create({
     statsContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        rowGap: 8,
     },
     statBox: {
-        flex: 1,
+        width: '48%',
         padding: 12,
         borderRadius: 12,
         alignItems: 'center',
-        marginHorizontal: 4,
     },
     statValue: {
         fontSize: 18,

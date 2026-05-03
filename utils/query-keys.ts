@@ -48,8 +48,10 @@ export const queryKeys = {
     productImages: (productId: number) => ['productImages', productId] as const,
     productVariants: (productId: number) => ['productVariants', productId] as const,
     productRatings: (productId: number) => ['productRatings', productId] as const,
+    productRatingAverage: (productId: number) => ['productRatingAverage', productId] as const,
     userRating: (productId: number, userId: number) => ['userRating', productId, userId] as const,
     reviews: (productId: number) => ['reviews', productId] as const,
+    myReview: (productId: number, userId: number) => ['myReview', productId, userId] as const,
     shopForProduct: (shopId: number) => ['shopForProduct', shopId] as const,
 
     // ── Cart ────────────────────────────────────────────────────────────────
@@ -61,10 +63,22 @@ export const queryKeys = {
     // ── Payment methods ─────────────────────────────────────────────────────
     paymentMethods: (userId: number) => ['paymentMethods', userId] as const,
 
+    // ── Buyer credits ───────────────────────────────────────────────────────
+    buyerCredits: (userId: number) => ['buyerCredits', userId] as const,
+
+    // ── In-app notifications ────────────────────────────────────────────────
+    notifications: (userId: number) => ['notifications', userId] as const,
+
     // ── Orders ──────────────────────────────────────────────────────────────
     orders: {
         byBuyer: (userId: number) => ['orders', 'buyer', userId] as const,
         bySeller: (shopId: number) => ['orders', 'seller', shopId] as const,
+    },
+
+    // ── Refund requests ─────────────────────────────────────────────────────
+    refunds: {
+        byBuyer: (userId: number) => ['refunds', 'buyer', userId] as const,
+        bySeller: (userId: number) => ['refunds', 'seller', userId] as const,
     },
 
     // ── Shop ────────────────────────────────────────────────────────────────

@@ -152,6 +152,11 @@ export default function SellerProfileScreen() {
             onPress: () => router.push('/home/my-orders-seller' as any),
         },
         {
+            icon: 'return-up-back-outline',
+            label: 'Refund Requests',
+            onPress: () => router.push('/home/refund-requests-seller' as any),
+        },
+        {
             icon: 'receipt-outline',
             label: 'Transaction History',
             onPress: () => router.push('/home/order-history' as any),

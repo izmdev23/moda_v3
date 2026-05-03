@@ -1,5 +1,6 @@
 import { UseQueryResult, useQuery } from '@tanstack/react-query';
 import { supabase } from '../supabase/supabaseClient';
+import { clearLocalSession, isInvalidRefreshTokenError } from '../utils/auth-session';
 import { queryKeys } from '../utils/query-keys';
 import type { UserRole } from '../utils/types';
 
@@ -36,7 +37,32 @@ function normalizeUserId(value: unknown): number | null {
 // ─── Fetch fn ─────────────────────────────────────────────────────────────────
 
 async function fetchCurrentUser(): Promise<CurrentUser | null> {
-    const { data: { session } } = await supabase.auth.getSession();
+    let session: { user?: { id?: string; email?: string | null } } | null = null;
+
+    try {
+        const sessionResult = await supabase.auth.getSession();
+        session = sessionResult.data.session;
+
+        if (sessionResult.error !== null) {
+            if (isInvalidRefreshTokenError(sessionResult.error)) {
+                await clearLocalSession();
+                return null;
+            }
+
+            console.warn('fetchCurrentUser session warning:', sessionResult.error.message);
+            return null;
+        }
+    } catch (error) {
+        if (isInvalidRefreshTokenError(error)) {
+            await clearLocalSession();
+            return null;
+        }
+
+        const message = error instanceof Error ? error.message : 'Unknown session error';
+        console.warn('fetchCurrentUser session failed:', message);
+        return null;
+    }
+
     if (!session?.user?.id) return null;
 
     const { data } = await supabase
@@ -64,9 +90,10 @@ async function fetchCurrentUser(): Promise<CurrentUser | null> {
 /**
  * Returns the currently authenticated user's profile row.
  *
- * Cached with `staleTime: Infinity` — the resolved user identity does not
- * change during a session. The cache is cleared automatically by `queryClient.clear()`
- * when the user signs out (see _layout.tsx auth state listener).
+ * Configured to refetch aggressively (`staleTime: 0`, `refetchOnMount: 'always'`)
+ * so user-scoped data stays correct when auth state changes across devices.
+ * The cache is also cleared by `queryClient.clear()` on auth transitions
+ * (see _layout.tsx auth state listener).
  *
  * Replaces the duplicated two-step pattern:
  *   `supabase.auth.getSession()` → `supabase.from('users').select('id').eq('auth_id', ...)`
@@ -76,6 +103,9 @@ export function useCurrentUser(): UseQueryResult<CurrentUser | null, Error> {
     return useQuery({
         queryKey: queryKeys.currentUser,
         queryFn: fetchCurrentUser,
-        staleTime: Infinity,
+        staleTime: 0,
+        refetchOnMount: 'always',
+        refetchOnWindowFocus: true,
+        refetchOnReconnect: true,
     });
 }

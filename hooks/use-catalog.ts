@@ -21,6 +21,13 @@ type ProductWithVariants = Tables<'products'> & {
     product_variants?: Array<Tables<'product_variants'>>;
 };
 
+type RatingProjectionRow = Pick<Tables<'ratings'>, 'product_id' | 'rating'>;
+
+interface RatingAggregate {
+    total: number;
+    count: number;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function withTimeout<T>(
@@ -76,6 +83,66 @@ export const transformProduct = (row: ProductWithVariants): CatalogProductItem =
     };
 };
 
+async function withLiveRatings(
+    rows: readonly ProductWithVariants[],
+    items: readonly CatalogProductItem[],
+    label: string
+): Promise<CatalogProductItem[]> {
+    if (rows.length === 0 || items.length === 0) {
+        return [...items];
+    }
+
+    const productIdByUid: Map<string, number> = new Map<string, number>();
+    const productIds: number[] = [];
+
+    for (const row of rows) {
+        productIdByUid.set(row.uid, row.id);
+        productIds.push(row.id);
+    }
+
+    const { data: ratingData, error: ratingError } = await withTimeout(
+        supabase
+            .from('ratings')
+            .select('product_id, rating')
+            .in('product_id', productIds),
+        `${label}.ratings`
+    );
+
+    if (ratingError !== null) {
+        console.warn(`[catalog] Failed to load live ratings for ${label}:`, ratingError.message);
+        return [...items];
+    }
+
+    const ratingAggregateByProductId: Map<number, RatingAggregate> = new Map<number, RatingAggregate>();
+    for (const row of (ratingData ?? []) as RatingProjectionRow[]) {
+        const existingAggregate = ratingAggregateByProductId.get(row.product_id);
+        if (existingAggregate === undefined) {
+            ratingAggregateByProductId.set(row.product_id, { total: row.rating, count: 1 });
+            continue;
+        }
+
+        existingAggregate.total += row.rating;
+        existingAggregate.count += 1;
+    }
+
+    return items.map((item) => {
+        const productId = productIdByUid.get(item.uid);
+        if (productId === undefined) {
+            return item;
+        }
+
+        const aggregate = ratingAggregateByProductId.get(productId);
+        if (aggregate === undefined || aggregate.count === 0) {
+            return item;
+        }
+
+        return {
+            ...item,
+            rating: aggregate.total / aggregate.count,
+        };
+    });
+}
+
 // ─── Fetch fns ────────────────────────────────────────────────────────────────
 
 async function fetchProductsPage(
@@ -112,7 +179,8 @@ async function fetchProductsPage(
         throw new Error(error.message);
     }
 
-    let transformed = ((data ?? []) as ProductWithVariants[]).map(transformProduct);
+    const productRows = (data ?? []) as ProductWithVariants[];
+    let transformed = productRows.map(transformProduct);
 
     // Client-side price filter (variant data required)
     transformed = transformed.filter((p) => {
@@ -121,10 +189,14 @@ async function fetchProductsPage(
         return true;
     });
 
+    transformed = await withLiveRatings(productRows, transformed, 'catalog.products.page');
+
     if (filters.sort === 'price_asc') {
         transformed.sort((a, b) => a.minPrice - b.minPrice);
     } else if (filters.sort === 'price_desc') {
         transformed.sort((a, b) => b.maxPrice - a.maxPrice);
+    } else if (filters.sort === 'best_rating') {
+        transformed.sort((a, b) => b.rating - a.rating);
     }
 
     const nextOffset = transformed.length >= CATALOG_PAGE_SIZE ? pageParam + CATALOG_PAGE_SIZE : null;
@@ -222,7 +294,9 @@ async function fetchTrendingProducts(): Promise<CatalogProductItem[]> {
         throw new Error(prodError.message);
     }
 
-    return ((prodData ?? []) as ProductWithVariants[]).map(transformProduct);
+    const productRows = (prodData ?? []) as ProductWithVariants[];
+    const transformed = productRows.map(transformProduct);
+    return withLiveRatings(productRows, transformed, 'catalog.trending.products');
 }
 
 async function fetchRecommendations(userId: number): Promise<{ products: CatalogProductItem[]; hasActivity: boolean }> {
@@ -272,8 +346,11 @@ async function fetchRecommendations(userId: number): Promise<{ products: Catalog
         throw new Error(productsError.message);
     }
 
+    const productRows = (prodData ?? []) as ProductWithVariants[];
+    const transformed = productRows.map(transformProduct);
+
     return {
-        products: ((prodData ?? []) as ProductWithVariants[]).map(transformProduct),
+        products: await withLiveRatings(productRows, transformed, 'catalog.recommendations.products'),
         hasActivity: true,
     };
 }

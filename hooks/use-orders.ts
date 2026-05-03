@@ -4,6 +4,7 @@ import { supabase } from '../supabase/supabaseClient';
 import { queryKeys } from '../utils/query-keys';
 
 export type OrderDisplayStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+export type OrderItemRefundStatus = 'none' | 'pending' | 'accepted' | 'rejected';
 
 interface BuyerOrderRow {
     readonly id: number;
@@ -23,6 +24,8 @@ interface BuyerOrderItemRow {
     readonly quantity: number;
     readonly unit_price: number;
     readonly total_price: number;
+    readonly seller_shipping_status: string;
+    readonly refund_status: string;
 }
 
 interface ProductThumbnailRow {
@@ -51,6 +54,7 @@ interface SellerOrderItemRow {
     readonly quantity: number;
     readonly unit_price: number;
     readonly total_price: number;
+    readonly seller_shipping_status: string;
 }
 
 interface SellerProductRow {
@@ -78,15 +82,17 @@ interface SellerVariantAccumulator {
     readonly receivedOrderIds: Set<number>;
 }
 
-interface SellerProductAccumulator {
+interface SellerOrderAccumulator {
+    readonly transactionId: number;
     readonly productId: number | null;
     productUid: string | null;
     productName: string;
+    readonly productNames: Set<string>;
+    productCount: number;
     thumbnailUrl: string;
     totalOrderedQuantity: number;
     totalSalesAmount: number;
     latestOrderAt: string;
-    orderIdSet: Set<number>;
     variantMap: Map<string, SellerVariantAccumulator>;
 }
 
@@ -103,6 +109,7 @@ export interface BuyerOrderCardItem {
     readonly variantName: string;
     readonly totalPrice: number;
     readonly createdAt: string;
+    readonly refundStatus: OrderItemRefundStatus;
 }
 
 export interface SellerOrderVariantSummary {
@@ -117,9 +124,11 @@ export interface SellerOrderVariantSummary {
 }
 
 export interface SellerOrderedProductCard {
+    readonly transactionId: number;
     readonly productId: number | null;
     readonly productUid: string | null;
     readonly productName: string;
+    readonly productCount: number;
     readonly thumbnailUrl: string;
     readonly totalOrderedQuantity: number;
     readonly totalSalesAmount: number;
@@ -136,7 +145,21 @@ export interface SellerOrdersData {
 
 const EMPTY_IMAGE_URL = '';
 const UNKNOWN_SHOP_NAME = 'Unknown Shop';
-const ACTIVE_ORDER_STATUSES: readonly OrderDisplayStatus[] = ['pending', 'confirmed', 'shipped', 'delivered'];
+const ACTIVE_ORDER_STATUSES: readonly OrderDisplayStatus[] = ['pending', 'confirmed', 'shipped'];
+
+function normalizeSellerShippingStatus(rawStatus: string): 'pending' | 'shipped' | 'delivered' {
+    const normalizedStatus = rawStatus.trim().toLowerCase();
+
+    if (normalizedStatus === 'delivered') {
+        return 'delivered';
+    }
+
+    if (normalizedStatus === 'shipped') {
+        return 'shipped';
+    }
+
+    return 'pending';
+}
 
 function normalizeOrderStatus(rawStatus: string): OrderDisplayStatus {
     const normalized = rawStatus.trim().toLowerCase();
@@ -157,6 +180,43 @@ function toBuyerDisplayStatus(rawStatus: string): OrderDisplayStatus {
     }
 
     return normalizedStatus;
+}
+
+function toBuyerItemDisplayStatus(orderStatus: string, sellerShippingStatus: string): OrderDisplayStatus {
+    const normalizedOrderStatus = normalizeOrderStatus(orderStatus);
+    const normalizedShippingStatus = normalizeSellerShippingStatus(sellerShippingStatus);
+
+    if (normalizedOrderStatus === 'delivered' || normalizedOrderStatus === 'cancelled') {
+        return normalizedOrderStatus;
+    }
+
+    if (normalizedShippingStatus === 'delivered') {
+        return 'delivered';
+    }
+
+    if (normalizedShippingStatus === 'shipped' || normalizedOrderStatus === 'shipped') {
+        return 'shipped';
+    }
+
+    return toBuyerDisplayStatus(orderStatus);
+}
+
+function normalizeRefundStatus(rawStatus: string): OrderItemRefundStatus {
+    const normalizedStatus = rawStatus.trim().toLowerCase();
+
+    if (normalizedStatus === 'pending') {
+        return 'pending';
+    }
+
+    if (normalizedStatus === 'accepted') {
+        return 'accepted';
+    }
+
+    if (normalizedStatus === 'rejected') {
+        return 'rejected';
+    }
+
+    return 'none';
 }
 
 async function fetchBuyerOrders(userId: number): Promise<BuyerOrderCardItem[]> {
@@ -185,7 +245,7 @@ async function fetchBuyerOrders(userId: number): Promise<BuyerOrderCardItem[]> {
 
     const { data: orderItemsData, error: orderItemsError } = await supabase
         .from('order_items')
-        .select('uid, order_id, product_id, shop_id, product_name, variant_name, quantity, unit_price, total_price')
+        .select('uid, order_id, product_id, shop_id, product_name, variant_name, quantity, unit_price, total_price, seller_shipping_status, refund_status')
         .in('order_id', orderIds)
         .order('created_at', { ascending: false });
 
@@ -246,12 +306,13 @@ async function fetchBuyerOrders(userId: number): Promise<BuyerOrderCardItem[]> {
                 thumbnail: item.product_id === null ? EMPTY_IMAGE_URL : (productImageById.get(item.product_id) ?? EMPTY_IMAGE_URL),
                 quantity: item.quantity,
                 price: item.unit_price,
-                status: toBuyerDisplayStatus(order.status),
+                status: toBuyerItemDisplayStatus(order.status, item.seller_shipping_status),
                 deadline: order.delivery_deadline === null ? undefined : new Date(order.delivery_deadline),
                 shopName: item.shop_id === null ? UNKNOWN_SHOP_NAME : (shopNameById.get(item.shop_id) ?? UNKNOWN_SHOP_NAME),
                 variantName: item.variant_name,
                 totalPrice: item.total_price,
                 createdAt: order.created_at,
+                refundStatus: normalizeRefundStatus(item.refund_status),
             } as BuyerOrderCardItem;
         })
         .filter((item): item is BuyerOrderCardItem => item !== null)
@@ -276,7 +337,7 @@ async function fetchSellerOrdersData(sellerUserId: number): Promise<SellerOrders
 
     const { data: orderItemsData, error: orderItemsError } = await supabase
         .from('order_items')
-        .select('order_id, product_id, variant_id, product_name, variant_name, quantity, unit_price, total_price')
+        .select('order_id, product_id, variant_id, product_name, variant_name, quantity, unit_price, total_price, seller_shipping_status')
         .eq('shop_id', shopData.id)
         .order('created_at', { ascending: false });
 
@@ -313,8 +374,6 @@ async function fetchSellerOrdersData(sellerUserId: number): Promise<SellerOrders
     const orderById = new Map<number, SellerOrderRow>();
 
     let pendingCount = 0;
-    let toShipCount = 0;
-    let deliveringCount = 0;
     let receivedCount = 0;
 
     for (const order of orders) {
@@ -323,12 +382,6 @@ async function fetchSellerOrdersData(sellerUserId: number): Promise<SellerOrders
 
         if (normalizedStatus === 'pending') {
             pendingCount += 1;
-        }
-        if (normalizedStatus === 'confirmed') {
-            toShipCount += 1;
-        }
-        if (normalizedStatus === 'shipped') {
-            deliveringCount += 1;
         }
         if (normalizedStatus === 'delivered') {
             receivedCount += 1;
@@ -350,8 +403,8 @@ async function fetchSellerOrdersData(sellerUserId: number): Promise<SellerOrders
             shopUid: shopData.uid,
             overview: {
                 pendingCount,
-                toShipCount,
-                deliveringCount,
+                toShipCount: 0,
+                deliveringCount: 0,
                 receivedCount,
             },
             products: [],
@@ -375,7 +428,9 @@ async function fetchSellerOrdersData(sellerUserId: number): Promise<SellerOrders
         productById.set(product.id, product);
     }
 
-    const groupedProducts = new Map<string, SellerProductAccumulator>();
+    const groupedOrders = new Map<number, SellerOrderAccumulator>();
+    const toShipOrderIds = new Set<number>();
+    const deliveringOrderIds = new Set<number>();
 
     for (const item of filteredItems) {
         const order = orderById.get(item.order_id);
@@ -383,40 +438,55 @@ async function fetchSellerOrdersData(sellerUserId: number): Promise<SellerOrders
             continue;
         }
 
-        const productKey = item.product_id === null ? `missing-${item.product_name}` : String(item.product_id);
         const mappedProduct = item.product_id === null ? undefined : productById.get(item.product_id);
+        const normalizedOrderStatus = normalizeOrderStatus(order.status);
+        const normalizedShippingStatus = normalizeSellerShippingStatus(item.seller_shipping_status);
+        const isReceived = normalizedOrderStatus === 'delivered' || normalizedShippingStatus === 'delivered';
+        const isShipped = normalizedShippingStatus === 'shipped' || normalizedOrderStatus === 'shipped';
 
-        let accumulator = groupedProducts.get(productKey);
+        let accumulator = groupedOrders.get(item.order_id);
         if (accumulator === undefined) {
             accumulator = {
+                transactionId: item.order_id,
                 productId: item.product_id,
                 productUid: mappedProduct?.uid ?? null,
                 productName: mappedProduct?.name ?? item.product_name,
+                productNames: new Set<string>([item.product_name]),
+                productCount: 1,
                 thumbnailUrl: mappedProduct?.thumbnail_url ?? EMPTY_IMAGE_URL,
                 totalOrderedQuantity: 0,
                 totalSalesAmount: 0,
                 latestOrderAt: order.created_at,
-                orderIdSet: new Set<number>(),
                 variantMap: new Map<string, SellerVariantAccumulator>(),
             };
-            groupedProducts.set(productKey, accumulator);
+            groupedOrders.set(item.order_id, accumulator);
+        } else {
+            accumulator.productNames.add(item.product_name);
+            accumulator.productCount = accumulator.productNames.size;
+
+            if (accumulator.thumbnailUrl.length === 0 && mappedProduct?.thumbnail_url !== undefined) {
+                accumulator.thumbnailUrl = mappedProduct.thumbnail_url;
+            }
         }
 
         accumulator.totalOrderedQuantity += item.quantity;
         accumulator.totalSalesAmount += item.total_price;
-        accumulator.orderIdSet.add(item.order_id);
 
         if (new Date(order.created_at).getTime() > new Date(accumulator.latestOrderAt).getTime()) {
             accumulator.latestOrderAt = order.created_at;
         }
 
-        const variantKey = item.variant_id === null ? `missing-${item.variant_name}` : String(item.variant_id);
+        const variantKey = [
+            item.product_id === null ? 'missing' : String(item.product_id),
+            item.variant_id === null ? 'missing' : String(item.variant_id),
+            item.variant_name,
+        ].join('|');
         const existingVariant = accumulator.variantMap.get(variantKey);
 
         if (existingVariant === undefined) {
             const createdVariant: SellerVariantAccumulator = {
                 variantId: item.variant_id,
-                variantName: item.variant_name,
+                variantName: `${item.product_name} - ${item.variant_name}`,
                 quantity: item.quantity,
                 totalPrice: item.total_price,
                 unitPrice: item.unit_price,
@@ -425,14 +495,15 @@ async function fetchSellerOrdersData(sellerUserId: number): Promise<SellerOrders
                 receivedOrderIds: new Set<number>(),
             };
 
-            const normalizedStatus = normalizeOrderStatus(order.status);
-            if (normalizedStatus === 'pending' || normalizedStatus === 'confirmed') {
+            if (!isReceived && !isShipped) {
                 createdVariant.toShipOrderIds.add(item.order_id);
+                toShipOrderIds.add(item.order_id);
             }
-            if (normalizedStatus === 'shipped') {
+            if (!isReceived && isShipped) {
                 createdVariant.deliveringOrderIds.add(item.order_id);
+                deliveringOrderIds.add(item.order_id);
             }
-            if (normalizedStatus === 'delivered') {
+            if (isReceived) {
                 createdVariant.receivedOrderIds.add(item.order_id);
             }
 
@@ -443,27 +514,32 @@ async function fetchSellerOrdersData(sellerUserId: number): Promise<SellerOrders
         existingVariant.quantity += item.quantity;
         existingVariant.totalPrice += item.total_price;
 
-        const normalizedStatus = normalizeOrderStatus(order.status);
-        if (normalizedStatus === 'pending' || normalizedStatus === 'confirmed') {
+        if (!isReceived && !isShipped) {
             existingVariant.toShipOrderIds.add(item.order_id);
+            toShipOrderIds.add(item.order_id);
         }
-        if (normalizedStatus === 'shipped') {
+        if (!isReceived && isShipped) {
             existingVariant.deliveringOrderIds.add(item.order_id);
+            deliveringOrderIds.add(item.order_id);
         }
-        if (normalizedStatus === 'delivered') {
+        if (isReceived) {
             existingVariant.receivedOrderIds.add(item.order_id);
         }
     }
 
-    const products: SellerOrderedProductCard[] = Array.from(groupedProducts.values())
+    const products: SellerOrderedProductCard[] = Array.from(groupedOrders.values())
         .map((accumulator) => ({
+            transactionId: accumulator.transactionId,
             productId: accumulator.productId,
             productUid: accumulator.productUid,
-            productName: accumulator.productName,
+            productName: accumulator.productCount > 1
+                ? `${accumulator.productName} +${accumulator.productCount - 1} more`
+                : accumulator.productName,
+            productCount: accumulator.productCount,
             thumbnailUrl: accumulator.thumbnailUrl,
             totalOrderedQuantity: accumulator.totalOrderedQuantity,
             totalSalesAmount: accumulator.totalSalesAmount,
-            orderCount: accumulator.orderIdSet.size,
+            orderCount: 1,
             latestOrderAt: accumulator.latestOrderAt,
             variants: Array.from(accumulator.variantMap.values())
                 .map((variant) => ({
@@ -476,7 +552,7 @@ async function fetchSellerOrdersData(sellerUserId: number): Promise<SellerOrders
                     deliveringOrderCount: variant.deliveringOrderIds.size,
                     receivedOrderCount: variant.receivedOrderIds.size,
                 }))
-                .sort((left, right) => right.quantity - left.quantity),
+                .sort((left, right) => right.totalPrice - left.totalPrice),
         }))
         .sort((left, right) => new Date(right.latestOrderAt).getTime() - new Date(left.latestOrderAt).getTime());
 
@@ -484,8 +560,8 @@ async function fetchSellerOrdersData(sellerUserId: number): Promise<SellerOrders
         shopUid: shopData.uid,
         overview: {
             pendingCount,
-            toShipCount,
-            deliveringCount,
+            toShipCount: toShipOrderIds.size,
+            deliveringCount: deliveringOrderIds.size,
             receivedCount,
         },
         products,
@@ -510,13 +586,13 @@ export function useSellerOrdersData(sellerUserId: number | null): UseQueryResult
     });
 }
 
-export function useMarkOrderReceived(): UseMutationResult<boolean, Error, { readonly orderUid: string }> {
+export function useMarkOrderReceived(): UseMutationResult<boolean, Error, { readonly orderItemUid: string }> {
     const queryClient = useQueryClient();
 
-    return useMutation<boolean, Error, { readonly orderUid: string }>({
-        mutationFn: async ({ orderUid }) => {
-            const { data, error } = await supabase.rpc('mark_order_received', {
-                p_order_uid: orderUid,
+    return useMutation<boolean, Error, { readonly orderItemUid: string }>({
+        mutationFn: async ({ orderItemUid }) => {
+            const { data, error } = await supabase.rpc('mark_order_item_received', {
+                p_order_item_uid: orderItemUid,
             });
 
             if (error !== null) {

@@ -11,7 +11,7 @@ import { SafeScreen } from '../../components/ui/safe-screen';
 import { SkeletonLoader } from '../../components/ui/skeleton-loader';
 import { useTheme } from '../../components/ui/theme-provider';
 import { useCurrentUser } from '../../hooks/use-current-user';
-import { useAddToCart, useProduct, useProductImages, useProductVariants, useRatingCount, useReviews, useShopForProduct, useUpsertRating, useUserRating, type VariantItem } from '../../hooks/use-product-details';
+import { useAddToCart, useMyReview, useProduct, useProductImages, useProductVariants, useRatingAverage, useRatingCount, useReviews, useShopForProduct, useUserRating, type VariantItem } from '../../hooks/use-product-details';
 import { supabase } from '../../supabase/supabaseClient';
 import { formatPrice, getInventoryStockLabel, getInventoryStockState } from '../../utils/utils';
 
@@ -234,7 +234,9 @@ export default function ProductDetailsScreen(): React.JSX.Element {
     const { data: imageData } = useProductImages(product?.id ?? null);
     const { data: variantData } = useProductVariants(product?.id ?? null);
     const { data: ratingCount = 0 } = useRatingCount(product?.id ?? null);
+    const { data: liveAverageRating } = useRatingAverage(product?.id ?? null);
     const { data: userRating = null } = useUserRating(product?.id ?? null, userId);
+    const { data: myReview } = useMyReview(product?.id ?? null, userId);
     const { data: reviewData } = useReviews(product?.id ?? null);
 
     const images: readonly string[] = imageData ?? EMPTY_IMAGE_URLS;
@@ -244,6 +246,8 @@ export default function ProductDetailsScreen(): React.JSX.Element {
     const isReadOnlySellerView =
         isSellerViewParam ||
         (currentUser?.role === 'seller' && userId !== null && shop?.sellerId === userId);
+    const canShowChatWithSeller = shop !== null && userId !== null && !isReadOnlySellerView;
+    const reviewButtonLabel = myReview !== null ? 'Edit Review' : 'Write a Review';
 
     const parsedDescription = useMemo<string>(() => {
         if (product === null || product === undefined) {
@@ -255,7 +259,6 @@ export default function ProductDetailsScreen(): React.JSX.Element {
 
     // ── Mutations ──────────────────────────────────────────────────────────
     const addToCartMutation = useAddToCart(userId);
-    const upsertRatingMutation = useUpsertRating(product?.id ?? null, userId);
 
     // ── Local UI state ─────────────────────────────────────────────────────
     const [selectedVariant, setSelectedVariant] = useState<VariantItem | null>(null);
@@ -309,34 +312,78 @@ export default function ProductDetailsScreen(): React.JSX.Element {
         try {
             const { data: reviewData } = await supabase
                 .from('reviews')
-                .select('*, users!inner(first_name, last_name, avatar_url)')
+                .select('id, uid, user_id, review_text, created_at')
                 .eq('product_id', productId)
                 .order('created_at', { ascending: false })
                 .range(offset, offset + REVIEWS_PAGE_SIZE - 1);
 
             if (!reviewData) return;
 
-            const reviewsWithImages: ReviewItem[] = await Promise.all(
-                reviewData.map(async (r) => {
-                    const { data: imgData } = await supabase
-                        .from('review_images')
-                        .select('image_url')
-                        .eq('review_id', r.id)
-                        .order('sort_order', { ascending: true });
+            const typedReviewRows = reviewData as Array<{
+                readonly id: number;
+                readonly uid: string;
+                readonly user_id: number;
+                readonly review_text: string;
+                readonly created_at: string;
+            }>;
 
-                    const userInfo = r.users as unknown as { first_name: string; last_name: string; avatar_url: string | null } | null;
+            const reviewIds = typedReviewRows.map((row) => row.id);
+            const userIds = Array.from(new Set(typedReviewRows.map((row) => row.user_id)));
 
-                    return {
-                        uid: r.uid,
-                        userName: userInfo ? `${userInfo.first_name} ${userInfo.last_name}` : 'Anonymous',
-                        avatarUrl: userInfo?.avatar_url ?? null,
-                        rating: 0,
-                        reviewText: r.review_text,
-                        imageUrls: imgData?.map((i) => i.image_url) ?? [],
-                        createdAt: r.created_at,
-                    };
-                })
-            );
+            const [imageResult, ratingResult, usersResult] = await Promise.all([
+                supabase
+                    .from('review_images')
+                    .select('review_id, image_url')
+                    .in('review_id', reviewIds)
+                    .order('sort_order', { ascending: true }),
+                supabase
+                    .from('ratings')
+                    .select('user_id, rating')
+                    .eq('product_id', productId)
+                    .in('user_id', userIds),
+                supabase
+                    .from('users')
+                    .select('id, first_name, last_name, avatar_url')
+                    .in('id', userIds),
+            ]);
+
+            const imageByReviewId = new Map<number, string[]>();
+            for (const imageRow of (imageResult.data ?? []) as Array<{ readonly review_id: number; readonly image_url: string }>) {
+                const existing = imageByReviewId.get(imageRow.review_id) ?? [];
+                existing.push(imageRow.image_url);
+                imageByReviewId.set(imageRow.review_id, existing);
+            }
+
+            const ratingByUserId = new Map<number, number>();
+            for (const ratingRow of (ratingResult.data ?? []) as Array<{ readonly user_id: number; readonly rating: number }>) {
+                ratingByUserId.set(ratingRow.user_id, ratingRow.rating);
+            }
+
+            const userById = new Map<number, { readonly first_name: string; readonly last_name: string; readonly avatar_url: string | null }>();
+            for (const userRow of (usersResult.data ?? []) as Array<{ readonly id: number; readonly first_name: string; readonly last_name: string; readonly avatar_url: string | null }>) {
+                userById.set(userRow.id, {
+                    first_name: userRow.first_name,
+                    last_name: userRow.last_name,
+                    avatar_url: userRow.avatar_url,
+                });
+            }
+
+            const reviewsWithImages: ReviewItem[] = typedReviewRows.map((reviewRow) => {
+                const reviewer = userById.get(reviewRow.user_id);
+                const firstName = reviewer?.first_name?.trim() ?? '';
+                const lastName = reviewer?.last_name?.trim() ?? '';
+                const fullName = `${firstName} ${lastName}`.trim();
+
+                return {
+                    uid: reviewRow.uid,
+                    userName: fullName.length > 0 ? fullName : 'Moda User',
+                    avatarUrl: reviewer?.avatar_url ?? null,
+                    rating: ratingByUserId.get(reviewRow.user_id) ?? 0,
+                    reviewText: reviewRow.review_text,
+                    imageUrls: imageByReviewId.get(reviewRow.id) ?? [],
+                    createdAt: reviewRow.created_at,
+                };
+            });
 
             setReviews((prev) => [...prev, ...reviewsWithImages]);
             setHasMoreReviews(reviewData.length >= REVIEWS_PAGE_SIZE);
@@ -371,10 +418,16 @@ export default function ProductDetailsScreen(): React.JSX.Element {
 
     const handleRate = useCallback((rating: number): void => {
         if (isReadOnlySellerView) return;
-        upsertRatingMutation.mutate(rating, {
-            onError: () => AppAlert.alert('Error', 'Failed to submit rating. Please try again.'),
-        });
-    }, [isReadOnlySellerView, upsertRatingMutation]);
+        if (!product) return;
+
+        router.push({
+            pathname: '/home/review-form' as string,
+            params: {
+                productUid: product.uid,
+                initialRating: String(rating),
+            },
+        } as Parameters<typeof router.push>[0]);
+    }, [isReadOnlySellerView, product]);
 
     const handleChatWithSeller = useCallback(async (): Promise<void> => {
         if (isReadOnlySellerView) return;
@@ -382,18 +435,31 @@ export default function ProductDetailsScreen(): React.JSX.Element {
 
         setIsChatLoading(true);
         try {
-            const { data: existing } = await supabase
+            const { data: existing, error: existingError } = await supabase
                 .from('chat_threads')
                 .select('uid')
                 .eq('buyer_id', userId)
                 .eq('seller_id', shop.sellerId)
                 .eq('shop_id', product.shopId ?? 0)
+                .eq('product_id', product.id)
                 .maybeSingle();
 
+            if (existingError !== null) {
+                throw existingError;
+            }
+
             if (existing) {
-                router.push({ pathname: '/home/chat-thread' as string, params: { uid: existing.uid } } as Parameters<typeof router.push>[0]);
+                router.push({
+                    pathname: '/home/chat-thread' as string,
+                    params: {
+                        threadUid: existing.uid,
+                        attachProduct: 'true',
+                        linkProductUid: product.uid,
+                        linkProductName: product.name,
+                    },
+                } as Parameters<typeof router.push>[0]);
             } else {
-                const { data: newThread } = await supabase
+                const { data: newThread, error: newThreadError } = await supabase
                     .from('chat_threads')
                     .insert({
                         buyer_id: userId,
@@ -404,9 +470,42 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                     .select('uid')
                     .single();
 
-                if (newThread) {
-                    router.push({ pathname: '/home/chat-thread' as string, params: { uid: newThread.uid } } as Parameters<typeof router.push>[0]);
+                if (newThreadError !== null || newThread === null) {
+                    const { data: fallbackThread, error: fallbackThreadError } = await supabase
+                        .from('chat_threads')
+                        .select('uid')
+                        .eq('buyer_id', userId)
+                        .eq('seller_id', shop.sellerId)
+                        .eq('shop_id', product.shopId ?? 0)
+                        .eq('product_id', product.id)
+                        .maybeSingle();
+
+                    if (fallbackThreadError !== null || fallbackThread === null) {
+                        throw newThreadError ?? fallbackThreadError ?? new Error('Unable to open chat thread.');
+                    }
+
+                    router.push({
+                        pathname: '/home/chat-thread' as string,
+                        params: {
+                            threadUid: fallbackThread.uid,
+                            attachProduct: 'true',
+                            linkProductUid: product.uid,
+                            linkProductName: product.name,
+                        },
+                    } as Parameters<typeof router.push>[0]);
+
+                    return;
                 }
+
+                router.push({
+                    pathname: '/home/chat-thread' as string,
+                    params: {
+                        threadUid: newThread.uid,
+                        attachProduct: 'true',
+                        linkProductUid: product.uid,
+                        linkProductName: product.name,
+                    },
+                } as Parameters<typeof router.push>[0]);
             }
         } catch {
             AppAlert.alert('Error', 'Could not open chat. Please try again.');
@@ -418,8 +517,14 @@ export default function ProductDetailsScreen(): React.JSX.Element {
     const handleWriteReview = useCallback((): void => {
         if (isReadOnlySellerView) return;
         if (!product) return;
-        router.push({ pathname: '/home/review-form' as string, params: { productUid: product.uid } } as Parameters<typeof router.push>[0]);
-    }, [isReadOnlySellerView, product]);
+        router.push({
+            pathname: '/home/review-form' as string,
+            params: {
+                productUid: product.uid,
+                existingReviewUid: myReview?.reviewUid ?? '',
+            },
+        } as Parameters<typeof router.push>[0]);
+    }, [isReadOnlySellerView, myReview?.reviewUid, product]);
 
     const handleVisitShop = useCallback((): void => {
         if (isReadOnlySellerView) return;
@@ -500,6 +605,7 @@ export default function ProductDetailsScreen(): React.JSX.Element {
 
     const resolvedThumbnailUrl = resolveProductThumbnailUrl(product.thumbnailUrl, variants);
     const carouselImageUrls = buildProductCarouselImages(selectedVariant, variants, images, resolvedThumbnailUrl);
+    const averageRatingToDisplay = liveAverageRating ?? product.ratingAvg ?? 0;
 
     return (
         <SafeScreen style={styles.root}>
@@ -598,7 +704,7 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                 />
 
                 {/* Chat with Seller */}
-                {shop && userId !== null && (
+                {canShowChatWithSeller && (
                     <ChatWithSellerButton
                         onPress={() => { void handleChatWithSeller(); }}
                         isLoading={isChatLoading}
@@ -608,11 +714,11 @@ export default function ProductDetailsScreen(): React.JSX.Element {
 
                 {/* Rating */}
                 <InlineRatingStars
-                    averageRating={product.ratingAvg ?? 0}
+                    averageRating={averageRatingToDisplay}
                     ratingCount={ratingCount}
                     userRating={userRating}
                     onRate={handleRate}
-                    isSubmitting={upsertRatingMutation.isPending}
+                    isSubmitting={false}
                     isReadOnly={isReadOnlySellerView}
                 />
 
@@ -623,6 +729,7 @@ export default function ProductDetailsScreen(): React.JSX.Element {
                     onLoadMore={handleLoadMoreReviews}
                     hasMore={hasMoreReviews}
                     onWriteReview={handleWriteReview}
+                    reviewButtonLabel={reviewButtonLabel}
                     isReadOnly={isReadOnlySellerView}
                 />
             </ScrollView>

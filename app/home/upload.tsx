@@ -10,7 +10,7 @@ import { DropdownOption, InlineDropdown } from '../../components/ui/inline-dropd
 import { LoadingIndicator } from '../../components/ui/loading-indicator';
 import { SafeScreen } from '../../components/ui/safe-screen';
 import { useTheme } from '../../components/ui/theme-provider';
-import { ImageDetail, ImageUploader, RichTextInput, TagsInput, VariantData, VariantFieldGroup } from '../../components/upload-components';
+import { ImageDetail, ImageUploader, RichTextInput, SavedExtractedImageOption, TagsInput, VariantData, VariantFieldGroup } from '../../components/upload-components';
 import { TablesInsert } from '../../supabase/database.types';
 import { supabase } from '../../supabase/supabaseClient';
 import { vtonUserPhotosBucket } from '../../utils/database/vton-results-bucket';
@@ -48,6 +48,7 @@ const EXTRACTION_MAX_POLL_ATTEMPTS = 60;
 const EXTRACTION_SOURCE_UPLOAD_TIMEOUT_MS = 30000;
 const EXTRACTION_FUNCTION_START_TIMEOUT_MS = 20000;
 const EXTRACTION_FUNCTION_CHECK_TIMEOUT_MS = 20000;
+const SAVED_EXTRACTED_LIST_LIMIT = 100;
 const UPLOAD_SAFE_AREA_EDGES: readonly Edge[] = ['top', 'left', 'right'];
 
 interface UploadedImageResult {
@@ -310,6 +311,9 @@ export default function UploadProductScreen() {
     const [isLoading, setIsLoading] = useState(false);
     const [isGenerating, setIsGenerating] = useState<boolean>(false);
     const [isRichEditorReady, setIsRichEditorReady] = useState<boolean>(false);
+    const [savedExtractedImages, setSavedExtractedImages] = useState<SavedExtractedImageOption[]>([]);
+    const [isSavedExtractedLoading, setIsSavedExtractedLoading] = useState<boolean>(false);
+    const [cachedDatabaseUserId, setCachedDatabaseUserId] = useState<number | null>(null);
 
     const { control, handleSubmit, formState: { errors } } = useForm<UploadProductFormValues>({
         defaultValues: { name: '', category: '' }
@@ -326,6 +330,116 @@ export default function UploadProductScreen() {
     }, []);
 
     const hasExtractingVariants = variants.some((variant) => variant.is_extracting);
+
+    const resolveCurrentDatabaseUserId = useCallback(async (): Promise<number> => {
+        if (cachedDatabaseUserId !== null) {
+            return cachedDatabaseUserId;
+        }
+
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError !== null) {
+            throw new Error(sessionError.message);
+        }
+
+        const authUserId = sessionData.session?.user?.id;
+        if (authUserId === undefined) {
+            throw new Error('You must be logged in to load saved extracted images.');
+        }
+
+        const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('auth_id', authUserId)
+            .single();
+
+        if (userError !== null || userData === null) {
+            throw new Error(userError?.message ?? 'Unable to load your account.');
+        }
+
+        setCachedDatabaseUserId(userData.id);
+
+        return userData.id;
+    }, [cachedDatabaseUserId]);
+
+    const loadSavedExtractedImages = useCallback(async (): Promise<void> => {
+        setIsSavedExtractedLoading(true);
+
+        try {
+            const databaseUserId = await resolveCurrentDatabaseUserId();
+
+            const { data: filesData, error: listError } = await supabase.storage
+                .from(OUTFIT_RESULTS_BUCKET)
+                .list(String(databaseUserId), {
+                    limit: SAVED_EXTRACTED_LIST_LIMIT,
+                    offset: 0,
+                    sortBy: { column: 'created_at', order: 'desc' },
+                });
+
+            if (listError !== null) {
+                throw new Error(listError.message);
+            }
+
+            const nextSavedImages: SavedExtractedImageOption[] = [];
+
+            for (const file of filesData ?? []) {
+                const normalizedName = file.name.trim();
+                if (normalizedName.length === 0) {
+                    continue;
+                }
+
+                const storagePath = `${databaseUserId}/${normalizedName}`;
+                const { data: publicUrlData } = supabase.storage
+                    .from(OUTFIT_RESULTS_BUCKET)
+                    .getPublicUrl(storagePath);
+
+                const label = typeof file.created_at === 'string' && file.created_at.trim().length > 0
+                    ? new Date(file.created_at).toLocaleString('en-PH', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                    })
+                    : normalizedName;
+
+                nextSavedImages.push({
+                    publicUrl: publicUrlData.publicUrl,
+                    storagePath,
+                    label,
+                });
+            }
+
+            setSavedExtractedImages(nextSavedImages);
+        } catch (savedImagesError: unknown) {
+            console.warn('[upload-product] Failed to load saved extracted images:', savedImagesError);
+            setSavedExtractedImages([]);
+        } finally {
+            setIsSavedExtractedLoading(false);
+        }
+    }, [resolveCurrentDatabaseUserId]);
+
+    useEffect(() => {
+        void loadSavedExtractedImages();
+    }, [loadSavedExtractedImages]);
+
+    const handleSelectSavedExtractedImage = useCallback((variantId: string, selectedImage: SavedExtractedImageOption): void => {
+        setVariants((previousVariants) => previousVariants.map((variant) => {
+            if (variant.id !== variantId) {
+                return variant;
+            }
+
+            return {
+                ...variant,
+                try_on_image: null,
+                try_on_image_url: selectedImage.publicUrl,
+                try_on_image_storage_path: null,
+                extracted_outfit_url: selectedImage.publicUrl,
+                extracted_outfit_storage_path: selectedImage.storagePath,
+                extraction_error: null,
+                is_extracting: false,
+            };
+        }));
+    }, []);
 
     const handleSelectTryOnImage = useCallback(async (variantId: string, image: ImageDetail): Promise<void> => {
         if (selectedCategory === '' || isAccessoryCategory(selectedCategory)) {
@@ -470,12 +584,7 @@ export default function UploadProductScreen() {
                 await removeStorageObjectIfExists(VTON_USER_PHOTOS_BUCKET, previousTryOnStoragePath);
             }
 
-            if (
-                previousExtractedOutfitStoragePath !== null
-                && previousExtractedOutfitStoragePath !== extractedStoragePath
-            ) {
-                await removeStorageObjectIfExists(OUTFIT_RESULTS_BUCKET, previousExtractedOutfitStoragePath);
-            }
+            await loadSavedExtractedImages();
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Failed to extract outfit image.';
             console.error('[upload-product] Outfit extraction failed:', {
@@ -508,7 +617,7 @@ export default function UploadProductScreen() {
 
             throw new Error(message);
         }
-    }, [selectedCategory, variants]);
+    }, [loadSavedExtractedImages, selectedCategory, variants]);
 
     const onSubmit = async (formData: UploadProductFormValues): Promise<void> => {
         if (!description) {
@@ -889,6 +998,10 @@ export default function UploadProductScreen() {
                     onChange={setVariants}
                     isAccessoryCategory={selectedCategory === 'accessory'}
                     onSelectTryOnImage={handleSelectTryOnImage}
+                    savedExtractedImages={savedExtractedImages}
+                    isSavedExtractedLoading={isSavedExtractedLoading}
+                    onRefreshSavedExtractedImages={loadSavedExtractedImages}
+                    onSelectSavedExtractedImage={handleSelectSavedExtractedImage}
                 />
 
                 <RipplePressable

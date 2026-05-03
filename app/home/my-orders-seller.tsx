@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Modal, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import type { Edge } from 'react-native-safe-area-context';
@@ -17,7 +18,7 @@ import { formatDate, formatPrice } from '../../utils/utils';
 const SELLER_ORDERS_SAFE_AREA_EDGES: readonly Edge[] = ['top', 'left', 'right'];
 
 function getProductSelectionKey(product: SellerOrderedProductCard): string {
-    return `${product.productId ?? 'missing'}-${product.productName}`;
+    return String(product.transactionId);
 }
 
 export default function MyOrdersSellerScreen(): React.JSX.Element {
@@ -82,7 +83,7 @@ export default function MyOrdersSellerScreen(): React.JSX.Element {
                             {
                                 onSuccess: (updatedCount) => {
                                     if (updatedCount > 0) {
-                                        AppAlert.alert('Updated', `${updatedCount} order(s) were sent to courier.`);
+                                        AppAlert.alert('Updated', `${updatedCount} item(s) were sent to courier.`);
                                         return;
                                     }
 
@@ -100,9 +101,12 @@ export default function MyOrdersSellerScreen(): React.JSX.Element {
     }, [markVariantAsDeliveringMutation]);
 
     const renderProductCard = ({ item }: { item: SellerOrderedProductCard }): React.JSX.Element => {
-        const hasShippedOrders: boolean = item.variants.some(
+        const pendingProductCount = item.variants.filter(
+            (variant): boolean => variant.toShipOrderCount > 0,
+        ).length;
+        const shippedProductCount = item.variants.filter(
             (variant): boolean => variant.deliveringOrderCount > 0 || variant.receivedOrderCount > 0,
-        );
+        ).length;
 
         return (
             <RipplePressable
@@ -123,14 +127,30 @@ export default function MyOrdersSellerScreen(): React.JSX.Element {
                         {item.productName}
                     </Text>
 
-                    {hasShippedOrders && (
-                        <View style={[styles.productStatusChip, { backgroundColor: theme.success }]}>
-                            <Text style={[styles.productStatusChipText, { color: theme.white }]}>Shipped</Text>
-                        </View>
-                    )}
+                    <View style={styles.productStatusChipsRow}>
+                        {pendingProductCount > 0 && (
+                            <View style={[styles.productStatusChip, { backgroundColor: theme.warning }]}>
+                                <Text style={[styles.productStatusChipText, { color: theme.white }]}>
+                                    {pendingProductCount} Pending
+                                </Text>
+                            </View>
+                        )}
+
+                        {shippedProductCount > 0 && (
+                            <View style={[styles.productStatusChip, { backgroundColor: theme.success }]}>
+                                <Text style={[styles.productStatusChipText, { color: theme.white }]}>
+                                    {shippedProductCount} Shipped
+                                </Text>
+                            </View>
+                        )}
+                    </View>
 
                     <View style={styles.productMetaRow}>
-                        <Text style={[styles.productMetaText, { color: theme.textSecondary }]}>Orders: {item.orderCount}</Text>
+                        <Text style={[styles.productMetaText, { color: theme.textSecondary }]}>Txn #{item.transactionId}</Text>
+                        <Text style={[styles.productMetaText, { color: theme.textSecondary }]}>Products: {item.productCount}</Text>
+                    </View>
+
+                    <View style={styles.productMetaRow}>
                         <Text style={[styles.productMetaText, { color: theme.textSecondary }]}>Qty: {item.totalOrderedQuantity}</Text>
                     </View>
 
@@ -146,15 +166,23 @@ export default function MyOrdersSellerScreen(): React.JSX.Element {
     return (
         <SafeScreen style={styles.container} edges={SELLER_ORDERS_SAFE_AREA_EDGES}>
             <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.cardBackground }]}>
-                <Text style={[styles.headerText, { color: theme.textPrimary }]}>Customer Orders</Text>
-                <Text style={[styles.headerSubtext, { color: theme.textSecondary }]}>
+                <View style={styles.headerTopRow}>
+                    <Text style={[styles.headerText, { color: theme.textPrimary }]}>Customer Orders</Text>
+                    <RipplePressable
+                        style={[styles.refundRequestsButton, { borderColor: theme.primary }]}
+                        onPress={() => router.push('/home/refund-requests-seller' as Parameters<typeof router.push>[0])}
+                    >
+                        <Text style={[styles.refundRequestsButtonText, { color: theme.primary }]}>Refund Requests</Text>
+                    </RipplePressable>
+                </View>
+                <Text style={[styles.headerSubtext, { color: theme.textSecondary }]}> 
                     Pending: {pendingCount} • To Ship: {toShipCount} • Delivering: {deliveringCount} • Received: {receivedCount}
                 </Text>
             </View>
 
             <FlatList
                 data={orderedProducts}
-                keyExtractor={(item) => `${item.productId ?? item.productName}`}
+                keyExtractor={(item) => String(item.transactionId)}
                 contentContainerStyle={styles.listContent}
                 renderItem={renderProductCard}
                 refreshControl={
@@ -195,7 +223,7 @@ export default function MyOrdersSellerScreen(): React.JSX.Element {
                     >
                         <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
                             <Text style={[styles.modalTitle, { color: theme.textPrimary }]} numberOfLines={2}>
-                                {selectedProduct?.productName ?? 'Order Variants'}
+                                {selectedProduct?.productName ?? 'Transaction Items'}
                             </Text>
                             <RipplePressable onPress={() => setSelectedProductKey(null)}>
                                 <MaterialIcons name="close" size={24} color={theme.textPrimary} />
@@ -264,6 +292,11 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: 'bold',
     },
+    headerTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
     headerSubtext: {
         fontSize: 12,
         marginTop: 4,
@@ -272,6 +305,16 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingTop: 16,
         paddingBottom: 24,
+    refundRequestsButton: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+    },
+    refundRequestsButtonText: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
     },
     productCard: {
         borderWidth: 1,
@@ -302,6 +345,12 @@ const styles = StyleSheet.create({
     productTitle: {
         fontSize: 15,
         fontWeight: 'bold',
+    },
+    productStatusChipsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 6,
     },
     productStatusChip: {
         alignSelf: 'flex-start',

@@ -132,6 +132,11 @@ export default function BuyerProfileScreen() {
             onPress: () => router.push('/home/my-orders-buyer' as any),
         },
         {
+            icon: 'notifications-outline',
+            label: 'Notifications',
+            onPress: () => router.push('/home/notifications' as any),
+        },
+        {
             icon: 'chatbubbles-outline',
             label: 'My Chats',
             onPress: () => router.push('/home/chat' as any),

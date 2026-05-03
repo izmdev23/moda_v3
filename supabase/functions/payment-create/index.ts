@@ -143,6 +143,65 @@ Deno.serve(async (req) => {
             throw new Error("Failed to create transaction history");
         }
 
+        const channelKey = String(paymentChannel).toLowerCase().trim();
+
+        if (channelKey === 'credits') {
+            const { data: creditsRow, error: creditsError } = await supabaseClient
+                .from("buyer_credits")
+                .select("balance")
+                .eq("user_id", secureUserId)
+                .maybeSingle();
+
+            if (creditsError) {
+                throw new Error(`Unable to verify buyer credits: ${creditsError.message}`);
+            }
+
+            const availableCredits = Number(creditsRow?.balance ?? 0);
+            if (availableCredits < totalAmount) {
+                throw new Error("Insufficient credits");
+            }
+
+            const nextBalance = availableCredits - Number(totalAmount);
+
+            const { error: creditUpdateError } = await supabaseClient
+                .from("buyer_credits")
+                .update({ balance: nextBalance, updated_at: new Date().toISOString() })
+                .eq("user_id", secureUserId);
+
+            if (creditUpdateError) {
+                throw new Error(`Unable to apply credit payment: ${creditUpdateError.message}`);
+            }
+
+            await supabaseClient
+                .from("buyer_credit_transactions")
+                .insert({
+                    user_id: secureUserId,
+                    order_id: orderId,
+                    transaction_type: 'spend_credit',
+                    amount: totalAmount,
+                    note: `Checkout payment via buyer credits for order ${orderUid}`,
+                });
+
+            await supabaseClient
+                .from("transaction_history")
+                .update({ status: "success" })
+                .eq("id", transaction.id);
+
+            await supabaseClient
+                .from("orders")
+                .update({ status: "confirmed" })
+                .eq("id", orderId);
+
+            return new Response(JSON.stringify({
+                orderId: orderUid,
+                transactionId: transaction.uid,
+                status: 'success'
+            }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                status: 200,
+            });
+        }
+
         // 5. Call Stripe API
         const totalAmountInCentavos = Math.round(totalAmount * 100);
         
@@ -154,7 +213,6 @@ Deno.serve(async (req) => {
             card: 'card',
         };
         
-        const channelKey = String(paymentChannel).toLowerCase().trim();
         const paymentMethodType = methodTypeMap[channelKey];
 
         if (!paymentMethodType) {

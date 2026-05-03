@@ -23,6 +23,7 @@ import { useTheme } from '../../components/ui/theme-provider';
 import { useAddresses, type AddressRow } from '../../hooks/use-addresses';
 import { useCurrentUser } from '../../hooks/use-current-user';
 import { getStripePaymentMethodIdFromStoredAccount } from '../../hooks/use-payment-methods';
+import { useBuyerCredits } from '../../hooks/use-refunds';
 import { supabase } from '../../supabase/supabaseClient';
 import { formatPrice } from '../../utils/utils';
 
@@ -86,6 +87,7 @@ export default function CheckoutScreen(): React.JSX.Element {
     // ── Identity + addresses from cache ───────────────────────────────────
     const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
     const userId = currentUser?.id ?? null;
+    const { data: buyerCredits = 0 } = useBuyerCredits(userId);
     const { data: rawAddresses = [], isLoading: isAddressesLoading } = useAddresses(userId);
 
     // Transform raw address rows to dropdown items
@@ -101,7 +103,7 @@ export default function CheckoutScreen(): React.JSX.Element {
     const [cartItemsLoading, setCartItemsLoading] = useState<boolean>(true);
     const [selectedAddressUid, setSelectedAddressUid] = useState<string | null>(null);
     const [selectedPaymentUid, setSelectedPaymentUid] = useState<string | null>(null);
-    const [selectedPaymentType, setSelectedPaymentType] = useState<PaymentMethodType | string | null>(null);
+    const [selectedPaymentType, setSelectedPaymentType] = useState<PaymentMethodType | null>(null);
     const [selectedPaymentAccountNumber, setSelectedPaymentAccountNumber] = useState<string | null>(null);
     const [paymentLoading, setPaymentLoading] = useState<boolean>(false);
     const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
@@ -210,7 +212,9 @@ export default function CheckoutScreen(): React.JSX.Element {
         setConfirmDialog({
             visible: true,
             title: 'Confirm Order',
-            message: `Place order for ${formatPrice(totalAmount)}? You'll be redirected to the payment gateway.`,
+            message: selectedPaymentType === 'credits'
+                ? `Use ${formatPrice(totalAmount)} from your credits balance?`
+                : `Place order for ${formatPrice(totalAmount)}? You'll be redirected to the payment gateway.`,
             onConfirm: () => {
                 setConfirmDialog((d) => ({ ...d, visible: false }));
                 void initiatePayment();
@@ -236,6 +240,10 @@ export default function CheckoutScreen(): React.JSX.Element {
                 normalizedPaymentChannel === 'card' && selectedPaymentAccountNumber !== null
                     ? getStripePaymentMethodIdFromStoredAccount(selectedPaymentAccountNumber)
                     : null;
+
+            if (normalizedPaymentChannel === 'credits' && buyerCredits < totalAmount) {
+                throw new Error('Insufficient credits. Please choose another payment method.');
+            }
 
             // Build idempotency key - prevents duplicate charges on retry
             const idempotencyKey = `order-${userId}-${Date.now()}`;
@@ -296,11 +304,29 @@ export default function CheckoutScreen(): React.JSX.Element {
                 paymentIntentId?: string;
                 orderId?: string;
                 transactionId?: string;
+                status?: string;
                 error?: string;
             } | null;
 
             if (response?.error) {
                 throw new Error(`Edge Function Error: ${response.error}`);
+            }
+
+            if (normalizedPaymentChannel === 'credits') {
+                if (!response || !response.orderId || !response.transactionId) {
+                    throw new Error('Invalid credit payment response. Please try again.');
+                }
+
+                router.push({
+                    pathname: '/home/order-confirmation' as string,
+                    params: {
+                        orderId: response.orderId,
+                        transactionId: response.transactionId,
+                        cartUids: cartUids ?? '',
+                        status: 'success'
+                    },
+                } as Parameters<typeof router.push>[0]);
+                return;
             }
 
             if (!response || !response.clientSecret) {
@@ -427,6 +453,7 @@ export default function CheckoutScreen(): React.JSX.Element {
         selectedAddressUid,
         selectedPaymentUid,
         selectedPaymentType,
+        buyerCredits,
         totalAmount,
         items,
         addressIdMap,
@@ -544,9 +571,11 @@ export default function CheckoutScreen(): React.JSX.Element {
                                 <PaymentMethodSelector
                                     userId={userId}
                                     selectedMethodUid={selectedPaymentUid}
+                                    creditsBalance={buyerCredits}
+                                    enableCredits
                                     onSelect={(uid, type, accountNumber) => {
                                         setSelectedPaymentUid(uid);
-                                        setSelectedPaymentType(type as PaymentMethodType);
+                                        setSelectedPaymentType(type);
                                         setSelectedPaymentAccountNumber(accountNumber);
                                     }}
                                     onAddNew={() =>
@@ -576,7 +605,7 @@ export default function CheckoutScreen(): React.JSX.Element {
 
                         {/* Stripe disclaimer */}
                         <Text style={[styles.disclaimer, { color: theme.gray }]}> 
-                            🔒 Payments (e-wallets and cards) are processed securely via Stripe. Your card numbers are never stored on our servers.
+                            🔒 E-wallet and card payments are processed securely via Stripe. Credits are test balance data stored in-app for refunds.
                         </Text>
                     </>
                 )}
@@ -593,7 +622,11 @@ export default function CheckoutScreen(): React.JSX.Element {
             {/* Payment loading overlay */}
             <PaymentLoadingOverlay
                 visible={paymentLoading}
-                message={selectedPaymentType === 'card' ? "Processing card payment…" : "Connecting to payment gateway…"}
+                message={selectedPaymentType === 'credits'
+                    ? 'Applying credits...'
+                    : selectedPaymentType === 'card'
+                        ? "Processing card payment…"
+                        : "Connecting to payment gateway…"}
             />
 
             {/* No Methods dialog */}

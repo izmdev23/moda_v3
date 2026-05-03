@@ -175,15 +175,15 @@ function normalizeShopUid(uidParam: string | string[] | undefined): string | nul
     return normalizedUid.length > 0 ? normalizedUid : null;
 }
 
-function sortBySoldCountAscending(products: readonly MyStoreProduct[]): MyStoreProduct[] {
+function sortBySoldCountDescending(products: readonly MyStoreProduct[]): MyStoreProduct[] {
     const sortedProducts = [...products];
 
     sortedProducts.sort((a, b) => {
-        if (a.totalSales === b.totalSales) {
+        if (b.totalSales === a.totalSales) {
             return a.name.localeCompare(b.name);
         }
 
-        return a.totalSales - b.totalSales;
+        return b.totalSales - a.totalSales;
     });
 
     return sortedProducts;
@@ -228,7 +228,7 @@ export default function ShopLandingScreen(): React.JSX.Element {
             return [];
         }
 
-        return sortBySoldCountAscending(myStoreData.products);
+        return sortBySoldCountDescending(myStoreData.products);
     }, [myStoreData]);
 
     useEffect(() => {

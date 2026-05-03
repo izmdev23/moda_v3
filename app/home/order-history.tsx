@@ -118,6 +118,9 @@ function mapPaymentMethodLabel(paymentChannel: string | null): string {
     if (normalizedChannel === 'card') {
         return 'Card';
     }
+    if (normalizedChannel === 'credits') {
+        return 'Moda Credits';
+    }
 
     if (normalizedChannel.length === 0) {
         return UNKNOWN_PAYMENT_METHOD_LABEL;

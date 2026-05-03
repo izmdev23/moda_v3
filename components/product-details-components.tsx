@@ -590,6 +590,7 @@ interface ReviewsListProps {
     readonly onLoadMore: () => void;
     readonly hasMore: boolean;
     readonly onWriteReview: () => void;
+    readonly reviewButtonLabel?: string;
     readonly isReadOnly?: boolean;
 }
 
@@ -597,7 +598,7 @@ interface ReviewsListProps {
  * Paginated reviews list below the rating section.
  * @param props {ReviewsListProps}
  */
-export const ReviewsList: React.FC<ReviewsListProps> = ({ reviews, isLoading, onLoadMore, hasMore, onWriteReview, isReadOnly = false }) => {
+export const ReviewsList: React.FC<ReviewsListProps> = ({ reviews, isLoading, onLoadMore, hasMore, onWriteReview, reviewButtonLabel = 'Write a Review', isReadOnly = false }) => {
     const { theme } = useTheme();
     return (
         <View style={[reviewsListStyles.container, { backgroundColor: theme.cardBackground }]}>
@@ -614,7 +615,7 @@ export const ReviewsList: React.FC<ReviewsListProps> = ({ reviews, isLoading, on
                     onPress={onWriteReview}
                     disabled={isReadOnly}
                 >
-                    <Text style={[reviewsListStyles.writeBtnText, { color: isReadOnly ? theme.textSecondary : theme.primary }]}>Write a Review</Text>
+                    <Text style={[reviewsListStyles.writeBtnText, { color: isReadOnly ? theme.textSecondary : theme.primary }]}>{reviewButtonLabel}</Text>
                 </RipplePressable>
             </View>
             {reviews.map((r) => (<ReviewCard key={r.uid} review={r} />))}

@@ -31,6 +31,49 @@ export interface ShopInfo {
     readonly sellerId: number;
 }
 
+export interface MyReviewDetails {
+    readonly reviewId: number;
+    readonly reviewUid: string;
+    readonly reviewText: string;
+    readonly rating: number;
+    readonly imageUrls: readonly string[];
+}
+
+interface ReviewRow {
+    readonly id: number;
+    readonly uid: string;
+    readonly user_id: number;
+    readonly review_text: string;
+    readonly created_at: string;
+}
+
+interface RatingRow {
+    readonly user_id: number;
+    readonly rating: number;
+}
+
+interface ReviewImageRow {
+    readonly review_id: number;
+    readonly image_url: string;
+}
+
+interface MyReviewRow {
+    readonly id: number;
+    readonly uid: string;
+    readonly review_text: string;
+}
+
+interface MyRatingRow {
+    readonly rating: number;
+}
+
+interface UserPublicRow {
+    readonly id: number;
+    readonly first_name: string;
+    readonly last_name: string;
+    readonly avatar_url: string | null;
+}
+
 // ─── Fetch fns ────────────────────────────────────────────────────────────────
 
 async function fetchProductByUid(uid: string): Promise<ProductDetails | null> {
@@ -116,6 +159,24 @@ async function fetchRatingCount(productId: number): Promise<number> {
     return data?.length ?? 0;
 }
 
+async function fetchRatingAverage(productId: number): Promise<number> {
+    const { data } = await supabase
+        .from('ratings')
+        .select('rating')
+        .eq('product_id', productId);
+
+    if (data === null || data.length === 0) {
+        return 0;
+    }
+
+    let total = 0;
+    for (const row of data) {
+        total += row.rating;
+    }
+
+    return total / data.length;
+}
+
 async function fetchUserRating(productId: number, userId: number): Promise<number | null> {
     const { data } = await supabase
         .from('ratings')
@@ -131,34 +192,117 @@ async function fetchReviews(productId: number, offset: number): Promise<ReviewIt
     const PAGE_SIZE = 5;
     const { data: reviewData } = await supabase
         .from('reviews')
-        .select('*, users!inner(first_name, last_name, avatar_url)')
+        .select('id, uid, user_id, review_text, created_at')
         .eq('product_id', productId)
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
 
     if (!reviewData) return [];
+    const reviewRows = reviewData as ReviewRow[];
+    const reviewIds = reviewRows.map((review) => review.id);
+    const userIds = Array.from(new Set(reviewRows.map((review) => review.user_id)));
 
-    return Promise.all(
-        reviewData.map(async (r) => {
-            const { data: imgData } = await supabase
-                .from('review_images')
-                .select('image_url')
-                .eq('review_id', r.id)
-                .order('sort_order', { ascending: true });
+    const [ratingsResult, imagesResult, usersResult] = await Promise.all([
+        supabase
+            .from('ratings')
+            .select('user_id, rating')
+            .eq('product_id', productId)
+            .in('user_id', userIds),
+        supabase
+            .from('review_images')
+            .select('review_id, image_url')
+            .in('review_id', reviewIds)
+            .order('sort_order', { ascending: true }),
+        supabase
+            .from('users')
+            .select('id, first_name, last_name, avatar_url')
+            .in('id', userIds),
+    ]);
 
-            const userInfo = r.users as unknown as { first_name: string; last_name: string; avatar_url: string | null } | null;
+    const ratingsByUserId = new Map<number, number>();
+    for (const ratingRow of (ratingsResult.data ?? []) as RatingRow[]) {
+        ratingsByUserId.set(ratingRow.user_id, ratingRow.rating);
+    }
 
-            return {
-                uid: r.uid,
-                userName: userInfo ? `${userInfo.first_name} ${userInfo.last_name}` : 'Anonymous',
-                avatarUrl: userInfo?.avatar_url ?? null,
-                rating: 0,
-                reviewText: r.review_text,
-                imageUrls: imgData?.map((i) => i.image_url) ?? [],
-                createdAt: r.created_at,
-            };
-        })
-    );
+    const imagesByReviewId = new Map<number, string[]>();
+    for (const imageRow of (imagesResult.data ?? []) as ReviewImageRow[]) {
+        const existingImages = imagesByReviewId.get(imageRow.review_id) ?? [];
+        existingImages.push(imageRow.image_url);
+        imagesByReviewId.set(imageRow.review_id, existingImages);
+    }
+
+    const usersById = new Map<number, UserPublicRow>();
+    for (const userRow of (usersResult.data ?? []) as UserPublicRow[]) {
+        usersById.set(userRow.id, userRow);
+    }
+
+    return reviewRows.map((reviewRow) => {
+        const reviewer = usersById.get(reviewRow.user_id);
+        const firstName = reviewer?.first_name?.trim() ?? '';
+        const lastName = reviewer?.last_name?.trim() ?? '';
+        const fullName = `${firstName} ${lastName}`.trim();
+
+        return {
+            uid: reviewRow.uid,
+            userName: fullName.length > 0 ? fullName : 'Moda User',
+            avatarUrl: reviewer?.avatar_url ?? null,
+            rating: ratingsByUserId.get(reviewRow.user_id) ?? 0,
+            reviewText: reviewRow.review_text,
+            imageUrls: imagesByReviewId.get(reviewRow.id) ?? [],
+            createdAt: reviewRow.created_at,
+        };
+    });
+}
+
+async function fetchMyReview(productId: number, userId: number): Promise<MyReviewDetails | null> {
+    const [reviewResult, ratingResult] = await Promise.all([
+        supabase
+            .from('reviews')
+            .select('id, uid, review_text')
+            .eq('product_id', productId)
+            .eq('user_id', userId)
+            .maybeSingle(),
+        supabase
+            .from('ratings')
+            .select('rating')
+            .eq('product_id', productId)
+            .eq('user_id', userId)
+            .maybeSingle(),
+    ]);
+
+    if (reviewResult.error !== null) {
+        throw new Error(reviewResult.error.message);
+    }
+
+    if (ratingResult.error !== null) {
+        throw new Error(ratingResult.error.message);
+    }
+
+    const reviewRow = reviewResult.data as MyReviewRow | null;
+    if (reviewRow === null) {
+        return null;
+    }
+
+    const { data: imageData, error: imageError } = await supabase
+        .from('review_images')
+        .select('review_id, image_url')
+        .eq('review_id', reviewRow.id)
+        .order('sort_order', { ascending: true });
+
+    if (imageError !== null) {
+        throw new Error(imageError.message);
+    }
+
+    const ratingRow = ratingResult.data as MyRatingRow | null;
+    const imageRows = (imageData ?? []) as ReviewImageRow[];
+
+    return {
+        reviewId: reviewRow.id,
+        reviewUid: reviewRow.uid,
+        reviewText: reviewRow.review_text,
+        rating: ratingRow?.rating ?? 0,
+        imageUrls: imageRows.map((row) => row.image_url),
+    };
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
@@ -213,6 +357,16 @@ export function useRatingCount(productId: number | null) {
     });
 }
 
+/** Fetch the average rating for a product from live ratings rows. */
+export function useRatingAverage(productId: number | null) {
+    return useQuery({
+        queryKey: queryKeys.productRatingAverage(productId ?? 0),
+        queryFn: () => fetchRatingAverage(productId!),
+        enabled: productId !== null,
+        staleTime: 2 * 60 * 1000,
+    });
+}
+
 /** Fetch the current user's rating for a product (null if not rated). */
 export function useUserRating(productId: number | null, userId: number | null) {
     return useQuery({
@@ -229,6 +383,16 @@ export function useReviews(productId: number | null) {
         queryKey: queryKeys.reviews(productId ?? 0),
         queryFn: () => fetchReviews(productId!, 0),
         enabled: productId !== null,
+        staleTime: 2 * 60 * 1000,
+    });
+}
+
+/** Fetch the current user's existing review details for a product. */
+export function useMyReview(productId: number | null, userId: number | null) {
+    return useQuery({
+        queryKey: queryKeys.myReview(productId ?? 0, userId ?? 0),
+        queryFn: () => fetchMyReview(productId!, userId!),
+        enabled: productId !== null && userId !== null,
         staleTime: 2 * 60 * 1000,
     });
 }
@@ -261,6 +425,7 @@ export function useUpsertRating(productId: number | null, userId: number | null)
         },
         onSuccess: () => {
             if (productId) void qc.invalidateQueries({ queryKey: queryKeys.productRatings(productId) });
+            if (productId) void qc.invalidateQueries({ queryKey: queryKeys.productRatingAverage(productId) });
             if (productId && userId) void qc.invalidateQueries({ queryKey: queryKeys.userRating(productId, userId) });
         },
     });

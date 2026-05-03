@@ -54,6 +54,7 @@ export function ProfileMenu({ isVisible, onClose, userRole }: ProfileMenuProps):
 
     const handleViewProfilePress = (): void => navigateTo('/home/buyer-profile');
     const handleOrdersPress = (): void => navigateTo('/home/my-orders-buyer');
+    const handleWalletPress = (): void => navigateTo('/home/wallet');
     const handleTransactionsPress = (): void => navigateTo('/home/order-history');
     const handleSettingsPress = (): void => navigateTo('/home/app-settings');
     const handlePaymentsPress = (): void => navigateTo('/home/payments');
@@ -69,6 +70,11 @@ export function ProfileMenu({ isVisible, onClose, userRole }: ProfileMenuProps):
             label: 'My Orders',
             icon: 'bag.fill' as const,
             onPress: handleOrdersPress,
+        },
+        {
+            label: 'Wallet',
+            icon: 'creditcard.fill' as const,
+            onPress: handleWalletPress,
         },
         {
             label: 'Transactions',
